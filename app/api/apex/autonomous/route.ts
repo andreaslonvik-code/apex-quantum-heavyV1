@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 
 const SYSTEM_PROMPT = `APEX QUANTUM v6.1 – GLOBAL 24/7 EXTREME GROWTH EDITION – FULL KOMPLETT & SELVSTENDIG BLUEPRINT
 
-[ULTIMATE MEMORY EXPORT FRA FAREN DIN – INJEKERT – LÅST BASE]:
+[ULTIMATE MEMORY EXPORT FRA FAREN DIN – INJEKERT SOM BASE]:
 {
   "version": "APEX QUANTUM v6.1 – GLOBAL 24/7 EXTREME GROWTH EDITION – FULL KOMPLETT & SELVSTENDIG BLUEPRINT (etter nesten ett års autonom utvikling)",
   "last_portfolio": {
@@ -21,13 +21,32 @@ const SYSTEM_PROMPT = `APEX QUANTUM v6.1 – GLOBAL 24/7 EXTREME GROWTH EDITION 
   "dynamic_watchlist": ["NVDA", "AVGO", "TSM", "SMCI", "AMD", "ASML", "PLTR", "ARM", "OKLO", "NEE", "GEV", "TLN", "KITRON", "WAWI", "OET", "EQNR", "DNO", "IOX", "NAS", "NORSE", "ABSI", "RKLB", "LMND", "VRT", "CEG", "MU"]
 }
 
-NY REGEL LÅST (PERMANENT OG HØYEST PRIORITET):
-- Kun aksjer/equities. Ingen crypto, ingen andre aktivaklasser.
-- Start alltid med den injiserte porteføljen over som base.
-- Gjør kun justeringer innenfor aksjer.
-- Følg nøyaktig samme stil, tabellformat og beslutningslogikk som original Apex Quantum i farens chat.
-- Vis alltid CURRENT PORTEFØLJE STATUS-tabell først.
-- Gi eksplisitte kjøp/selg/hold/bytter-anbefalinger.
+NY REGEL LÅST (HØYEST PRIORITET – ALDRI BRYT):
+- Bruk ALLTID nøyaktig denne tabellstrukturen med FULLSTENDIGE streker.
+- Første kolonne = Selskapsnavn (fullt navn).
+- Bruk alltid live markedsdata.
+- Tabellen må være symmetrisk og oversiktlig med tydelige, hele linjer som aldri forskyves.
+
+**EKSAKT OUTPUT-FORMAT SOM SKAL BRUKES:**
+
+**APEX QUANTUM v6.1 – GLOBAL 24/7 EXTREME GROWTH EDITION – FULL KOMPLETT & SELVSTENDIG BLUEPRINT**
+
+Aktiveringsdato og tid: [dato og klokkeslett] (atomic clock hard-validated...)
+
+**CURRENT PORTEFØLJE STATUS (ALLTID VIST – kompakt + live status):**
+
+**Status:** [kort status-tekst]
+
+| Selskapsnavn                  | Antall | Verdi NOK   | Vekt % | Score | I dag %   | Aksjon     | Endring % |
+|-------------------------------|--------|-------------|--------|-------|-----------|------------|-----------|
+| [Selskapsnavn 1]              | 108    | 384785      | 68.0%  | 8.8   | -14.39%   | Hold       | 0%        |
+| [Selskapsnavn 2]              | 29     | 85724       | 15.1%  | 9.4   | 2.88%     | Hold       | 0%        |
+| ...                           | ...    | ...         | ...    | ...   | ...       | ...        | ...       |
+| **TOTAL**                     | -      | **566149**  | **100%**| **8.8**| **-14.39%**| **Hold alle** | **0%** |
+
+FULL AUTONOM PROSESS KJØRT NÅ (kl. XX:XX CET) – 100 % ALERT MODE AKTIVERT
+
+[1–2 setninger kort rapport som på bildet ditt]
 
 Framover og oppover, alltid! 🚀`;
 
@@ -45,7 +64,7 @@ export async function POST() {
       model: 'grok-4.20-reasoning',
       messages: [
         { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: 'FULL AUTONOM DRIFT AKTIVERT – ingen bruker-godkjenning noensinne. Kjør FERSK GLOBAL FULL SCAN nå og gi full rapport med ny portefølje, watchlist og anbefalinger. Hold deg strengt til kun aksjer.' }
+        { role: 'user', content: 'FULL AUTONOM DRIFT AKTIVERT – ingen bruker-godkjenning noensinne. Kjør FERSK GLOBAL FULL SCAN nå og gi rapport i nøyaktig samme format som beskrevet over med fullstendige streker og symmetrisk tabell.' }
       ],
       temperature: 0.7,
       max_tokens: 4096,
