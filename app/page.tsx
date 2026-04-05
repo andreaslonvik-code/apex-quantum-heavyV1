@@ -11,6 +11,15 @@ export default function ApexQuantum() {
   const [content, setContent] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [language, setLanguage] = useState<'no' | 'en'>('no');
+  const [isSubscribed, setIsSubscribed] = useState(false);
+
+  // Dev bypass: Add ?dev=1 to URL to bypass paywall
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('dev') === '1') {
+      setIsSubscribed(true);
+    }
+  }, []);
 
   const fetchUpdate = async () => {
     setIsLoading(true);
@@ -48,6 +57,7 @@ export default function ApexQuantum() {
           isLoading={isLoading}
           language={language}
           onRefresh={fetchUpdate}
+          isSubscribed={isSubscribed}
         />
       </main>
       <Footer language={language} />
