@@ -15,9 +15,11 @@ export default function ApexQuantum() {
 
   // Dev bypass: Add ?dev=1 to URL to bypass paywall
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('dev') === '1') {
-      setIsSubscribed(true);
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('dev') === '1') {
+        setIsSubscribed(true);
+      }
     }
   }, []);
 
