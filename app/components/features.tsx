@@ -10,23 +10,23 @@ export function Features({ language }: FeaturesProps) {
       features: [
         {
           icon: 'globe',
-          title: 'Global Dekning',
-          description: 'Scanner aksjer og markeder over hele verden i sanntid.',
+          title: 'Global Analyse',
+          description: 'AI-en scanner aksjer og markeder over hele verden i sanntid.',
         },
         {
           icon: 'clock',
-          title: '24/7 Drift',
-          description: 'Alltid aktiv, aldri pause. Fanger muligheter mens du sover.',
+          title: 'Daglige Anbefalinger',
+          description: 'Motta oppdaterte porteføljeanbefalinger hver dag du kan handle på.',
         },
         {
           icon: 'brain',
-          title: 'Autonom AI',
-          description: 'Ingen menneskelig inngripen. Kun datadrevne beslutninger.',
+          title: 'Dokumentert Avkastning',
+          description: 'Følg porteføljen slavisk og oppnå eksepsjonelle resultater.',
         },
         {
           icon: 'shield',
-          title: 'Risikostyring',
-          description: 'Innebygde sikkerhetsprotokoller for å beskytte kapitalen din.',
+          title: 'Enkelt å Følge',
+          description: 'Tydelige kjøps- og salgssignaler du selv utfører hos din megler.',
         },
       ],
     },
@@ -34,23 +34,23 @@ export function Features({ language }: FeaturesProps) {
       features: [
         {
           icon: 'globe',
-          title: 'Global Coverage',
-          description: 'Scans stocks and markets worldwide in real-time.',
+          title: 'Global Analysis',
+          description: 'The AI scans stocks and markets worldwide in real-time.',
         },
         {
           icon: 'clock',
-          title: '24/7 Operation',
-          description: 'Always active, never paused. Captures opportunities while you sleep.',
+          title: 'Daily Recommendations',
+          description: 'Receive updated portfolio recommendations every day you can act on.',
         },
         {
           icon: 'brain',
-          title: 'Autonomous AI',
-          description: 'No human intervention. Only data-driven decisions.',
+          title: 'Proven Returns',
+          description: 'Follow the portfolio precisely and achieve exceptional results.',
         },
         {
           icon: 'shield',
-          title: 'Risk Management',
-          description: 'Built-in safety protocols to protect your capital.',
+          title: 'Easy to Follow',
+          description: 'Clear buy and sell signals you execute yourself with your broker.',
         },
       ],
     },
