@@ -1,4 +1,3 @@
-// Oppdatert 5. april 2026
 'use client';
 import { useState, useEffect } from 'react';
 
