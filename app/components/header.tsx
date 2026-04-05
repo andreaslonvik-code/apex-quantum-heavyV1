@@ -21,17 +21,11 @@ export function Header({ language, onLanguageChange }: HeaderProps) {
     <header className="fixed top-0 left-0 right-0 z-50 bg-background/80 backdrop-blur-xl border-b border-border">
       <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="w-5 h-5 text-accent-foreground"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-            </svg>
-          </div>
+          <img 
+            src="/images/logo.jpg" 
+            alt="Apex Quantum" 
+            className="h-10 w-auto"
+          />
           <span className="font-semibold text-lg tracking-tight">Apex Quantum</span>
         </div>
 

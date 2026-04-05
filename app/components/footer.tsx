@@ -23,17 +23,11 @@ export function Footer({ language }: FooterProps) {
       <div className="max-w-5xl mx-auto">
         <div className="flex flex-col md:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
-            <div className="w-8 h-8 rounded-lg bg-accent flex items-center justify-center">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                className="w-5 h-5 text-accent-foreground"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-              </svg>
-            </div>
+            <img 
+              src="/images/logo.jpg" 
+              alt="Apex Quantum" 
+              className="h-8 w-auto"
+            />
             <span className="font-semibold">Apex Quantum</span>
           </div>
           <p className="text-sm text-muted-foreground text-center md:text-right max-w-md">

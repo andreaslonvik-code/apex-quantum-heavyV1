@@ -5,9 +5,10 @@ interface LiveReportProps {
   isLoading: boolean;
   language: 'no' | 'en';
   onRefresh: () => void;
+  isSubscribed?: boolean;
 }
 
-export function LiveReport({ content, isLoading, language, onRefresh }: LiveReportProps) {
+export function LiveReport({ content, isLoading, language, onRefresh, isSubscribed = false }: LiveReportProps) {
   const t = {
     no: {
       title: 'Live Markedsrapport',
@@ -15,6 +16,15 @@ export function LiveReport({ content, isLoading, language, onRefresh }: LiveRepo
       refresh: 'Oppdater',
       loading: 'Analyserer markeder...',
       lastUpdate: 'Oppdateres automatisk hvert 10. minutt',
+      paywallTitle: 'Abonner for full tilgang',
+      paywallDesc: 'Få tilgang til daglige AI-genererte markedsrapporter, porteføljeanbefalinger og sanntidsanalyser.',
+      subscribe: 'Abonner nå - 499 kr/mnd',
+      preview: 'Forhåndsvisning',
+      portfolioTitle: 'AI-Portefølje',
+      stock: 'Aksje',
+      allocation: 'Allokering',
+      signal: 'Signal',
+      change: 'Endring',
     },
     en: {
       title: 'Live Market Report',
@@ -22,8 +32,25 @@ export function LiveReport({ content, isLoading, language, onRefresh }: LiveRepo
       refresh: 'Refresh',
       loading: 'Analyzing markets...',
       lastUpdate: 'Auto-updates every 10 minutes',
+      paywallTitle: 'Subscribe for Full Access',
+      paywallDesc: 'Get access to daily AI-generated market reports, portfolio recommendations and real-time analysis.',
+      subscribe: 'Subscribe Now - 499 NOK/mo',
+      preview: 'Preview',
+      portfolioTitle: 'AI Portfolio',
+      stock: 'Stock',
+      allocation: 'Allocation',
+      signal: 'Signal',
+      change: 'Change',
     },
   }[language];
+
+  const samplePortfolio = [
+    { ticker: 'NVDA', name: 'NVIDIA Corp', allocation: '18%', signal: 'BUY', change: '+2.4%' },
+    { ticker: 'AAPL', name: 'Apple Inc', allocation: '15%', signal: 'HOLD', change: '+0.8%' },
+    { ticker: 'MSFT', name: 'Microsoft', allocation: '14%', signal: 'BUY', change: '+1.2%' },
+    { ticker: 'GOOGL', name: 'Alphabet', allocation: '12%', signal: 'HOLD', change: '-0.3%' },
+    { ticker: 'AMZN', name: 'Amazon', allocation: '11%', signal: 'BUY', change: '+1.8%' },
+  ];
 
   return (
     <section className="py-16 px-6">
@@ -37,39 +64,151 @@ export function LiveReport({ content, isLoading, language, onRefresh }: LiveRepo
               </div>
               <span className="text-sm text-muted-foreground hidden sm:block">{t.subtitle}</span>
             </div>
-            <button
-              onClick={onRefresh}
-              disabled={isLoading}
-              className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-            >
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}
-                stroke="currentColor"
-                strokeWidth="2"
+            {isSubscribed && (
+              <button
+                onClick={onRefresh}
+                disabled={isLoading}
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
               >
-                <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
-                <path d="M21 3v5h-5" />
-              </svg>
-              {t.refresh}
-            </button>
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}
+                  stroke="currentColor"
+                  strokeWidth="2"
+                >
+                  <path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+                  <path d="M21 3v5h-5" />
+                </svg>
+                {t.refresh}
+              </button>
+            )}
           </div>
 
-          <div className="p-6 md:p-8 min-h-[50vh]">
-            {isLoading ? (
-              <div className="flex flex-col items-center justify-center h-[40vh] gap-4">
-                <div className="w-10 h-10 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                <p className="text-muted-foreground">{t.loading}</p>
-              </div>
-            ) : content ? (
-              <div className="prose-custom font-mono text-sm whitespace-pre-wrap">{content}</div>
-            ) : null}
+          <div className="p-6 md:p-8 min-h-[50vh] relative">
+            {isSubscribed ? (
+              isLoading ? (
+                <div className="flex flex-col items-center justify-center h-[40vh] gap-4">
+                  <div className="w-10 h-10 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                  <p className="text-muted-foreground">{t.loading}</p>
+                </div>
+              ) : content ? (
+                <div className="space-y-8">
+                  <div className="prose-custom font-mono text-sm whitespace-pre-wrap">{content}</div>
+                  
+                  <div className="mt-8">
+                    <h3 className="text-lg font-semibold mb-4">{t.portfolioTitle}</h3>
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-border">
+                            <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">{t.stock}</th>
+                            <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">{t.allocation}</th>
+                            <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">{t.signal}</th>
+                            <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">{t.change}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {samplePortfolio.map((stock) => (
+                            <tr key={stock.ticker} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                              <td className="py-3 px-4">
+                                <div className="flex flex-col">
+                                  <span className="font-medium">{stock.ticker}</span>
+                                  <span className="text-sm text-muted-foreground">{stock.name}</span>
+                                </div>
+                              </td>
+                              <td className="text-right py-3 px-4 font-mono">{stock.allocation}</td>
+                              <td className="text-center py-3 px-4">
+                                <span className={`inline-flex px-2 py-1 rounded-md text-xs font-medium ${
+                                  stock.signal === 'BUY' 
+                                    ? 'bg-accent/20 text-accent' 
+                                    : 'bg-muted text-muted-foreground'
+                                }`}>
+                                  {stock.signal}
+                                </span>
+                              </td>
+                              <td className={`text-right py-3 px-4 font-mono ${
+                                stock.change.startsWith('+') ? 'text-accent' : 'text-red-400'
+                              }`}>
+                                {stock.change}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              ) : null
+            ) : (
+              <>
+                {/* Blurred preview */}
+                <div className="blur-sm select-none pointer-events-none">
+                  <div className="space-y-4 text-sm font-mono text-muted-foreground">
+                    <p>MARKET ANALYSIS - {new Date().toLocaleDateString()}</p>
+                    <p>{'='}.repeat(50)</p>
+                    <p>Global markets showing strong momentum with tech sector leading gains...</p>
+                    <p>AI chip demand continues to drive semiconductor valuations...</p>
+                    <p>Federal Reserve signals potential rate adjustments in Q2...</p>
+                    <div className="h-4" />
+                    <p>TOP RECOMMENDATIONS:</p>
+                    <p>1. NVDA - Strong Buy - Target: $XXX</p>
+                    <p>2. AAPL - Hold - Target: $XXX</p>
+                    <p>3. MSFT - Buy - Target: $XXX</p>
+                  </div>
+                  
+                  <div className="mt-8">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-border">
+                          <th className="text-left py-3 px-4">Stock</th>
+                          <th className="text-right py-3 px-4">Allocation</th>
+                          <th className="text-center py-3 px-4">Signal</th>
+                          <th className="text-right py-3 px-4">Change</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {[1,2,3,4,5].map((i) => (
+                          <tr key={i} className="border-b border-border/50">
+                            <td className="py-3 px-4">XXXX</td>
+                            <td className="text-right py-3 px-4">XX%</td>
+                            <td className="text-center py-3 px-4">XXX</td>
+                            <td className="text-right py-3 px-4">+X.X%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Paywall overlay */}
+                <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-card via-card/95 to-card/80">
+                  <div className="text-center max-w-md px-6">
+                    <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center">
+                      <svg viewBox="0 0 24 24" fill="none" className="w-8 h-8 text-accent" stroke="currentColor" strokeWidth="2">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                        <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                      </svg>
+                    </div>
+                    <h3 className="text-2xl font-bold mb-3">{t.paywallTitle}</h3>
+                    <p className="text-muted-foreground mb-6 leading-relaxed">{t.paywallDesc}</p>
+                    <button
+                      onClick={() => (window.location.href = '/api/stripe/checkout')}
+                      className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold px-6 py-3 rounded-xl transition-all w-full"
+                    >
+                      {t.subscribe}
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
 
-          <div className="px-6 py-4 border-t border-border">
-            <p className="text-xs text-muted-foreground text-center">{t.lastUpdate}</p>
-          </div>
+          {isSubscribed && (
+            <div className="px-6 py-4 border-t border-border">
+              <p className="text-xs text-muted-foreground text-center">{t.lastUpdate}</p>
+            </div>
+          )}
         </div>
       </div>
     </section>
