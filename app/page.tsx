@@ -4,13 +4,18 @@ import { useState, useEffect } from 'react';
 export default function ApexQuantum() {
   const [content, setContent] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [language, setLanguage] = useState<'no' | 'en'>('no');
 
   const fetchUpdate = async () => {
     setIsLoading(true);
     try {
-      const res = await fetch('/api/apex/autonomous', { method: 'POST' });
+      const res = await fetch('/api/apex/autonomous', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ language }),
+      });
       const data = await res.json();
-      setContent(data.message || 'Ingen data mottatt');
+      setContent(data.message);
     } catch (err) {
       setContent('Feil ved henting av data');
     } finally {
@@ -22,50 +27,41 @@ export default function ApexQuantum() {
     fetchUpdate();
     const interval = setInterval(fetchUpdate, 600000);
     return () => clearInterval(interval);
-  }, []);
+  }, [language]);
 
   return (
-    <div className="min-h-screen bg-[#050505] text-white font-sans">
+    <div className="min-h-screen bg-[#050507] text-white">
       <div className="max-w-7xl mx-auto px-8 pt-8">
         {/* Header */}
-        <div className="flex items-center justify-between mb-10">
-          <div className="flex items-center gap-6">
-            <div className="text-[92px] font-black tracking-[-8px] leading-none flex items-baseline">
-              A<span className="text-cyan-400">Q</span>
-            </div>
-            <div>
-              <div className="text-4xl font-semibold tracking-tight">APEX QUANTUM</div>
-              <div className="text-xs text-gray-400 -mt-1">v6.1 • GLOBAL 24/7 EXTREME GROWTH</div>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-3 bg-[#111] border border-gray-700 px-5 py-2.5 rounded-3xl">
-            <div className="w-3 h-3 bg-emerald-400 rounded-full animate-pulse"></div>
-            <span className="text-emerald-400 font-medium text-sm tracking-widest">FULL AUTONOM DRIFT • LIVE</span>
+        <div className="flex justify-between items-center mb-16">
+          <img src="/aq-logo.png" alt="Apex Quantum" className="h-36" />
+          <div className="flex items-center gap-8">
+            <button onClick={() => setLanguage('no')} className={`text-3xl transition-all ${language === 'no' ? 'scale-110' : 'opacity-60 hover:opacity-100'}`}>🇳🇴</button>
+            <button onClick={() => setLanguage('en')} className={`text-3xl transition-all ${language === 'en' ? 'scale-110' : 'opacity-60 hover:opacity-100'}`}>🇬🇧</button>
+            <button 
+              onClick={() => window.location.href = '/api/stripe/checkout'}
+              className="bg-cyan-400 hover:bg-cyan-300 text-black font-semibold px-8 py-4 rounded-2xl transition-all"
+            >
+              Få tilgang nå – 499 kr/mnd
+            </button>
           </div>
         </div>
 
-        {/* Hovedinnhold */}
-        <div className="bg-[#0a0a0a] border border-gray-800 rounded-3xl p-10 min-h-[78vh] shadow-2xl">
-          {isLoading && (
-            <div className="flex flex-col items-center justify-center h-full py-24 text-emerald-400">
-              <div className="text-6xl animate-pulse mb-8">◉</div>
-              <p className="text-2xl font-light">Apex Quantum scanner markedet...</p>
-            </div>
-          )}
-
-          {content && (
-            <div className="prose prose-invert max-w-none">
-              <div className="whitespace-pre-wrap text-[17px] leading-relaxed text-gray-100 font-light">
-                {content}
-              </div>
-            </div>
-          )}
+        {/* Hero */}
+        <div className="text-center mb-20">
+          <h1 className="text-7xl font-bold tracking-tighter leading-none">
+            The AI that never sleeps.<br />
+            <span className="text-cyan-400">The edge that never stops.</span>
+          </h1>
+          <p className="mt-6 text-2xl text-gray-400 max-w-2xl mx-auto">
+            Autonom AI-aksjerobot. 24/7 global scanning. Null menneskelig inngripen.
+          </p>
         </div>
 
-        <p className="text-center text-xs text-gray-500 mt-10">
-          Dette er ikke finansiell rådgivning. Investeringer innebærer risiko for tap av kapital.
-        </p>
+        {/* Live rapport */}
+        <div className="bg-[#0a0a0a] border border-gray-800 rounded-3xl p-10 min-h-[70vh]">
+          {content && <div className="prose prose-invert max-w-none">{content}</div>}
+        </div>
       </div>
     </div>
   );
