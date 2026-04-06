@@ -5,6 +5,7 @@ import { Header } from './components/header';
 import { Hero } from './components/hero';
 import { Features } from './components/features';
 import { LiveReport } from './components/live-report';
+import { BrokerConnect } from './components/broker-connect';
 import { Footer } from './components/footer';
 
 export default function ApexQuantum() {
@@ -61,6 +62,7 @@ export default function ApexQuantum() {
           onRefresh={fetchUpdate}
           isSubscribed={isSubscribed}
         />
+        <BrokerConnect language={language} />
       </main>
       <Footer language={language} />
     </div>
