@@ -1,6 +1,6 @@
 'use client';
 
-import type { ReactNode } from 'react';
+import React from 'react';
 
 interface FeaturesProps {
   language: 'no' | 'en';
@@ -59,7 +59,7 @@ export function Features({ language }: FeaturesProps) {
   };
 
   const t = content[language];
-  const icons: Record<string, ReactNode> = {
+  const icons: Record<string, React.JSX.Element> = {
     globe: (
       <svg viewBox="0 0 24 24" fill="none" className="w-6 h-6" stroke="currentColor" strokeWidth="1.5">
         <circle cx="12" cy="12" r="10" />
