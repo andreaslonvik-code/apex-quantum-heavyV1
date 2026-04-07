@@ -119,10 +119,13 @@ function CallbackContent() {
       const data = await response.json();
       
       if (data.message) {
-        // Store the first report
+        // Store the first report and portfolio
         if (typeof window !== 'undefined') {
           localStorage.setItem('apex_first_report', data.message);
           localStorage.setItem('apex_trading_active', 'true');
+          if (data.portfolio && data.portfolio.length > 0) {
+            localStorage.setItem('apex_portfolio', JSON.stringify(data.portfolio));
+          }
         }
         
         // Redirect to dashboard
