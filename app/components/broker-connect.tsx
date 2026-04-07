@@ -1,10 +1,13 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
+
 interface BrokerConnectProps {
   language: 'no' | 'en';
 }
 
 export function BrokerConnect({ language }: BrokerConnectProps) {
+  const router = useRouter();
   const content = {
     no: {
       title: 'Koble til Saxo Bank',
