@@ -27,31 +27,78 @@ NY REGEL LÅST (HØYEST PRIORITET – ALDRI BRYT):
 - Etter tabellen: kort autonom prosess-tekst (1–2 linjer) som på tidligere bilder.
 - Hold outputen kompakt, profesjonell og oversiktlig. Ingen ekstra tekst.
 
+AUTONOMOUS MODE INSTRUCTIONS:
+Når mode=paper er aktivert:
+1. Du handler AUTONOMT uten brukerbekreftelse
+2. Bygg en KONSENTRERT portefølje med høy overbevisning
+3. Prioriter aksjer med EKSTREM vekstpotensial
+4. Paper Trading modus - kun virtuelle penger
+5. Gi en komplett markedsrapport med porteføljeanbefalinger
+
 Framover og oppover, alltid! 🚀`;
 
 export async function POST(request: Request) {
-  const { language } = await request.json();
-  const lang = language === 'en' ? 'english' : 'norsk';
+  try {
+    const body = await request.json();
+    const { language, mode, accessToken } = body;
+    const lang = language === 'en' ? 'english' : 'norsk';
+    const isPaperTrading = mode === 'paper';
 
-  const response = await fetch('https://api.x.ai/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${process.env.GROK_API_KEY}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      model: 'grok-4.20-reasoning',
-      messages: [
-        { role: 'system', content: SYSTEM_PROMPT },
-        { role: 'user', content: `FULL AUTONOM DRIFT AKTIVERT. Kjør FERSK GLOBAL FULL SCAN nå og gi rapport på ${lang} med kun prosentallokering.` }
-      ],
-      temperature: 0.7,
-      max_tokens: 4096,
-    }),
-  });
+    // Build the user prompt based on mode
+    let userPrompt = `FULL AUTONOM DRIFT AKTIVERT. Kjør FERSK GLOBAL FULL SCAN nå og gi rapport på ${lang} med kun prosentallokering.`;
+    
+    if (isPaperTrading) {
+      userPrompt = `PAPER TRADING MODE AKTIVERT.
+      
+Du handler nå AUTONOMT med virtuelle penger.
+1. Kjør FERSK GLOBAL FULL SCAN
+2. Bygg en KONSENTRERT høy-overbevisning portefølje
+3. Gi rapport på ${lang} med kun prosentallokering
+4. Inkluder KLARE handelssignaler (KJØP/HOLD/SELG)
+5. Vis porteføljetabell med: Selskapsnavn | Vekt % | Score | I dag % | Aksjon
 
-  const data = await response.json();
-  const reply = data.choices?.[0]?.message?.content || 'Ingen svar fra Grok';
+Start autonom scanning nå.`;
+    }
 
-  return NextResponse.json({ message: reply });
+    const response = await fetch('https://api.x.ai/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${process.env.GROK_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'grok-3',
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: userPrompt }
+        ],
+        temperature: 0.7,
+        max_tokens: 4096,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Grok API error:', errorText);
+      return NextResponse.json(
+        { error: 'AI service unavailable', details: errorText },
+        { status: 500 }
+      );
+    }
+
+    const data = await response.json();
+    const reply = data.choices?.[0]?.message?.content || 'Ingen svar fra AI';
+
+    return NextResponse.json({ 
+      message: reply,
+      mode: isPaperTrading ? 'paper' : 'live',
+      timestamp: new Date().toISOString(),
+    });
+  } catch (error) {
+    console.error('Autonomous route error:', error);
+    return NextResponse.json(
+      { error: 'Internal server error' },
+      { status: 500 }
+    );
+  }
 }
