@@ -11,6 +11,22 @@ import { Footer } from './components/footer';
 import { Suspense } from 'react';
 
 function StatusBanner({ accountInfo }: { accountInfo: { accountId: string; balance: number; currency: string } | null }) {
+  const [nextScan, setNextScan] = useState<number>(10);
+
+  useEffect(() => {
+    // Calculate minutes until next 10-minute interval
+    const now = new Date();
+    const minutesPast = now.getMinutes() % 10;
+    const initialMinutes = minutesPast === 0 ? 10 : 10 - minutesPast;
+    setNextScan(initialMinutes);
+
+    const interval = setInterval(() => {
+      setNextScan(prev => (prev <= 1 ? 10 : prev - 1));
+    }, 60000);
+
+    return () => clearInterval(interval);
+  }, []);
+
   if (!accountInfo) return null;
   
   return (
@@ -29,10 +45,14 @@ function StatusBanner({ accountInfo }: { accountInfo: { accountId: string; balan
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
               <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
             </span>
-            <span className="text-foreground">Autonom handel aktiv</span>
+            <span className="text-foreground">24/7 Autonom Drift Aktiv</span>
           </div>
           <span className="text-muted-foreground hidden sm:inline">•</span>
           <span className="text-cyan-400 font-medium">Paper Trading</span>
+          <span className="text-muted-foreground hidden sm:inline">•</span>
+          <span className="text-muted-foreground">
+            Neste scan om <span className="text-foreground font-medium">{nextScan} min</span>
+          </span>
           <span className="text-muted-foreground hidden sm:inline">•</span>
           <span className="text-muted-foreground">
             Saldo: <span className="text-foreground font-medium">{accountInfo.balance.toLocaleString('no-NO')} {accountInfo.currency}</span>
