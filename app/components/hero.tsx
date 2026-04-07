@@ -12,7 +12,7 @@ export function Hero({ language }: HeroProps) {
       titleAccent: 'Se resultatene.',
       description:
         'Motta daglige porteføljeanbefalinger fra vår AI som analyserer globale markeder 24/7. Følg anbefalingene og oppnå eksepsjonell avkastning.',
-      cta: 'Abonner nå',
+      cta: 'Start nå',
       price: '499 kr/mnd',
     },
     en: {
@@ -21,7 +21,7 @@ export function Hero({ language }: HeroProps) {
       titleAccent: 'See the results.',
       description:
         'Receive daily portfolio recommendations from our AI analyzing global markets 24/7. Follow the recommendations and achieve exceptional returns.',
-      cta: 'Subscribe Now',
+      cta: 'Get Started',
       price: '499 NOK/mo',
     },
   };
@@ -48,7 +48,9 @@ export function Hero({ language }: HeroProps) {
 
         <div className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4">
           <button
-            onClick={() => (window.location.href = '/api/stripe/checkout')}
+            onClick={() => {
+              document.getElementById('setup')?.scrollIntoView({ behavior: 'smooth' });
+            }}
             className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold px-8 py-3.5 rounded-xl transition-all flex items-center gap-3 text-lg"
           >
             {t.cta}

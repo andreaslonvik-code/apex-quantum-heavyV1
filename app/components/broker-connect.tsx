@@ -95,7 +95,7 @@ export function BrokerConnect({ language }: BrokerConnectProps) {
   const t = content[language];
 
   return (
-    <section className="py-20 px-4 sm:px-6 lg:px-8 border-t border-border/50">
+    <section id="setup" className="py-20 px-4 sm:px-6 lg:px-8 border-t border-border/50">
       <div className="max-w-4xl mx-auto">
         <div className="text-center mb-12">
           <h2 className="text-3xl sm:text-4xl font-bold mb-4">{t.title}</h2>

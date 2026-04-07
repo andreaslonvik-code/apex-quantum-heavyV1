@@ -193,7 +193,10 @@ export function LiveReport({ content, isLoading, language, onRefresh, isSubscrib
                     <h3 className="text-2xl font-bold mb-3">{t.paywallTitle}</h3>
                     <p className="text-muted-foreground mb-6 leading-relaxed">{t.paywallDesc}</p>
                     <button
-                      onClick={() => (window.location.href = '/api/stripe/checkout')}
+                      onClick={() => {
+                        // Paywall - visual only for now
+                        alert(language === 'no' ? 'Betalingsløsning kommer snart!' : 'Payment solution coming soon!');
+                      }}
                       className="bg-accent hover:bg-accent/90 text-accent-foreground font-semibold px-6 py-3 rounded-xl transition-all w-full"
                     >
                       {t.subscribe}
