@@ -29,12 +29,13 @@ export default function CallbackPage() {
 function CallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [status, setStatus] = useState<'loading' | 'connected' | 'scanning' | 'error'>('loading');
   const [message, setMessage] = useState('Kobler til Saxo...');
   const [accountInfo, setAccountInfo] = useState<{
     accountId: string;
     balance: number;
     currency: string;
+    accessToken?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -73,8 +74,23 @@ function CallbackContent() {
           accountId: data.accountId,
           balance: data.balance,
           currency: data.currency,
+          accessToken: data.accessToken,
         });
-        setStatus('success');
+        
+        // Store connection info in localStorage
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('apex_saxo_connected', 'true');
+          localStorage.setItem('apex_saxo_account', JSON.stringify({
+            accountId: data.accountId,
+            balance: data.balance,
+            currency: data.currency,
+          }));
+          if (data.accessToken) {
+            localStorage.setItem('apex_saxo_token', data.accessToken);
+          }
+        }
+        
+        setStatus('connected');
         setMessage('Tilkobling vellykket!');
       } catch (err) {
         setStatus('error');
@@ -84,6 +100,39 @@ function CallbackContent() {
 
     exchangeCode();
   }, [searchParams]);
+
+  const startAutonomousTrading = async () => {
+    setStatus('scanning');
+    setMessage('Apex Quantum starter nå autonom scanning og bygger din konsentrerte portefølje...');
+    
+    try {
+      const response = await fetch('/api/apex/autonomous', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
+          mode: 'paper',
+          language: 'no',
+          accessToken: accountInfo?.accessToken,
+        }),
+      });
+
+      const data = await response.json();
+      
+      if (data.message) {
+        // Store the first report
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('apex_first_report', data.message);
+          localStorage.setItem('apex_trading_active', 'true');
+        }
+        
+        // Redirect to dashboard
+        router.push('/?connected=1');
+      }
+    } catch (err) {
+      setStatus('error');
+      setMessage('Feil ved oppstart av autonom handel');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center p-4">
@@ -105,7 +154,7 @@ function CallbackContent() {
             </>
           )}
 
-          {status === 'success' && accountInfo && (
+          {status === 'connected' && accountInfo && (
             <>
               <div className="w-16 h-16 bg-accent/20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg className="w-8 h-8 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -134,20 +183,60 @@ function CallbackContent() {
                 </div>
               </div>
 
-              <div className="flex items-center justify-center gap-2 text-accent mb-6">
-                <span className="relative flex h-2 w-2">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
-                </span>
-                <span className="text-sm">AI-en scanner markedet...</span>
-              </div>
-
               <button
-                onClick={() => router.push('/')}
-                className="w-full py-3 px-6 bg-accent text-accent-foreground font-medium rounded-xl hover:bg-accent/90 transition-colors"
+                onClick={startAutonomousTrading}
+                className="w-full py-4 px-6 bg-accent text-accent-foreground font-semibold text-lg rounded-xl hover:bg-accent/90 transition-all transform hover:scale-[1.02] shadow-lg shadow-accent/25"
               >
-                Gå til dashboard
+                <span className="flex items-center justify-center gap-3">
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Start Autonom Handel nå
+                </span>
               </button>
+              
+              <p className="text-muted-foreground/60 text-xs mt-4">
+                AI-en vil bygge en konsentrert portefølje basert på sanntidsanalyse
+              </p>
+            </>
+          )}
+
+          {status === 'scanning' && (
+            <>
+              <div className="w-16 h-16 bg-accent/20 rounded-full flex items-center justify-center mx-auto mb-6">
+                <div className="w-10 h-10 border-4 border-accent border-t-transparent rounded-full animate-spin" />
+              </div>
+              <h2 className="text-xl font-semibold text-foreground mb-4">Autonom Handel Starter</h2>
+              <p className="text-muted-foreground mb-4">
+                Apex Quantum starter nå autonom scanning og bygger din konsentrerte portefølje...
+              </p>
+              <p className="text-accent text-sm font-medium">
+                Dette kan ta 15-40 sekunder.
+              </p>
+              
+              <div className="mt-6 space-y-2">
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-accent opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-accent"></span>
+                  </span>
+                  Scanner globale markeder...
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75" style={{ animationDelay: '0.5s' }}></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-cyan-400"></span>
+                  </span>
+                  Analyserer vekstpotensial...
+                </div>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <span className="relative flex h-2 w-2">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" style={{ animationDelay: '1s' }}></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-green-400"></span>
+                  </span>
+                  Bygger konsentrert portefølje...
+                </div>
+              </div>
             </>
           )}
 
