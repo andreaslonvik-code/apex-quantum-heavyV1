@@ -145,7 +145,7 @@ export function LiveReport({ content, isLoading, language, onRefresh, isSubscrib
                 {/* Blurred preview */}
                 <div className="blur-sm select-none pointer-events-none">
                   <div className="space-y-4 text-sm font-mono text-muted-foreground">
-                    <p>MARKET ANALYSIS - {new Date().toLocaleDateString()}</p>
+                    <p>MARKET ANALYSIS - 07.04.2026</p>
                     <p>{'='}.repeat(50)</p>
                     <p>Global markets showing strong momentum with tech sector leading gains...</p>
                     <p>AI chip demand continues to drive semiconductor valuations...</p>
