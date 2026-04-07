@@ -1,9 +1,32 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 
-export default function SaxoCallbackPage() {
+export default function CallbackPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="max-w-md w-full text-center">
+          <img
+            src="/images/logo.jpg"
+            alt="Apex Quantum"
+            className="h-16 w-auto mx-auto mb-4"
+          />
+          <h1 className="text-2xl font-bold text-foreground mb-8">Apex Quantum</h1>
+          <div className="bg-card border border-border rounded-2xl p-8">
+            <div className="w-12 h-12 border-4 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+            <p className="text-muted-foreground">Kobler til Saxo Bank...</p>
+          </div>
+        </div>
+      </div>
+    }>
+      <CallbackContent />
+    </Suspense>
+  );
+}
+
+function CallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
