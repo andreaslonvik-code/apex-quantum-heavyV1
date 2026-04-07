@@ -7,7 +7,7 @@ const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 // App credentials - in production these should be environment variables
 const CLIENT_ID = '036e1c50316b4589b899db41f61563a7';
 const CLIENT_SECRET = '11188e12641c4328aab1833982e060c7';
-const REDIRECT_URI = process.env.SAXO_REDIRECT_URI || 'http://localhost:3000/callback';
+const REDIRECT_URI = process.env.SAXO_REDIRECT_URI || 'https://apex-quantum.com/callback';
 
 export async function POST(request: NextRequest) {
   try {
@@ -90,6 +90,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      accessToken: accessToken,
       accountId: account.AccountId || account.AccountKey || 'TRIAL_22114134',
       balance: balance,
       currency: currency,
