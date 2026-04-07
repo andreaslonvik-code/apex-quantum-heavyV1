@@ -58,7 +58,6 @@ function CallbackContent() {
     // Exchange code for token
     const exchangeCode = async () => {
       try {
-        console.log('[v0] Exchanging code for token...');
         const response = await fetch('/api/apex/saxo-token', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -66,7 +65,6 @@ function CallbackContent() {
         });
 
         const data = await response.json();
-        console.log('[v0] Token response:', { success: data.success, hasAccessToken: !!data.accessToken, accountId: data.accountId });
 
         if (!response.ok) {
           throw new Error(data.error || 'Token exchange failed');
@@ -77,7 +75,6 @@ function CallbackContent() {
         }
 
         // Store credentials securely via API
-        console.log('[v0] Storing credentials via connect-saxo...');
         const connectResponse = await fetch('/api/apex/connect-saxo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -86,12 +83,10 @@ function CallbackContent() {
 
         if (!connectResponse.ok) {
           const connectError = await connectResponse.json();
-          console.log('[v0] Connect error:', connectError);
           throw new Error(connectError.error || 'Failed to store credentials');
         }
 
         const connectData = await connectResponse.json();
-        console.log('[v0] Connect success:', connectData);
 
         setAccountInfo({
           accountId: connectData.accountInfo.accountId,
