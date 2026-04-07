@@ -1,23 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
 // Saxo Bank SIM API endpoints
-const SAXO_SIM_AUTH_URL = 'https://sim.logonvalidation.net/token';
 const SAXO_SIM_API_URL = 'https://gateway.saxobank.com/sim/openapi';
-
-interface SaxoTokenResponse {
-  access_token: string;
-  token_type: string;
-  expires_in: number;
-  refresh_token?: string;
-}
 
 interface SaxoAccountResponse {
   Data: Array<{
     AccountId: string;
     AccountKey: string;
+    ClientKey: string;
     AccountType: string;
     Currency: string;
-    Balance?: number;
   }>;
 }
 
@@ -30,49 +23,17 @@ interface SaxoBalanceResponse {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { clientId, clientSecret, simulationMode } = body;
+    const { accessToken } = body;
 
     // Validate input
-    if (!clientId || !clientSecret) {
+    if (!accessToken) {
       return NextResponse.json(
-        { error: 'Client ID og Client Secret er påkrevd' },
+        { error: 'Access token er pakrevd' },
         { status: 400 }
       );
     }
 
-    if (!simulationMode) {
-      return NextResponse.json(
-        { error: 'Kun simuleringsmodus er støttet for øyeblikket' },
-        { status: 400 }
-      );
-    }
-
-    // Step 1: Get access token from Saxo SIM
-    const tokenResponse = await fetch(SAXO_SIM_AUTH_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: clientId,
-        client_secret: clientSecret,
-      }),
-    });
-
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      console.error('Saxo token error:', errorText);
-      return NextResponse.json(
-        { error: 'Kunne ikke autentisere med Saxo. Sjekk at Client ID og Client Secret er korrekte.' },
-        { status: 401 }
-      );
-    }
-
-    const tokenData: SaxoTokenResponse = await tokenResponse.json();
-    const accessToken = tokenData.access_token;
-
-    // Step 2: Get account information
+    // Step 1: Get account information using the access token
     const accountsResponse = await fetch(`${SAXO_SIM_API_URL}/port/v1/accounts/me`, {
       method: 'GET',
       headers: {
@@ -85,8 +46,8 @@ export async function POST(request: NextRequest) {
       const errorText = await accountsResponse.text();
       console.error('Saxo accounts error:', errorText);
       return NextResponse.json(
-        { error: 'Kunne ikke hente kontoinformasjon fra Saxo' },
-        { status: 500 }
+        { error: 'Kunne ikke hente kontoinformasjon fra Saxo. Sjekk at tilkoblingen er gyldig.' },
+        { status: 401 }
       );
     }
 
@@ -94,16 +55,16 @@ export async function POST(request: NextRequest) {
     
     if (!accountsData.Data || accountsData.Data.length === 0) {
       return NextResponse.json(
-        { error: 'Ingen kontoer funnet på denne Saxo-kontoen' },
+        { error: 'Ingen kontoer funnet pa denne Saxo-kontoen' },
         { status: 404 }
       );
     }
 
     const primaryAccount = accountsData.Data[0];
 
-    // Step 3: Get balance for the primary account
+    // Step 2: Get balance for the primary account
     const balanceResponse = await fetch(
-      `${SAXO_SIM_API_URL}/port/v1/balances?AccountKey=${primaryAccount.AccountKey}&ClientKey=${primaryAccount.AccountKey}`,
+      `${SAXO_SIM_API_URL}/port/v1/balances?AccountKey=${primaryAccount.AccountKey}&ClientKey=${primaryAccount.ClientKey}`,
       {
         method: 'GET',
         headers: {
@@ -113,27 +74,48 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    let balance = '100,000.00';
-    let currency = 'NOK';
+    let balance = 100000;
+    let currency = 'USD';
 
     if (balanceResponse.ok) {
       const balanceData: SaxoBalanceResponse = await balanceResponse.json();
-      balance = balanceData.TotalValue?.toLocaleString('no-NO', { 
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2 
-      }) || '100,000.00';
-      currency = balanceData.Currency || primaryAccount.Currency || 'NOK';
+      balance = balanceData.TotalValue || balanceData.CashBalance || 100000;
+      currency = balanceData.Currency || primaryAccount.Currency || 'USD';
     }
 
-    // Store credentials securely (in production, use a proper secrets manager)
-    // For now, we'll just validate the connection
-    // In a real app, you'd store these encrypted in a database
+    // Store access token in secure HTTP-only cookie
+    const cookieStore = await cookies();
+    cookieStore.set('apex_saxo_token', accessToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 60 * 24, // 24 hours
+      path: '/',
+    });
+
+    // Store account key for trading
+    cookieStore.set('apex_saxo_account_key', primaryAccount.AccountKey, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 60 * 24,
+      path: '/',
+    });
+
+    cookieStore.set('apex_saxo_client_key', primaryAccount.ClientKey, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 60 * 24,
+      path: '/',
+    });
 
     return NextResponse.json({
       success: true,
       message: 'Tilkobling vellykket',
       accountInfo: {
         accountId: primaryAccount.AccountId,
+        accountKey: primaryAccount.AccountKey,
         balance,
         currency,
         simulationMode: true,
@@ -143,8 +125,37 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Connect Saxo error:', error);
     return NextResponse.json(
-      { error: 'En uventet feil oppstod. Vennligst prøv igjen.' },
+      { error: 'En uventet feil oppstod. Vennligst prov igjen.' },
       { status: 500 }
     );
+  }
+}
+
+// GET endpoint to check connection status
+export async function GET() {
+  try {
+    const cookieStore = await cookies();
+    const token = cookieStore.get('apex_saxo_token');
+    const accountKey = cookieStore.get('apex_saxo_account_key');
+
+    if (!token || !accountKey) {
+      return NextResponse.json({ connected: false });
+    }
+
+    // Verify token is still valid by making a simple API call
+    const response = await fetch(`${SAXO_SIM_API_URL}/port/v1/accounts/me`, {
+      headers: { 'Authorization': `Bearer ${token.value}` },
+    });
+
+    if (!response.ok) {
+      return NextResponse.json({ connected: false });
+    }
+
+    return NextResponse.json({ 
+      connected: true,
+      accountKey: accountKey.value,
+    });
+  } catch {
+    return NextResponse.json({ connected: false });
   }
 }

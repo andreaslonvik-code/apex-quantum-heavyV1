@@ -135,9 +135,12 @@ function ApexQuantumContent() {
   };
 
   useEffect(() => {
+    // Only fetch data if connected
+    if (!isConnected) return;
+    
     // Only auto-fetch if we don't have a stored report
     const hasStoredReport = typeof window !== 'undefined' && localStorage.getItem('apex_first_report');
-    if (!hasStoredReport || !isConnected) {
+    if (!hasStoredReport) {
       fetchUpdate();
     }
     
@@ -145,22 +148,35 @@ function ApexQuantumContent() {
     return () => clearInterval(interval);
   }, [language, isConnected]);
 
+  // If not connected, show landing page only (paywall)
+  if (!isConnected) {
+    return (
+      <div className="min-h-screen bg-background text-foreground">
+        <Header language={language} onLanguageChange={setLanguage} />
+        <main>
+          <Hero language={language} />
+          <Features language={language} />
+          <BrokerConnect language={language} />
+        </main>
+        <Footer language={language} />
+      </div>
+    );
+  }
+
+  // Connected - show full dashboard with portfolio and reports
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Header language={language} onLanguageChange={setLanguage} />
-      {isConnected && <StatusBanner accountInfo={accountInfo} />}
+      <StatusBanner accountInfo={accountInfo} />
       <main>
-        <Hero language={language} />
-        <Features language={language} />
         <LiveReport
           content={content}
           isLoading={isLoading}
           language={language}
           onRefresh={fetchUpdate}
-          isSubscribed={isSubscribed}
+          isSubscribed={true}
           portfolio={portfolio}
         />
-        {!isConnected && <BrokerConnect language={language} />}
       </main>
       <Footer language={language} />
     </div>
