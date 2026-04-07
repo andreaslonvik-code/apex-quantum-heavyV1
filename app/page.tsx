@@ -51,6 +51,7 @@ function ApexQuantumContent() {
   const [isSubscribed, setIsSubscribed] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
   const [accountInfo, setAccountInfo] = useState<{ accountId: string; balance: number; currency: string } | null>(null);
+  const [portfolio, setPortfolio] = useState<Array<{ ticker: string; navn: string; vekt: number; aksjon: string; antall: number }>>([]);
 
   // Check connection status and load stored data
   useEffect(() => {
@@ -80,12 +81,19 @@ function ApexQuantumContent() {
           }
         }
         
-        // Load first report if available
+        // Load first report and portfolio if available
         const firstReport = localStorage.getItem('apex_first_report');
+        const storedPortfolio = localStorage.getItem('apex_portfolio');
         if (firstReport && tradingActive) {
           setContent(firstReport);
           setIsLoading(false);
-          return;
+        }
+        if (storedPortfolio) {
+          try {
+            setPortfolio(JSON.parse(storedPortfolio));
+          } catch (e) {
+            console.error('Failed to parse portfolio');
+          }
         }
       }
     }
@@ -104,6 +112,14 @@ function ApexQuantumContent() {
       });
       const data = await res.json();
       setContent(data.message);
+      
+      // Update portfolio if available
+      if (data.portfolio && data.portfolio.length > 0) {
+        setPortfolio(data.portfolio);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('apex_portfolio', JSON.stringify(data.portfolio));
+        }
+      }
       
       // Update stored report
       if (typeof window !== 'undefined' && isConnected) {
@@ -142,6 +158,7 @@ function ApexQuantumContent() {
           language={language}
           onRefresh={fetchUpdate}
           isSubscribed={isSubscribed}
+          portfolio={portfolio}
         />
         {!isConnected && <BrokerConnect language={language} />}
       </main>

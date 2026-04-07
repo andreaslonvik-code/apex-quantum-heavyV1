@@ -1,14 +1,23 @@
 'use client';
 
+interface PortfolioItem {
+  ticker: string;
+  navn: string;
+  vekt: number;
+  aksjon: string;
+  antall: number;
+}
+
 interface LiveReportProps {
   content: string;
   isLoading: boolean;
   language: 'no' | 'en';
   onRefresh: () => void;
   isSubscribed?: boolean;
+  portfolio?: PortfolioItem[];
 }
 
-export function LiveReport({ content, isLoading, language, onRefresh, isSubscribed = true }: LiveReportProps) {
+export function LiveReport({ content, isLoading, language, onRefresh, isSubscribed = true, portfolio = [] }: LiveReportProps) {
   const t = {
     no: {
       title: 'Live Markedsrapport',
@@ -44,13 +53,7 @@ export function LiveReport({ content, isLoading, language, onRefresh, isSubscrib
     },
   }[language];
 
-  const samplePortfolio = [
-    { ticker: 'NVDA', name: 'NVIDIA Corp', allocation: '18%', signal: 'BUY', change: '+2.4%' },
-    { ticker: 'AAPL', name: 'Apple Inc', allocation: '15%', signal: 'HOLD', change: '+0.8%' },
-    { ticker: 'MSFT', name: 'Microsoft', allocation: '14%', signal: 'BUY', change: '+1.2%' },
-    { ticker: 'GOOGL', name: 'Alphabet', allocation: '12%', signal: 'HOLD', change: '-0.3%' },
-    { ticker: 'AMZN', name: 'Amazon', allocation: '11%', signal: 'BUY', change: '+1.8%' },
-  ];
+
 
   return (
     <section className="py-16 px-6">
@@ -96,48 +99,50 @@ export function LiveReport({ content, isLoading, language, onRefresh, isSubscrib
                 <div className="space-y-8">
                   <div className="prose-custom font-mono text-sm whitespace-pre-wrap">{content}</div>
                   
-                  <div className="mt-8">
-                    <h3 className="text-lg font-semibold mb-4">{t.portfolioTitle}</h3>
-                    <div className="overflow-x-auto">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="border-b border-border">
-                            <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">{t.stock}</th>
-                            <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">{t.allocation}</th>
-                            <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">{t.signal}</th>
-                            <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">{t.change}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {samplePortfolio.map((stock) => (
-                            <tr key={stock.ticker} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                              <td className="py-3 px-4">
-                                <div className="flex flex-col">
-                                  <span className="font-medium">{stock.ticker}</span>
-                                  <span className="text-sm text-muted-foreground">{stock.name}</span>
-                                </div>
-                              </td>
-                              <td className="text-right py-3 px-4 font-mono">{stock.allocation}</td>
-                              <td className="text-center py-3 px-4">
-                                <span className={`inline-flex px-2 py-1 rounded-md text-xs font-medium ${
-                                  stock.signal === 'BUY' 
-                                    ? 'bg-accent/20 text-accent' 
-                                    : 'bg-muted text-muted-foreground'
-                                }`}>
-                                  {stock.signal}
-                                </span>
-                              </td>
-                              <td className={`text-right py-3 px-4 font-mono ${
-                                stock.change.startsWith('+') ? 'text-accent' : 'text-red-400'
-                              }`}>
-                                {stock.change}
-                              </td>
+                  {portfolio.length > 0 && (
+                    <div className="mt-8">
+                      <h3 className="text-lg font-semibold mb-4">{t.portfolioTitle}</h3>
+                      <div className="overflow-x-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="border-b border-border">
+                              <th className="text-left py-3 px-4 text-sm font-medium text-muted-foreground">{t.stock}</th>
+                              <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">{t.allocation}</th>
+                              <th className="text-center py-3 px-4 text-sm font-medium text-muted-foreground">{t.signal}</th>
+                              <th className="text-right py-3 px-4 text-sm font-medium text-muted-foreground">Antall</th>
                             </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                          </thead>
+                          <tbody>
+                            {portfolio.map((stock) => (
+                              <tr key={stock.ticker} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                                <td className="py-3 px-4">
+                                  <div className="flex flex-col">
+                                    <span className="font-medium">{stock.ticker}</span>
+                                    <span className="text-sm text-muted-foreground">{stock.navn}</span>
+                                  </div>
+                                </td>
+                                <td className="text-right py-3 px-4 font-mono">{stock.vekt}%</td>
+                                <td className="text-center py-3 px-4">
+                                  <span className={`inline-flex px-2 py-1 rounded-md text-xs font-medium ${
+                                    stock.aksjon === 'KJØP' || stock.aksjon === 'ØK'
+                                      ? 'bg-accent/20 text-accent' 
+                                      : stock.aksjon === 'SELG' || stock.aksjon === 'REDUSER'
+                                      ? 'bg-red-500/20 text-red-400'
+                                      : 'bg-muted text-muted-foreground'
+                                  }`}>
+                                    {stock.aksjon}
+                                  </span>
+                                </td>
+                                <td className="text-right py-3 px-4 font-mono">
+                                  {stock.antall}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               ) : null
             ) : (
