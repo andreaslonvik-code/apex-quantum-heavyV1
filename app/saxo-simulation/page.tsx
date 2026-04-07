@@ -5,9 +5,9 @@ import { useState } from 'react';
 // Saxo OAuth2 configuration
 const SAXO_AUTH_URL = 'https://sim.logonvalidation.net/authorize';
 const CLIENT_ID = '036e1c50316b4589b899db41f61563a7';
-const REDIRECT_URI = typeof window !== 'undefined' 
-  ? `${window.location.origin}/callback`
-  : 'http://localhost:3000/callback';
+// IMPORTANT: This redirect_uri must be registered in Saxo Developer Portal
+// Add your production URL there: https://developer.saxo/openapi/appmanagement/
+const REDIRECT_URI = 'https://apex-quantum.com/callback';
 
 export default function SaxoSimulationPage() {
   const [isConnecting, setIsConnecting] = useState(false);
