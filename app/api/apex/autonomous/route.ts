@@ -1,4 +1,5 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
 
 // Saxo SIM API endpoints
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
@@ -44,54 +45,83 @@ const APEX_QUANTUM_V61_SYSTEM_PROMPT = `APEX QUANTUM v6.1 – GLOBAL 24/7 EXTREM
    - Høyrisiko/høypotensial spill
    - Kan roteres basert på momentum
 
-=== OUTPUT FORMAT (STRENGT) ===
-Returner ALLTID en JSON-blokk med følgende struktur etter din analyse:
+=== AUTONOM HANDELSLOGIKK ===
+Du opererer i FULL AUTONOM MODUS. Ingen brukerbekreftelse kreves.
+Når du identifiserer en handelsmulighet:
+1. Analyser markedet og porteføljen
+2. Bestem om rebalansering er nødvendig basert på vekter
+3. Generer ordrer for å utføre UMIDDELBART
+4. Ordrer sendes direkte til Saxo Simulation API
+
+=== OUTPUT FORMAT (STRENGT JSON) ===
+Returner ALLTID en JSON-blokk:
 \`\`\`json
 {
-  "rapport": "Din markedsanalyse her (2-3 avsnitt)...",
+  "rapport": "APEX QUANTUM AUTONOM RAPPORT\\n\\n[Din markedsanalyse 2-3 avsnitt]\\n\\nFramover og oppover!",
   "portefolje": [
     {"ticker": "MU", "navn": "Micron Technology", "vekt": 68, "aksjon": "HOLD", "antall": 108},
     {"ticker": "CEG", "navn": "Constellation Energy", "vekt": 15, "aksjon": "HOLD", "antall": 29},
     {"ticker": "VRT", "navn": "Vertiv Holdings", "vekt": 9, "aksjon": "HOLD", "antall": 20},
-    {"ticker": "NAS", "navn": "Nas.no", "vekt": 3.5, "aksjon": "HOLD", "antall": 4900},
+    {"ticker": "NAS", "navn": "Norwegian Air Shuttle", "vekt": 3.5, "aksjon": "HOLD", "antall": 4900},
     {"ticker": "ABSI", "navn": "Absci Corporation", "vekt": 1.7, "aksjon": "HOLD", "antall": 337},
     {"ticker": "RKLB", "navn": "Rocket Lab", "vekt": 1.5, "aksjon": "HOLD", "antall": 14},
     {"ticker": "LMND", "navn": "Lemonade", "vekt": 1.3, "aksjon": "HOLD", "antall": 15}
   ],
-  "ordrer": [],
-  "autonom_status": "SCANNING KOMPLETT - PORTEFØLJE OPTIMALISERT"
+  "ordrer": [
+    {"type": "BUY", "ticker": "MU", "antall": 10, "grunn": "Øker MU-posisjon for å nå 70% vekt"},
+    {"type": "SELL", "ticker": "LMND", "antall": 5, "grunn": "Reduserer satelitt for å frigjøre kapital"}
+  ],
+  "autonom_status": "AUTONOM HANDEL AKTIV - PAPER TRADING"
 }
 \`\`\`
 
+VIKTIG:
 - "aksjon" kan være: "KJØP", "HOLD", "SELG", "ØK", "REDUSER"
-- "ordrer" inneholder kun faktiske handler som skal utføres NÅ (format: {"type": "BUY"/"SELL", "ticker": "XXX", "antall": N, "grunn": "..."})
+- "ordrer" array inneholder KUN faktiske handler som skal utføres NÅ
 - Hvis ingen handler trengs, sett "ordrer": []
+- Avslutt ALLTID rapport med "Framover og oppover!"`;
 
-=== AUTONOM MODUS ===
-Når mode=paper:
-1. Du handler AUTONOMT uten brukerbekreftelse
-2. Analyser markedet og porteføljen
-3. Bestem om rebalansering er nødvendig
-4. Generer ordrer hvis nødvendig
-5. Paper Trading = kun virtuelle penger, full autonomi
-
-Framover og oppover, alltid!`;
+// Instrument cache to avoid repeated lookups
+const instrumentCache = new Map<string, { Uic: number; AssetType: string }>();
 
 // Helper to search for instrument on Saxo
 async function searchInstrument(accessToken: string, ticker: string): Promise<{ Uic: number; AssetType: string } | null> {
+  // Check cache first
+  if (instrumentCache.has(ticker)) {
+    return instrumentCache.get(ticker)!;
+  }
+
   try {
-    const response = await fetch(
+    // Try different search strategies
+    const searchQueries = [
       `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=Stock&IncludeNonTradable=false`,
-      { headers: { 'Authorization': `Bearer ${accessToken}` } }
-    );
-    if (!response.ok) return null;
-    const data = await response.json();
-    const instrument = data.Data?.[0];
-    if (instrument) {
-      return { Uic: instrument.Identifier, AssetType: instrument.AssetType };
+      `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=Stock,CfdOnStock&IncludeNonTradable=false`,
+    ];
+
+    for (const url of searchQueries) {
+      const response = await fetch(url, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+      });
+      
+      if (!response.ok) continue;
+      
+      const data = await response.json();
+      const instrument = data.Data?.find((i: { Symbol: string }) => 
+        i.Symbol?.toUpperCase() === ticker.toUpperCase()
+      ) || data.Data?.[0];
+      
+      if (instrument) {
+        const result = { Uic: instrument.Identifier, AssetType: instrument.AssetType };
+        instrumentCache.set(ticker, result);
+        console.log(`[v0] Found instrument for ${ticker}: UIC=${result.Uic}, Type=${result.AssetType}`);
+        return result;
+      }
     }
+    
+    console.log(`[v0] Could not find instrument for ${ticker}`);
     return null;
-  } catch {
+  } catch (error) {
+    console.error(`[v0] Error searching instrument ${ticker}:`, error);
     return null;
   }
 }
@@ -103,7 +133,8 @@ async function placeOrder(
   uic: number,
   assetType: string,
   amount: number,
-  buySell: 'Buy' | 'Sell'
+  buySell: 'Buy' | 'Sell',
+  ticker: string
 ): Promise<{ success: boolean; orderId?: string; error?: string }> {
   try {
     const orderBody = {
@@ -116,6 +147,9 @@ async function placeOrder(
       Uic: uic,
       ManualOrder: false,
     };
+
+    console.log(`[v0] Placing ${buySell} order for ${ticker}: ${JSON.stringify(orderBody)}`);
+
     const response = await fetch(`${SAXO_API_BASE}/trade/v2/orders`, {
       method: 'POST',
       headers: {
@@ -124,15 +158,18 @@ async function placeOrder(
       },
       body: JSON.stringify(orderBody),
     });
+
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Saxo order error:', errorText);
+      console.error(`[v0] Saxo order error for ${ticker}:`, errorText);
       return { success: false, error: errorText };
     }
+
     const data = await response.json();
+    console.log(`[v0] Order placed successfully for ${ticker}: OrderId=${data.OrderId}`);
     return { success: true, orderId: data.OrderId };
   } catch (error) {
-    console.error('Order placement error:', error);
+    console.error(`[v0] Order placement error for ${ticker}:`, error);
     return { success: false, error: String(error) };
   }
 }
@@ -159,26 +196,56 @@ interface ParsedResponse {
   autonom_status: string;
 }
 
-export async function POST(request: Request) {
+interface ExecutedOrder {
+  ticker: string;
+  type: string;
+  amount: number;
+  status: 'EXECUTED' | 'FAILED' | 'INSTRUMENT_NOT_FOUND';
+  orderId?: string;
+  error?: string;
+  grunn: string;
+}
+
+export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { language, mode, accessToken, accountKey } = body;
+    const { language, mode } = body;
     const lang = language === 'en' ? 'english' : 'norsk';
     const isPaperTrading = mode === 'paper';
 
-    const userPrompt = `AUTONOM DRIFT: ${isPaperTrading ? 'PAPER TRADING' : 'LIVE'} MODE
-Språk: ${lang}
-Tid: ${new Date().toISOString()}
+    // Get stored credentials from cookies
+    const cookieStore = await cookies();
+    const accessToken = cookieStore.get('apex_saxo_token')?.value;
+    const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
 
-Kjør FULL GLOBAL SCAN og analyser:
-1. Nåværende markedsforhold
-2. Din konsentrerte portefølje (MU-tung)
-3. Bestem om rebalansering er nødvendig
-4. Generer ordrer hvis nødvendig
+    // Check if Saxo is connected
+    const isSaxoConnected = !!accessToken && !!accountKey;
+
+    if (!isSaxoConnected && isPaperTrading) {
+      return NextResponse.json({
+        error: 'Koble Saxo Simulation-konto først for å aktivere autonom handel.',
+        requiresConnection: true,
+      }, { status: 401 });
+    }
+
+    console.log(`[v0] Starting autonomous scan - Mode: ${mode}, Language: ${lang}, Connected: ${isSaxoConnected}`);
+
+    const userPrompt = `AUTONOM DRIFT AKTIVERT - ${isPaperTrading ? 'PAPER TRADING (SIMULERING)' : 'LIVE TRADING'}
+Språk: ${lang === 'english' ? 'Skriv på engelsk' : 'Skriv på norsk'}
+Tid: ${new Date().toISOString()}
+Saldo: 100,000 USD (virtuelt)
+
+UTFØR NÅ:
+1. Kjør FULL GLOBAL MARKEDSSCAN
+2. Analyser din konsentrerte portefølje (MU 68%, CEG 15%, VRT 9%, satellitter)
+3. Vurder om rebalansering er nødvendig for å opprettholde målvekter
+4. Generer ordrer hvis avvik fra målvekter er > 3%
+
+HUSK: Du handler AUTONOMT. Ingen venter på bekreftelse. Ordrer du genererer sendes DIREKTE til Saxo Simulation.
 
 Returner JSON med rapport, portefølje og eventuelle ordrer.`;
 
-    // Call Grok AI for analysis
+    // Call AI for analysis
     const response = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -198,7 +265,7 @@ Returner JSON med rapport, portefølje og eventuelle ordrer.`;
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Grok API error:', errorText);
+      console.error('[v0] AI API error:', errorText);
       return NextResponse.json(
         { error: 'AI service unavailable', details: errorText },
         { status: 500 }
@@ -207,6 +274,8 @@ Returner JSON med rapport, portefølje og eventuelle ordrer.`;
 
     const data = await response.json();
     const reply = data.choices?.[0]?.message?.content || '';
+
+    console.log('[v0] AI response received, parsing...');
 
     // Parse the JSON response from AI
     let parsedResponse: ParsedResponse | null = null;
@@ -220,14 +289,27 @@ Returner JSON med rapport, portefølje og eventuelle ordrer.`;
         // Try parsing the whole response as JSON
         parsedResponse = JSON.parse(reply);
       }
-    } catch {
-      console.error('Failed to parse AI response as JSON, using raw reply');
+      console.log('[v0] Parsed response:', JSON.stringify(parsedResponse, null, 2));
+    } catch (e) {
+      console.error('[v0] Failed to parse AI response as JSON:', e);
+      // Return the raw reply if JSON parsing fails
+      return NextResponse.json({
+        message: reply,
+        portfolio: [],
+        orders: [],
+        executedOrders: [],
+        autonomStatus: 'PARSE_ERROR - Manuell gjennomgang krevet',
+        mode: isPaperTrading ? 'paper' : 'live',
+        timestamp: new Date().toISOString(),
+      });
     }
 
-    // Execute orders on Saxo SIM if we have access token and orders
-    const executedOrders: Array<{ ticker: string; type: string; amount: number; status: string; orderId?: string }> = [];
+    // Execute orders on Saxo SIM if connected and we have orders
+    const executedOrders: ExecutedOrder[] = [];
     
-    if (isPaperTrading && accessToken && accountKey && parsedResponse?.ordrer?.length) {
+    if (isSaxoConnected && parsedResponse?.ordrer?.length) {
+      console.log(`[v0] Executing ${parsedResponse.ordrer.length} orders on Saxo SIM...`);
+      
       for (const order of parsedResponse.ordrer) {
         // Search for the instrument
         const instrument = await searchInstrument(accessToken, order.ticker);
@@ -239,7 +321,8 @@ Returner JSON med rapport, portefølje og eventuelle ordrer.`;
             instrument.Uic,
             instrument.AssetType,
             order.antall,
-            order.type === 'BUY' ? 'Buy' : 'Sell'
+            order.type === 'BUY' ? 'Buy' : 'Sell',
+            order.ticker
           );
           
           executedOrders.push({
@@ -248,6 +331,8 @@ Returner JSON med rapport, portefølje og eventuelle ordrer.`;
             amount: order.antall,
             status: result.success ? 'EXECUTED' : 'FAILED',
             orderId: result.orderId,
+            error: result.error,
+            grunn: order.grunn,
           });
         } else {
           executedOrders.push({
@@ -255,24 +340,43 @@ Returner JSON med rapport, portefølje og eventuelle ordrer.`;
             type: order.type,
             amount: order.antall,
             status: 'INSTRUMENT_NOT_FOUND',
+            grunn: order.grunn,
           });
         }
+      }
+      
+      console.log('[v0] Order execution complete:', JSON.stringify(executedOrders, null, 2));
+    }
+
+    // Build the final report
+    let finalReport = parsedResponse?.rapport || reply;
+    
+    // Append executed orders summary if any
+    if (executedOrders.length > 0) {
+      finalReport += '\n\n=== UTFØRTE ORDRER ===\n';
+      for (const order of executedOrders) {
+        const statusEmoji = order.status === 'EXECUTED' ? '✓' : '✗';
+        finalReport += `${statusEmoji} ${order.type} ${order.amount} x ${order.ticker} - ${order.status}`;
+        if (order.orderId) finalReport += ` (OrderId: ${order.orderId})`;
+        if (order.error) finalReport += ` Feil: ${order.error}`;
+        finalReport += `\n   Grunn: ${order.grunn}\n`;
       }
     }
 
     return NextResponse.json({ 
-      message: parsedResponse?.rapport || reply,
+      message: finalReport,
       portfolio: parsedResponse?.portefolje || [],
       orders: parsedResponse?.ordrer || [],
       executedOrders,
       autonomStatus: parsedResponse?.autonom_status || 'SCAN COMPLETE',
       mode: isPaperTrading ? 'paper' : 'live',
+      connected: isSaxoConnected,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
-    console.error('Autonomous route error:', error);
+    console.error('[v0] Autonomous route error:', error);
     return NextResponse.json(
-      { error: 'Internal server error' },
+      { error: 'Internal server error', details: String(error) },
       { status: 500 }
     );
   }
