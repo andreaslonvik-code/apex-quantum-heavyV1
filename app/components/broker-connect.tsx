@@ -164,7 +164,8 @@ export function BrokerConnect({ language }: BrokerConnectProps) {
               />
             </div>
             <button
-              type="submit"
+              type="button"
+              onClick={() => router.push('/saxo-simulation')}
               className="w-full py-3 px-6 bg-accent text-accent-foreground font-medium rounded-lg hover:bg-accent/90 transition-colors"
             >
               {t.connect}
