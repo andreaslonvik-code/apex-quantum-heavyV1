@@ -2,50 +2,28 @@
 
 import { useState } from 'react';
 
+// Saxo OAuth2 configuration
+const SAXO_AUTH_URL = 'https://sim.logonvalidation.net/authorize';
+const CLIENT_ID = '036e1c50316b4589b899db41f61563a7';
+const REDIRECT_URI = typeof window !== 'undefined' 
+  ? `${window.location.origin}/callback`
+  : 'http://localhost:3000/callback';
+
 export default function SaxoSimulationPage() {
-  const [clientId, setClientId] = useState('036e1c50316b4589b899db41f61563a7');
-  const [clientSecret, setClientSecret] = useState('');
-  const [showSecret, setShowSecret] = useState(false);
   const [isConnecting, setIsConnecting] = useState(false);
-  const [isConnected, setIsConnected] = useState(false);
-  const [error, setError] = useState('');
-  const [accountInfo, setAccountInfo] = useState<{ balance: string; currency: string } | null>(null);
 
-  const handleConnect = async () => {
-    if (!clientId || !clientSecret) {
-      setError('Vennligst fyll ut både Client ID og Client Secret');
-      return;
-    }
-
+  const handleConnect = () => {
     setIsConnecting(true);
-    setError('');
-
-    try {
-      const response = await fetch('/api/apex/connect-saxo', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          clientId,
-          clientSecret,
-          simulationMode: true,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Kunne ikke koble til Saxo');
-      }
-
-      setAccountInfo(data.accountInfo);
-      setIsConnected(true);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'En feil oppstod');
-    } finally {
-      setIsConnecting(false);
-    }
+    
+    // Build OAuth2 authorization URL
+    const authUrl = new URL(SAXO_AUTH_URL);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('client_id', CLIENT_ID);
+    authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
+    authUrl.searchParams.set('state', crypto.randomUUID());
+    
+    // Redirect to Saxo login
+    window.location.href = authUrl.toString();
   };
 
   return (
@@ -65,203 +43,168 @@ export default function SaxoSimulationPage() {
       {/* Main content */}
       <main className="flex-1 py-12 px-4 sm:px-6 lg:px-8">
         <div className="max-w-2xl mx-auto">
-          {!isConnected ? (
-            <div className="bg-card border border-border rounded-2xl p-8 sm:p-10">
-              <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-4 text-balance">
-                Koble din Saxo Simulation-konto
-              </h1>
-              
-              <p className="text-muted-foreground mb-8 leading-relaxed">
-                Du er nå klar til å koble Apex Quantum til din Saxo Simulation-konto med 100 000 kr virtuelle penger. Apex Quantum vil handle autonomt i Paper Trading-modus. Ingen ekte penger brukes.
-              </p>
+          <div className="bg-card border border-border rounded-2xl p-8 sm:p-10">
+            <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-4 text-balance">
+              Koble din Saxo Simulation-konto til Apex Quantum
+            </h1>
+            
+            <p className="text-muted-foreground mb-8 leading-relaxed">
+              Apex Quantum vil nå handle autonomt i Paper Trading-modus med dine 100 000 kr virtuelle penger. Ingen ekte penger brukes.
+            </p>
 
-              <div className="space-y-6">
-                {/* Client ID field */}
-                <div>
-                  <label htmlFor="clientId" className="block text-sm font-medium text-foreground mb-2">
-                    Client ID (App Key)
-                  </label>
-                  <input
-                    type="text"
-                    id="clientId"
-                    value={clientId}
-                    onChange={(e) => setClientId(e.target.value)}
-                    className="w-full bg-muted border border-border rounded-xl px-4 py-3 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent transition-all font-mono text-sm"
-                    placeholder="Din Client ID"
-                  />
-                </div>
-
-                {/* Client Secret field with eye toggle */}
-                <div>
-                  <label htmlFor="clientSecret" className="block text-sm font-medium text-foreground mb-2">
-                    Client Secret (App Secret)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type={showSecret ? 'text' : 'password'}
-                      id="clientSecret"
-                      value={clientSecret}
-                      onChange={(e) => setClientSecret(e.target.value)}
-                      className="w-full bg-muted border border-border rounded-xl px-4 py-3 pr-12 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent transition-all font-mono text-sm"
-                      placeholder="Din Client Secret"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowSecret(!showSecret)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                    >
-                      {showSecret ? (
-                        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                          <line x1="1" y1="1" x2="23" y2="23" />
-                        </svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                          <circle cx="12" cy="12" r="3" />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Simulation Mode Toggle (locked ON) */}
+            <div className="space-y-6">
+              {/* Info cards */}
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="bg-muted/50 border border-border rounded-xl p-4">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-medium text-foreground">Simulation Mode</p>
-                      <p className="text-sm text-muted-foreground">Paper Trading – virtuelle penger</p>
-                    </div>
-                    <div className="relative">
-                      <div className="w-12 h-6 bg-accent rounded-full flex items-center px-1">
-                        <div className="w-4 h-4 bg-accent-foreground rounded-full ml-auto" />
-                      </div>
-                      <div className="absolute inset-0 cursor-not-allowed" title="Simulation mode er alltid på" />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Error message */}
-                {error && (
-                  <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
-                    <p className="text-red-400 text-sm">{error}</p>
-                  </div>
-                )}
-
-                {/* Connect button */}
-                <button
-                  onClick={handleConnect}
-                  disabled={isConnecting}
-                  className="w-full bg-accent hover:bg-accent/90 disabled:bg-accent/50 disabled:cursor-not-allowed text-accent-foreground font-semibold px-6 py-4 rounded-xl transition-all flex items-center justify-center gap-3 text-lg"
-                >
-                  {isConnecting ? (
-                    <>
-                      <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
-                        <circle
-                          className="opacity-25"
-                          cx="12"
-                          cy="12"
-                          r="10"
-                          stroke="currentColor"
-                          strokeWidth="4"
-                          fill="none"
-                        />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
-                        />
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-accent/20 flex items-center justify-center">
+                      <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-accent" stroke="currentColor" strokeWidth="2">
+                        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
                       </svg>
-                      Kobler til...
-                    </>
-                  ) : (
-                    <>
-                      <svg
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        className="w-5 h-5"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
-                        <polyline points="10 17 15 12 10 7" />
-                        <line x1="15" y1="12" x2="3" y2="12" />
-                      </svg>
-                      Koble til Saxo og start autonom handel
-                    </>
-                  )}
-                </button>
-
-                {/* Note */}
-                <p className="text-center text-xs text-muted-foreground">
-                  Dette er kun simulert handel for testing og utvikling.
-                </p>
-              </div>
-            </div>
-          ) : (
-            <div className="bg-card border border-accent/30 rounded-2xl p-8 sm:p-10">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 rounded-full bg-accent/20 flex items-center justify-center">
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    className="w-6 h-6 text-accent"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                </div>
-                <h2 className="text-2xl font-bold text-foreground">Tilkobling vellykket!</h2>
-              </div>
-
-              <p className="text-muted-foreground mb-6 leading-relaxed">
-                Apex Quantum er nå koblet til din Saxo Simulation-konto. AI-en vil starte å scanne markedet og bygge din konsentrerte portefølje umiddelbart.
-              </p>
-
-              {accountInfo && (
-                <div className="bg-muted/50 border border-border rounded-xl p-4 mb-6">
-                  <p className="text-sm text-muted-foreground mb-1">Virtuell saldo</p>
-                  <p className="text-2xl font-bold text-foreground">
-                    {accountInfo.balance} {accountInfo.currency}
+                    </div>
+                    <span className="font-medium text-foreground text-sm">Sikker tilkobling</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Du logger inn direkte hos Saxo Bank. Vi lagrer aldri ditt passord.
                   </p>
                 </div>
-              )}
 
-              <div className="flex items-center gap-2 text-accent">
-                <div className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-                <span className="text-sm font-medium">AI-en scanner markedet...</span>
+                <div className="bg-muted/50 border border-border rounded-xl p-4">
+                  <div className="flex items-center gap-3 mb-2">
+                    <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
+                      <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-cyan-400" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="M12 6v6l4 2" />
+                      </svg>
+                    </div>
+                    <span className="font-medium text-foreground text-sm">Paper Trading</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Kun virtuelle penger. Perfekt for testing av AI-strategien.
+                  </p>
+                </div>
               </div>
 
-              <div className="mt-8">
-                <a
-                  href="/"
-                  className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors text-sm"
-                >
-                  <svg
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    className="w-4 h-4"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  >
-                    <path d="M19 12H5M12 19l-7-7 7-7" />
-                  </svg>
-                  Tilbake til dashbordet
-                </a>
+              {/* Simulation Mode indicator */}
+              <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse" />
+                    <div>
+                      <p className="font-medium text-foreground">Simulation Mode</p>
+                      <p className="text-sm text-cyan-400">Paper Trading – virtuelle penger</p>
+                    </div>
+                  </div>
+                  <div className="w-12 h-6 bg-cyan-500 rounded-full flex items-center px-1">
+                    <div className="w-4 h-4 bg-white rounded-full ml-auto" />
+                  </div>
+                </div>
               </div>
 
-              <p className="text-center text-xs text-muted-foreground mt-8">
-                Dette er kun simulert handel for testing og utvikling.
+              {/* What happens section */}
+              <div className="border-t border-border pt-6">
+                <h3 className="text-sm font-medium text-foreground mb-4">Hva skjer etter tilkobling?</h3>
+                <ul className="space-y-3">
+                  <li className="flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-xs font-medium text-accent">1</span>
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      AI-en scanner markedet og identifiserer muligheter
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-xs font-medium text-accent">2</span>
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      Apex Quantum bygger en konsentrert portefølje basert på din risikoappetitt
+                    </span>
+                  </li>
+                  <li className="flex items-start gap-3">
+                    <div className="w-5 h-5 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-xs font-medium text-accent">3</span>
+                    </div>
+                    <span className="text-sm text-muted-foreground">
+                      Handler utføres automatisk i din Saxo-konto
+                    </span>
+                  </li>
+                </ul>
+              </div>
+
+              {/* Connect button */}
+              <button
+                onClick={handleConnect}
+                disabled={isConnecting}
+                className="w-full bg-accent hover:bg-accent/90 disabled:bg-accent/50 disabled:cursor-not-allowed text-accent-foreground font-semibold px-6 py-4 rounded-xl transition-all flex items-center justify-center gap-3 text-lg"
+              >
+                {isConnecting ? (
+                  <>
+                    <svg className="animate-spin h-5 w-5" viewBox="0 0 24 24">
+                      <circle
+                        className="opacity-25"
+                        cx="12"
+                        cy="12"
+                        r="10"
+                        stroke="currentColor"
+                        strokeWidth="4"
+                        fill="none"
+                      />
+                      <path
+                        className="opacity-75"
+                        fill="currentColor"
+                        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                      />
+                    </svg>
+                    Omdirigerer til Saxo Bank...
+                  </>
+                ) : (
+                  <>
+                    <svg
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      className="w-5 h-5"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
+                      <polyline points="10 17 15 12 10 7" />
+                      <line x1="15" y1="12" x2="3" y2="12" />
+                    </svg>
+                    Koble til Saxo og start autonom handel
+                  </>
+                )}
+              </button>
+
+              {/* Note */}
+              <p className="text-center text-xs text-muted-foreground">
+                Dette er kun simulert handel for testing.
               </p>
             </div>
-          )}
+          </div>
+
+          {/* Back link */}
+          <div className="mt-6 text-center">
+            <a
+              href="/"
+              className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors text-sm"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                className="w-4 h-4"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              Tilbake til forsiden
+            </a>
+          </div>
         </div>
       </main>
 
