@@ -228,6 +228,14 @@ export async function POST(request: NextRequest) {
       }, { status: 401 });
     }
 
+    // Check for API key
+    if (!process.env.GROK_API_KEY) {
+      console.error('[v0] GROK_API_KEY not configured');
+      return NextResponse.json({
+        error: 'AI API-nøkkel mangler. Kontakt administrator.',
+      }, { status: 500 });
+    }
+
     console.log(`[v0] Starting autonomous scan - Mode: ${mode}, Language: ${lang}, Connected: ${isSaxoConnected}`);
 
     const userPrompt = `AUTONOM DRIFT AKTIVERT - ${isPaperTrading ? 'PAPER TRADING (SIMULERING)' : 'LIVE TRADING'}
