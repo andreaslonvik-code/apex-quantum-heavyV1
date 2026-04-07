@@ -70,24 +70,35 @@ function CallbackContent() {
           throw new Error(data.error || 'Token exchange failed');
         }
 
+        // Store credentials securely via API
+        const connectResponse = await fetch('/api/apex/connect-saxo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ accessToken: data.accessToken }),
+        });
+
+        if (!connectResponse.ok) {
+          const connectError = await connectResponse.json();
+          throw new Error(connectError.error || 'Failed to store credentials');
+        }
+
+        const connectData = await connectResponse.json();
+
         setAccountInfo({
-          accountId: data.accountId,
-          balance: data.balance,
-          currency: data.currency,
+          accountId: connectData.accountInfo.accountId,
+          balance: connectData.accountInfo.balance,
+          currency: connectData.accountInfo.currency,
           accessToken: data.accessToken,
         });
         
-        // Store connection info in localStorage
+        // Store connection info in localStorage (non-sensitive data only)
         if (typeof window !== 'undefined') {
           localStorage.setItem('apex_saxo_connected', 'true');
           localStorage.setItem('apex_saxo_account', JSON.stringify({
-            accountId: data.accountId,
-            balance: data.balance,
-            currency: data.currency,
+            accountId: connectData.accountInfo.accountId,
+            balance: connectData.accountInfo.balance,
+            currency: connectData.accountInfo.currency,
           }));
-          if (data.accessToken) {
-            localStorage.setItem('apex_saxo_token', data.accessToken);
-          }
         }
         
         setStatus('connected');
