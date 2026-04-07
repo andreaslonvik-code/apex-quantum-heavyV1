@@ -54,7 +54,9 @@ export function Header({ language, onLanguageChange }: HeaderProps) {
           </div>
 
           <button
-            onClick={() => (window.location.href = '/api/stripe/checkout')}
+            onClick={() => {
+              document.getElementById('setup')?.scrollIntoView({ behavior: 'smooth' });
+            }}
             className="bg-accent hover:bg-accent/90 text-accent-foreground font-medium px-5 py-2 rounded-lg transition-all flex items-center gap-2"
           >
             {t.cta}
