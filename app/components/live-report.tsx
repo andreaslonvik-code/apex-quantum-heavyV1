@@ -8,7 +8,7 @@ interface LiveReportProps {
   isSubscribed?: boolean;
 }
 
-export function LiveReport({ content, isLoading, language, onRefresh, isSubscribed = false }: LiveReportProps) {
+export function LiveReport({ content, isLoading, language, onRefresh, isSubscribed = true }: LiveReportProps) {
   const t = {
     no: {
       title: 'Live Markedsrapport',
