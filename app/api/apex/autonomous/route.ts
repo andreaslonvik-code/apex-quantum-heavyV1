@@ -8,10 +8,10 @@ const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 // xnas = NASDAQ, xnys = NYSE, xosl = Oslo
 const SAXO_SYMBOL_MAP: Record<string, string> = {
   'MU': 'MU:xnas',      // Micron - NASDAQ
-  'CEG': 'CEG:xnas',    // Constellation Energy - NASDAQ
+  'CEG': 'CEG:xnas',    // Constellation Energy - NASDAQ  
   'VRT': 'VRT:xnys',    // Vertiv - NYSE
   'RKLB': 'RKLB:xnas',  // Rocket Lab - NASDAQ
-  'LMND': 'LMND:xnys',  // Lemonade - NYSE (was NASDAQ, now NYSE)
+  'LMND': 'LMND:xnas',  // Lemonade - NASDAQ
   'ABSI': 'ABSI:xnas',  // Absci - NASDAQ
   'NAS': 'NAS:xosl',    // Norwegian Air - Oslo
 };
@@ -66,7 +66,6 @@ async function getCurrentPositions(accessToken: string, accountKey: string): Pro
     );
 
     if (!response.ok) {
-      console.log('[v0] Ingen eksisterende posisjoner funnet');
       return [];
     }
 
@@ -85,7 +84,6 @@ async function getCurrentPositions(accessToken: string, accountKey: string): Pro
       });
     }
 
-    console.log(`[v0] Fant ${positions.length} eksisterende posisjoner`);
     return positions;
   } catch (error) {
     console.error('[v0] Feil ved henting av posisjoner:', error);
@@ -115,7 +113,6 @@ async function getAccountBalance(accessToken: string, accountKey: string): Promi
     }
     
     const data = await response.json();
-    console.log('[v0] Account balance data:', JSON.stringify(data));
     return data.CashAvailableForTrading || data.TotalValue || data.CashBalance || 100000;
   } catch (error) {
     console.error('[v0] Error fetching balance:', error);
@@ -137,7 +134,7 @@ async function getInstrumentWithPrice(
     // Get Saxo symbol mapping
     const searchSymbol = SAXO_SYMBOL_MAP[ticker.toUpperCase()] || ticker;
 
-    console.log(`[v0] Søker etter ${ticker} med symbol: ${searchSymbol}`);
+
 
     // Method 1: Try searching with the mapped symbol (e.g., "MU:xnas")
     let searchResponse = await fetch(
@@ -149,7 +146,6 @@ async function getInstrumentWithPrice(
 
     // Method 2: If no results, try with just the ticker
     if (!data?.Data?.length) {
-      console.log(`[v0] Prøver alternativ søk for ${ticker}...`);
       searchResponse = await fetch(
         `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=Stock&IncludeNonTradable=false`,
         { headers: { 'Authorization': `Bearer ${accessToken}` } }
@@ -159,7 +155,6 @@ async function getInstrumentWithPrice(
 
     // Method 3: Try CfdOnStock if Stock doesn't work (Saxo SIM often uses CFDs)
     if (!data?.Data?.length) {
-      console.log(`[v0] Prøver CFD-søk for ${ticker}...`);
       searchResponse = await fetch(
         `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=CfdOnStock&IncludeNonTradable=false`,
         { headers: { 'Authorization': `Bearer ${accessToken}` } }
@@ -168,7 +163,6 @@ async function getInstrumentWithPrice(
     }
 
     if (!data?.Data?.length) {
-      console.log(`[v0] Ingen instrumenter funnet for ${ticker}`);
       return null;
     }
 
@@ -180,18 +174,14 @@ async function getInstrumentWithPrice(
     ) || data.Data[0];
 
     if (!instrument) {
-      console.log(`[v0] Ingen matching instrument for ${ticker} i resultater`);
       return null;
     }
-
-    console.log(`[v0] Fant ${ticker}: UIC=${instrument.Identifier}, Symbol=${instrument.Symbol}, AssetType=${instrument.AssetType}`);
 
     // Get current price
     const price = await getInstrumentPrice(accessToken, instrument.Identifier, instrument.AssetType);
     
     const result = { Uic: instrument.Identifier, AssetType: instrument.AssetType, CurrentPrice: price };
     instrumentCache.set(ticker, result);
-    console.log(`[v0] ${ticker}: UIC=${result.Uic}, Pris=$${result.CurrentPrice}`);
     return result;
   } catch (error) {
     console.error(`[v0] Feil ved søk etter ${ticker}:`, error);
