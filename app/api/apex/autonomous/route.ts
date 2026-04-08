@@ -262,9 +262,10 @@ export async function POST(request: NextRequest) {
   
   try {
     const body = await request.json();
-    const { language, mode } = body;
+    const { language, mode, buildPortfolio } = body;
     const lang = language === 'en' ? 'english' : 'norsk';
     const isPaperTrading = mode === 'paper';
+    const isInitialBuild = buildPortfolio === true;
 
     // Get credentials
     const cookieStore = await cookies();
@@ -283,9 +284,10 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[APEX] ========================================`);
-    console.log(`[APEX] APEX QUANTUM v6.1 - AKTIV TRADING START`);
+    console.log(`[APEX] APEX QUANTUM v6.1 - ${isInitialBuild ? 'INITIAL PORTFOLIO BUILD' : 'AKTIV TRADING'}`);
     console.log(`[APEX] Tidspunkt: ${new Date().toISOString()}`);
     console.log(`[APEX] Mode: ${isPaperTrading ? 'PAPER TRADING' : 'LIVE'}`);
+    console.log(`[APEX] Initial Build: ${isInitialBuild}`);
     console.log(`[APEX] ========================================`);
 
     // Get account state
@@ -303,7 +305,110 @@ export async function POST(request: NextRequest) {
       positionSummary += `${ticker}: ${amount} aksjer\n`;
     }
 
-    // Get AI trading signals
+    // Special handling for initial portfolio build
+    if (isInitialBuild && currentPositions.size === 0) {
+      console.log(`[APEX] INITIAL BUILD: Bygger v6.1 blueprint-portefolje fra scratch`);
+      
+      // Build portfolio according to v6.1 blueprint
+      const blueprintOrders: ExecutedTrade[] = [];
+      const targetPositions = [
+        { ticker: 'MU', vekt: 68 },
+        { ticker: 'CEG', vekt: 15 },
+        { ticker: 'VRT', vekt: 9 },
+        { ticker: 'RKLB', vekt: 3 },
+        { ticker: 'LMND', vekt: 3 },
+        { ticker: 'ABSI', vekt: 2 },
+      ];
+
+      for (const target of targetPositions) {
+        const instrument = await getInstrumentWithPrice(accessToken, target.ticker);
+        if (!instrument) {
+          console.log(`[APEX] Kunne ikke finne ${target.ticker}`);
+          continue;
+        }
+
+        const targetValue = (balance * target.vekt) / 100;
+        const shares = Math.floor(targetValue / instrument.CurrentPrice);
+        
+        if (shares <= 0) continue;
+
+        const saxoSymbol = SAXO_SYMBOL_MAP[target.ticker] || target.ticker;
+        console.log(`[APEX] INITIAL BUILD: Kjoper ${shares} aksjer ${saxoSymbol} (${target.vekt}% = $${targetValue.toFixed(0)})`);
+
+        const orderResult = await placeOrder(
+          accessToken,
+          accountKey,
+          instrument.Uic,
+          instrument.AssetType,
+          shares,
+          'Buy',
+          target.ticker
+        );
+
+        blueprintOrders.push({
+          ticker: target.ticker,
+          saxoSymbol,
+          type: 'BUY',
+          antall: shares,
+          pris: instrument.CurrentPrice,
+          verdi: shares * instrument.CurrentPrice,
+          orderId: orderResult.orderId,
+          status: orderResult.success ? 'EXECUTED' : 'FAILED',
+          grunn: `Initial build - ${target.vekt}% allokering`,
+        });
+      }
+
+      const successfulBuilds = blueprintOrders.filter(o => o.status === 'EXECUTED');
+      const totalBuilt = successfulBuilds.reduce((sum, o) => sum + o.verdi, 0);
+
+      console.log(`[APEX] INITIAL BUILD COMPLETE: ${successfulBuilds.length} posisjoner, $${totalBuilt.toLocaleString()}`);
+
+      // Build report for initial build
+      let buildReport = `APEX QUANTUM v6.1 - PORTEFOLJE BYGGET
+${'='.repeat(50)}
+Tidspunkt: ${new Date().toLocaleString('no-NO')}
+Mode: PAPER TRADING (Simulering)
+Kontosaldo: $${balance.toLocaleString()}
+
+=== PORTEFOLJE OPPRETTET FRA BLUEPRINT ===
+`;
+      for (const order of blueprintOrders) {
+        const icon = order.status === 'EXECUTED' ? 'OK' : 'FEIL';
+        buildReport += `${icon} ${order.antall}x ${order.saxoSymbol} @ $${order.pris.toFixed(2)} = $${order.verdi.toFixed(0)} (${APEX_POSITIONS[order.ticker as keyof typeof APEX_POSITIONS]?.baseVekt || 0}%)\n`;
+      }
+
+      buildReport += `
+Total investert: $${totalBuilt.toLocaleString()}
+Posisjoner opprettet: ${successfulBuilds.length}/${blueprintOrders.length}
+
+Portefoljen er na klar for aktiv trading!`;
+
+      const portfolio = Object.entries(APEX_POSITIONS).map(([ticker, info]) => {
+        const order = blueprintOrders.find(o => o.ticker === ticker);
+        return {
+          ticker,
+          navn: info.navn,
+          vekt: info.baseVekt,
+          aksjon: 'KJOPT',
+          antall: order?.antall || 0,
+        };
+      });
+
+      return NextResponse.json({
+        message: buildReport,
+        portfolio,
+        executedTrades: blueprintOrders,
+        autonomStatus: `Portefolje bygget: ${successfulBuilds.length} posisjoner`,
+        mode: 'paper',
+        connected: true,
+        accountBalance: balance,
+        totalTraded: totalBuilt,
+        isInitialBuild: true,
+        timestamp: new Date().toISOString(),
+      });
+    }
+
+    // Get AI trading signals for active trading
     const userPrompt = `AKTIV TRADING SCAN - ${new Date().toISOString()}
 
 Kontosaldo: $${balance.toLocaleString()}
