@@ -1,0 +1,72 @@
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+
+const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
+
+interface Position {
+  ticker: string;
+  amount: number;
+  marketValue: number;
+  currentPrice: number;
+  assetType: string;
+}
+
+export async function GET() {
+  try {
+    const cookieStore = await cookies();
+    const accessToken = cookieStore.get('apex_saxo_token')?.value;
+    const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
+
+    if (!accessToken || !accountKey) {
+      return NextResponse.json({
+        error: 'Ikke tilkoblet Saxo',
+        positions: [],
+      }, { status: 401 });
+    }
+
+    // Get positions from Saxo
+    const response = await fetch(
+      `${SAXO_API_BASE}/port/v1/positions?ClientKey=${accountKey}`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+
+    if (!response.ok) {
+      console.log('[APEX] Ingen posisjoner eller feil ved henting');
+      return NextResponse.json({
+        positions: [],
+        message: 'Ingen eksisterende posisjoner',
+      });
+    }
+
+    const data = await response.json();
+    const positions: Position[] = [];
+
+    for (const pos of data.Data || []) {
+      const ticker = pos.DisplayAndFormat?.Symbol?.split(':')[0] || 
+                     pos.PositionBase?.Uic?.toString() || '';
+      
+      positions.push({
+        ticker: ticker.toUpperCase(),
+        amount: pos.PositionBase?.Amount || 0,
+        marketValue: pos.PositionView?.MarketValue || 0,
+        currentPrice: pos.PositionView?.CurrentPrice || 0,
+        assetType: pos.PositionBase?.AssetType || 'Stock',
+      });
+    }
+
+    console.log(`[APEX] Hentet ${positions.length} posisjoner fra Saxo`);
+
+    return NextResponse.json({
+      positions,
+      totalValue: positions.reduce((sum, p) => sum + p.marketValue, 0),
+      positionCount: positions.length,
+    });
+
+  } catch (error) {
+    console.error('[APEX] Feil ved henting av posisjoner:', error);
+    return NextResponse.json({
+      error: 'Feil ved henting av posisjoner',
+      positions: [],
+    }, { status: 500 });
+  }
+}
