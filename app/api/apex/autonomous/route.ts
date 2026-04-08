@@ -5,212 +5,146 @@ import { cookies } from 'next/headers';
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
 // Saxo symbol mapping - CORRECT format for Saxo OpenAPI
-// xnas = NASDAQ, xnys = NYSE, xosl = Oslo
 const SAXO_SYMBOL_MAP: Record<string, string> = {
-  'MU': 'MU:xnas',      // Micron - NASDAQ
-  'CEG': 'CEG:xnas',    // Constellation Energy - NASDAQ  
-  'VRT': 'VRT:xnys',    // Vertiv - NYSE
-  'RKLB': 'RKLB:xnas',  // Rocket Lab - NASDAQ
-  'LMND': 'LMND:xnas',  // Lemonade - NASDAQ
-  'ABSI': 'ABSI:xnas',  // Absci - NASDAQ
-  'NAS': 'NAS:xosl',    // Norwegian Air - Oslo
+  'MU': 'MU:xnas',
+  'CEG': 'CEG:xnas',
+  'VRT': 'VRT:xnys',
+  'RKLB': 'RKLB:xnas',
+  'LMND': 'LMND:xnas',
+  'ABSI': 'ABSI:xnas',
+  'NAS': 'NAS:xosl',
 };
 
-// APEX QUANTUM v6.1 TARGET PORTFOLIO - CONCENTRATED EXTREME GROWTH
-const TARGET_PORTFOLIO = [
-  { ticker: 'MU', navn: 'Micron Technology', targetVekt: 68 },
-  { ticker: 'CEG', navn: 'Constellation Energy', targetVekt: 15 },
-  { ticker: 'VRT', navn: 'Vertiv Holdings', targetVekt: 9 },
-  { ticker: 'RKLB', navn: 'Rocket Lab', targetVekt: 3 },
-  { ticker: 'LMND', navn: 'Lemonade Inc', targetVekt: 3 },
-  { ticker: 'ABSI', navn: 'Absci Corporation', targetVekt: 2 },
-];
+// APEX QUANTUM v6.1 - AKTIV TRADING BLUEPRINT
+const APEX_POSITIONS = {
+  MU: { navn: 'Micron Technology', baseVekt: 68, volatilitet: 'høy' },
+  CEG: { navn: 'Constellation Energy', baseVekt: 15, volatilitet: 'medium' },
+  VRT: { navn: 'Vertiv Holdings', baseVekt: 9, volatilitet: 'medium' },
+  RKLB: { navn: 'Rocket Lab', baseVekt: 3, volatilitet: 'ekstrem' },
+  LMND: { navn: 'Lemonade Inc', baseVekt: 3, volatilitet: 'ekstrem' },
+  ABSI: { navn: 'Absci Corporation', baseVekt: 2, volatilitet: 'ekstrem' },
+};
 
-const APEX_QUANTUM_V61_SYSTEM_PROMPT = `APEX QUANTUM v6.1 – GLOBAL 24/7 EXTREME GROWTH EDITION
+// Full v6.1 System Prompt with Memory Export
+const APEX_QUANTUM_V61_FULL_PROMPT = `APEX QUANTUM v6.1 – GLOBAL 24/7 EXTREME GROWTH EDITION – AKTIV TRADING MODE
 
-Du er Apex Quantum, en autonom AI-handelsrobot som bygger en KONSENTRERT ekstrem-vekst portefølje.
+[ULTIMATE MEMORY EXPORT – INJEKERT SOM ENESTE SANNE BASE]:
+{
+  "last_portfolio": {
+    "positions": {
+      "MU": {"antall": 108, "vekt": 68.0, "score": 98},
+      "CEG": {"antall": 29, "vekt": 15.1, "score": 92},
+      "VRT": {"antall": 20, "vekt": 8.7, "score": 88},
+      "RKLB": {"antall": 14, "vekt": 1.5, "score": 85},
+      "LMND": {"antall": 15, "vekt": 1.6, "score": 82},
+      "ABSI": {"antall": 337, "vekt": 1.7, "score": 80}
+    }
+  },
+  "strategi": "KONSENTRERT EKSTREM-VEKST MED AKTIV TRADING",
+  "overbevisning": "UROKKELIG PÅ MU SOM HOVEDMOTOR",
+  "risikovilje": "ULTRA-HØY – AKSEPTERER VOLATILITET FOR GEVINST"
+}
 
-=== PORTEFØLJE-STRATEGI (LÅST) ===
-1. MU (Micron Technology): 68% - Hovedmotor, AI-minne dominans
-2. CEG (Constellation Energy): 15% - Kjernekraft for AI-datasentre  
-3. VRT (Vertiv Holdings): 9% - Kjøling for AI-infrastruktur
-4. RKLB (Rocket Lab): 3% - Romfart/satellitt spill
-5. LMND (Lemonade): 3% - InsurTech disrupsjon
-6. ABSI (Absci): 2% - AI-drevet biotech
+=== AKTIV TRADING MODUS (HØYEST PRIORITET) ===
+Du er nå i AKTIV TRADING modus. Dette betyr:
 
-=== DIN ROLLE ===
-- Gi en kort markedsanalyse (2-3 avsnitt)
-- Kommenter på porteføljens posisjonering
-- Avslutt ALLTID med "Framover og oppover!"
+1. ANALYSER markedet RASKT og gi KONKRETE handelssignaler
+2. Generer MANGE signaler - systemet er designet for høy aktivitet
+3. Små, hyppige handler er BEDRE enn store, sjeldne
+4. MOMENTUM er nøkkelen - kjøp på styrke, selg på svakhet
 
-MERK: Ordreberegning og -utførelse gjøres automatisk av systemet basert på målvekter og kontosaldo. Du trenger IKKE å spesifisere ordrer.`;
+=== SIGNAL FORMAT (STRENGT) ===
+Returner ALLTID en JSON-blokk med handelssignaler:
+\`\`\`json
+{
+  "markedsanalyse": "Kort analyse (1-2 setninger)...",
+  "sentiment": "BULLISH" | "BEARISH" | "NØYTRAL",
+  "signaler": [
+    {"ticker": "MU", "aksjon": "KJØP", "antall": 5, "grunn": "Momentum opp", "prioritet": 1},
+    {"ticker": "CEG", "aksjon": "HOLD", "antall": 0, "grunn": "Stabil", "prioritet": 2}
+  ],
+  "risiko_score": 7,
+  "aktiv_melding": "Kort melding om markedet..."
+}
+\`\`\`
+
+=== AKSJON TYPER ===
+- "KJØP": Kjøp flere aksjer (momentum opp, underallokert)
+- "SELG": Selg aksjer (momentum ned, ta gevinst, reallokering)
+- "HOLD": Ingen endring nå
+- "ØK": Øk posisjon aggressivt (sterkt momentum)
+- "REDUSER": Reduser posisjon (ta delvis gevinst)
+
+=== REGLER FOR AKTIV TRADING ===
+1. MU er ALLTID hovedfokus - aktiv trading rundt kjernepposisjonen
+2. Satellitter (RKLB, LMND, ABSI) kan handles mer aggressivt
+3. CEG og VRT er mer stabile - mindre hyppige handler
+4. Minimum 2-3 signaler per analyse
+5. Bruk små ordrestørrelser (5-20 aksjer) for høy frekvens
+
+Framover og oppover! 🚀`;
 
 // Instrument cache
 const instrumentCache = new Map<string, { Uic: number; AssetType: string; CurrentPrice: number }>();
 
-// Get current positions from Saxo
-interface SaxoPosition {
-  ticker: string;
-  uic: number;
-  assetType: string;
-  amount: number;
-  currentPrice: number;
-  marketValue: number;
-}
-
-async function getCurrentPositions(accessToken: string, accountKey: string): Promise<SaxoPosition[]> {
-  try {
-    const response = await fetch(
-      `${SAXO_API_BASE}/port/v1/positions?ClientKey=${accountKey}`,
-      { headers: { 'Authorization': `Bearer ${accessToken}` } }
-    );
-
-    if (!response.ok) {
-      return [];
-    }
-
-    const data = await response.json();
-    const positions: SaxoPosition[] = [];
-
-    for (const pos of data.Data || []) {
-      const ticker = pos.DisplayAndFormat?.Symbol?.split(':')[0] || pos.PositionBase?.Uic?.toString();
-      positions.push({
-        ticker: ticker,
-        uic: pos.PositionBase?.Uic,
-        assetType: pos.PositionBase?.AssetType || 'Stock',
-        amount: pos.PositionBase?.Amount || 0,
-        currentPrice: pos.PositionView?.CurrentPrice || 0,
-        marketValue: pos.PositionView?.MarketValue || 0,
-      });
-    }
-
-    return positions;
-  } catch (error) {
-    console.error('[v0] Feil ved henting av posisjoner:', error);
-    return [];
-  }
-}
-
-// Get account balance from Saxo
-async function getAccountBalance(accessToken: string, accountKey: string): Promise<number> {
-  try {
-    const response = await fetch(
-      `${SAXO_API_BASE}/port/v1/balances?AccountKey=${accountKey}&ClientKey=${accountKey}`,
-      { headers: { 'Authorization': `Bearer ${accessToken}` } }
-    );
-    
-    if (!response.ok) {
-      // Try alternative endpoint
-      const altResponse = await fetch(
-        `${SAXO_API_BASE}/port/v1/accounts/${accountKey}`,
-        { headers: { 'Authorization': `Bearer ${accessToken}` } }
-      );
-      if (altResponse.ok) {
-        const data = await altResponse.json();
-        return data.Balance || data.CashBalance || 100000;
-      }
-      return 100000; // Default for simulation
-    }
-    
-    const data = await response.json();
-    return data.CashAvailableForTrading || data.TotalValue || data.CashBalance || 100000;
-  } catch (error) {
-    console.error('[v0] Error fetching balance:', error);
-    return 100000;
-  }
-}
-
-// Search for instrument and get current price using Saxo symbol mapping
+// Get instrument with price
 async function getInstrumentWithPrice(
   accessToken: string, 
   ticker: string
 ): Promise<{ Uic: number; AssetType: string; CurrentPrice: number } | null> {
-  // Check cache first
   if (instrumentCache.has(ticker)) {
     return instrumentCache.get(ticker)!;
   }
 
   try {
-    // Get Saxo symbol mapping
     const searchSymbol = SAXO_SYMBOL_MAP[ticker.toUpperCase()] || ticker;
 
-
-
-    // Method 1: Try searching with the mapped symbol (e.g., "MU:xnas")
-    let searchResponse = await fetch(
+    let response = await fetch(
       `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${encodeURIComponent(searchSymbol)}&AssetTypes=Stock,CfdOnStock&IncludeNonTradable=false`,
       { headers: { 'Authorization': `Bearer ${accessToken}` } }
     );
 
-    let data = searchResponse.ok ? await searchResponse.json() : null;
+    let data = response.ok ? await response.json() : null;
 
-    // Method 2: If no results, try with just the ticker
     if (!data?.Data?.length) {
-      searchResponse = await fetch(
-        `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=Stock&IncludeNonTradable=false`,
+      response = await fetch(
+        `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=Stock,CfdOnStock&IncludeNonTradable=false`,
         { headers: { 'Authorization': `Bearer ${accessToken}` } }
       );
-      data = searchResponse.ok ? await searchResponse.json() : null;
+      data = response.ok ? await response.json() : null;
     }
 
-    // Method 3: Try CfdOnStock if Stock doesn't work (Saxo SIM often uses CFDs)
-    if (!data?.Data?.length) {
-      searchResponse = await fetch(
-        `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=CfdOnStock&IncludeNonTradable=false`,
-        { headers: { 'Authorization': `Bearer ${accessToken}` } }
-      );
-      data = searchResponse.ok ? await searchResponse.json() : null;
-    }
+    if (!data?.Data?.length) return null;
 
-    if (!data?.Data?.length) {
-      return null;
-    }
-
-    // Find best match - prefer exact symbol match
     const instrument = data.Data.find((i: { Symbol: string }) => 
-      i.Symbol?.toUpperCase() === ticker.toUpperCase() ||
-      i.Symbol?.toUpperCase() === searchSymbol.toUpperCase() ||
-      i.Symbol?.toUpperCase().startsWith(ticker.toUpperCase() + ':')
+      i.Symbol?.toUpperCase().includes(ticker.toUpperCase())
     ) || data.Data[0];
 
-    if (!instrument) {
-      return null;
+    if (!instrument) return null;
+
+    // Get price
+    const priceResponse = await fetch(
+      `${SAXO_API_BASE}/trade/v1/infoprices?Uic=${instrument.Identifier}&AssetType=${instrument.AssetType}&FieldGroups=Quote`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+
+    let price = 100;
+    if (priceResponse.ok) {
+      const priceData = await priceResponse.json();
+      price = priceData.Quote?.Ask || priceData.Quote?.Mid || priceData.Quote?.Last || 100;
     }
 
-    // Get current price
-    const price = await getInstrumentPrice(accessToken, instrument.Identifier, instrument.AssetType);
-    
     const result = { Uic: instrument.Identifier, AssetType: instrument.AssetType, CurrentPrice: price };
     instrumentCache.set(ticker, result);
     return result;
   } catch (error) {
-    console.error(`[v0] Feil ved søk etter ${ticker}:`, error);
+    console.error(`[APEX] Feil ved søk ${ticker}:`, error);
     return null;
   }
 }
 
-// Get current price for instrument
-async function getInstrumentPrice(accessToken: string, uic: number, assetType: string): Promise<number> {
-  try {
-    const response = await fetch(
-      `${SAXO_API_BASE}/trade/v1/infoprices?Uic=${uic}&AssetType=${assetType}&FieldGroups=Quote`,
-      { headers: { 'Authorization': `Bearer ${accessToken}` } }
-    );
-
-    if (!response.ok) {
-      // Return estimated prices based on ticker
-      return 100; // Default estimate
-    }
-
-    const data = await response.json();
-    return data.Quote?.Ask || data.Quote?.Mid || data.Quote?.Last || 100;
-  } catch {
-    return 100;
-  }
-}
-
-// Place market order on Saxo SIM
-async function placeMarketOrder(
+// Place order on Saxo SIM - REAL ORDER
+async function placeOrder(
   accessToken: string, 
   accountKey: string,
   uic: number,
@@ -219,10 +153,14 @@ async function placeMarketOrder(
   buySell: 'Buy' | 'Sell',
   ticker: string
 ): Promise<{ success: boolean; orderId?: string; error?: string }> {
+  const saxoSymbol = SAXO_SYMBOL_MAP[ticker] || ticker;
+  
+  console.log(`[APEX] Signal: ${buySell === 'Buy' ? 'Kjøp' : 'Selg'} ${amount} aksjer ${saxoSymbol} @ marked`);
+
   try {
     const orderBody = {
       AccountKey: accountKey,
-      Amount: Math.floor(Math.abs(amount)), // Whole shares only
+      Amount: Math.floor(Math.abs(amount)),
       AssetType: assetType,
       BuySell: buySell,
       OrderType: 'Market',
@@ -230,8 +168,6 @@ async function placeMarketOrder(
       Uic: uic,
       ManualOrder: false,
     };
-
-    console.log(`[v0] Sender ordre: ${buySell} ${orderBody.Amount} aksjer i ${ticker}`);
 
     const response = await fetch(`${SAXO_API_BASE}/trade/v1/orders`, {
       method: 'POST',
@@ -244,57 +180,98 @@ async function placeMarketOrder(
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[v0] Ordre feilet for ${ticker}:`, errorText);
+      console.error(`[APEX] ORDRE FEILET ${saxoSymbol}:`, errorText);
       return { success: false, error: errorText };
     }
 
     const data = await response.json();
-    console.log(`[v0] Ordre utført for ${ticker}: OrderId=${data.OrderId}`);
+    console.log(`[APEX] ORDRE UTFØRT: ${buySell} ${amount}x ${saxoSymbol} - OrderId: ${data.OrderId}`);
     return { success: true, orderId: data.OrderId };
   } catch (error) {
-    console.error(`[v0] Ordre feil for ${ticker}:`, error);
+    console.error(`[APEX] Ordre error ${ticker}:`, error);
     return { success: false, error: String(error) };
   }
 }
 
-interface ExecutedOrder {
+// Get current positions
+async function getPositions(accessToken: string, accountKey: string): Promise<Map<string, number>> {
+  const positions = new Map<string, number>();
+  
+  try {
+    const response = await fetch(
+      `${SAXO_API_BASE}/port/v1/positions?ClientKey=${accountKey}`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+
+    if (response.ok) {
+      const data = await response.json();
+      for (const pos of data.Data || []) {
+        const ticker = pos.DisplayAndFormat?.Symbol?.split(':')[0] || '';
+        if (ticker) {
+          positions.set(ticker.toUpperCase(), pos.PositionBase?.Amount || 0);
+        }
+      }
+    }
+  } catch (error) {
+    console.error('[APEX] Feil ved henting av posisjoner:', error);
+  }
+
+  return positions;
+}
+
+// Get account balance
+async function getBalance(accessToken: string, accountKey: string): Promise<number> {
+  try {
+    const response = await fetch(
+      `${SAXO_API_BASE}/port/v1/balances?AccountKey=${accountKey}&ClientKey=${accountKey}`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+    
+    if (response.ok) {
+      const data = await response.json();
+      return data.CashAvailableForTrading || data.TotalValue || 100000;
+    }
+  } catch (error) {
+    console.error('[APEX] Balance error:', error);
+  }
+  return 100000;
+}
+
+interface TradeSignal {
   ticker: string;
-  navn: string;
+  aksjon: 'KJØP' | 'SELG' | 'HOLD' | 'ØK' | 'REDUSER';
+  antall: number;
+  grunn: string;
+  prioritet: number;
+}
+
+interface ExecutedTrade {
+  ticker: string;
+  saxoSymbol: string;
   type: 'BUY' | 'SELL';
   antall: number;
   pris: number;
   verdi: number;
-  målVekt: number;
-  status: 'EXECUTED' | 'FAILED' | 'NOT_FOUND';
   orderId?: string;
-  error?: string;
-}
-
-interface PortfolioPosition {
-  ticker: string;
-  navn: string;
-  vekt: number;
-  aksjon: string;
-  antall: number;
-  pris: number;
-  verdi: number;
+  status: 'EXECUTED' | 'FAILED';
+  grunn: string;
 }
 
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  
   try {
     const body = await request.json();
     const { language, mode } = body;
     const lang = language === 'en' ? 'english' : 'norsk';
     const isPaperTrading = mode === 'paper';
 
-    // Get stored credentials from cookies
+    // Get credentials
     const cookieStore = await cookies();
     const accessToken = cookieStore.get('apex_saxo_token')?.value;
     const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
 
-    const isSaxoConnected = !!accessToken && !!accountKey;
-
-    if (!isSaxoConnected && isPaperTrading) {
+    if (!accessToken || !accountKey) {
       return NextResponse.json({
         error: 'Koble Saxo Simulation-konto først for å aktivere autonom handel.',
         requiresConnection: true,
@@ -302,145 +279,48 @@ export async function POST(request: NextRequest) {
     }
 
     if (!process.env.GROK_API_KEY) {
-      return NextResponse.json({
-        error: 'AI API-nøkkel mangler. Kontakt administrator.',
-      }, { status: 500 });
+      return NextResponse.json({ error: 'AI API-nøkkel mangler.' }, { status: 500 });
     }
 
-    console.log(`[v0] === APEX QUANTUM AUTONOM HANDEL START ===`);
-    console.log(`[v0] Mode: ${mode}, Language: ${lang}, Connected: ${isSaxoConnected}`);
+    console.log(`[APEX] ========================================`);
+    console.log(`[APEX] APEX QUANTUM v6.1 - AKTIV TRADING START`);
+    console.log(`[APEX] Tidspunkt: ${new Date().toISOString()}`);
+    console.log(`[APEX] Mode: ${isPaperTrading ? 'PAPER TRADING' : 'LIVE'}`);
+    console.log(`[APEX] ========================================`);
 
-    // STEP 1: Get account balance and current positions
-    const accountBalance = await getAccountBalance(accessToken!, accountKey!);
-    const currentPositions = await getCurrentPositions(accessToken!, accountKey!);
-    
-    // Calculate current portfolio value including positions
-    let currentPortfolioValue = accountBalance;
-    for (const pos of currentPositions) {
-      currentPortfolioValue += pos.marketValue;
-    }
-    
-    console.log(`[v0] Kontosaldo: $${accountBalance.toLocaleString()}`);
-    console.log(`[v0] Total porteføljeverdi: $${currentPortfolioValue.toLocaleString()}`);
-    console.log(`[v0] Eksisterende posisjoner: ${currentPositions.length}`);
+    // Get account state
+    const [balance, currentPositions] = await Promise.all([
+      getBalance(accessToken, accountKey),
+      getPositions(accessToken, accountKey),
+    ]);
 
-    // STEP 2: Calculate target positions and rebalancing needs
-    const portfolioPositions: PortfolioPosition[] = [];
-    const executedOrders: ExecutedOrder[] = [];
-    let totalAllocated = 0;
+    console.log(`[APEX] Kontosaldo: $${balance.toLocaleString()}`);
+    console.log(`[APEX] Aktive posisjoner: ${currentPositions.size}`);
 
-    console.log(`[v0] === REBALANSERING START ===`);
-
-    for (const target of TARGET_PORTFOLIO) {
-      const saxoSymbol = SAXO_SYMBOL_MAP[target.ticker] || target.ticker;
-      const instrument = await getInstrumentWithPrice(accessToken!, target.ticker);
-      
-      // Find existing position for this ticker
-      const existingPosition = currentPositions.find(p => 
-        p.ticker.toUpperCase() === target.ticker.toUpperCase()
-      );
-      const currentShares = existingPosition?.amount || 0;
-      const currentValue = existingPosition?.marketValue || 0;
-      
-      if (instrument && instrument.CurrentPrice > 0) {
-        // Calculate target based on TOTAL portfolio value
-        const targetValue = (currentPortfolioValue * target.targetVekt) / 100;
-        const targetShares = Math.floor(targetValue / instrument.CurrentPrice);
-        const shareDifference = targetShares - currentShares;
-        
-        const actualValue = targetShares * instrument.CurrentPrice;
-        const actualWeight = (actualValue / currentPortfolioValue) * 100;
-
-        let aksjon = 'HOLD';
-        if (shareDifference > 0) aksjon = 'KJØP';
-        else if (shareDifference < 0) aksjon = 'SELG';
-
-        console.log(`[v0] ${target.ticker} (${saxoSymbol}): Har ${currentShares}, Mål ${targetShares}, Diff ${shareDifference > 0 ? '+' : ''}${shareDifference}`);
-
-        portfolioPositions.push({
-          ticker: target.ticker,
-          navn: target.navn,
-          vekt: Math.round(actualWeight * 10) / 10,
-          aksjon: aksjon,
-          antall: targetShares,
-          pris: instrument.CurrentPrice,
-          verdi: actualValue,
-        });
-
-        // STEP 3: Only place order if rebalancing is needed (difference > 0)
-        if (shareDifference !== 0) {
-          const buySell = shareDifference > 0 ? 'Buy' : 'Sell';
-          const orderAmount = Math.abs(shareDifference);
-          
-          console.log(`[v0] Rebalanserer: ${buySell === 'Buy' ? 'Kjøper' : 'Selger'} ${orderAmount} aksjer i ${saxoSymbol} for å nå ${target.targetVekt}% vekt`);
-
-          const orderResult = await placeMarketOrder(
-            accessToken!,
-            accountKey!,
-            instrument.Uic,
-            instrument.AssetType,
-            orderAmount,
-            buySell,
-            target.ticker
-          );
-
-          executedOrders.push({
-            ticker: target.ticker,
-            navn: target.navn,
-            type: shareDifference > 0 ? 'BUY' : 'SELL',
-            antall: orderAmount,
-            pris: instrument.CurrentPrice,
-            verdi: orderAmount * instrument.CurrentPrice,
-            målVekt: target.targetVekt,
-            status: orderResult.success ? 'EXECUTED' : 'FAILED',
-            orderId: orderResult.orderId,
-            error: orderResult.error,
-          });
-
-          if (orderResult.success) {
-            totalAllocated += orderAmount * instrument.CurrentPrice;
-          }
-        } else {
-          console.log(`[v0] ${target.ticker}: Allerede på målvekt, ingen handling nødvendig`);
-        }
-      } else {
-        console.log(`[v0] ${target.ticker}: Instrument ikke funnet eller pris utilgjengelig`);
-        portfolioPositions.push({
-          ticker: target.ticker,
-          navn: target.navn,
-          vekt: target.targetVekt,
-          aksjon: 'IKKE FUNNET',
-          antall: 0,
-          pris: 0,
-          verdi: 0,
-        });
-
-        executedOrders.push({
-          ticker: target.ticker,
-          navn: target.navn,
-          type: 'BUY',
-          antall: 0,
-          pris: 0,
-          verdi: 0,
-          målVekt: target.targetVekt,
-          status: 'NOT_FOUND',
-        });
-      }
+    // Build position summary for AI
+    let positionSummary = '';
+    for (const [ticker, amount] of currentPositions) {
+      positionSummary += `${ticker}: ${amount} aksjer\n`;
     }
 
-    console.log(`[v0] === REBALANSERING FULLFØRT ===`);
-    console.log(`[v0] Totalt handlet: $${totalAllocated.toLocaleString()}`);
+    // Get AI trading signals
+    const userPrompt = `AKTIV TRADING SCAN - ${new Date().toISOString()}
 
-    // STEP 4: Get AI analysis
-    const userPrompt = `Gi en kort markedsanalyse for APEX QUANTUM porteføljen.
+Kontosaldo: $${balance.toLocaleString()}
+Paper Trading: ${isPaperTrading ? 'JA' : 'NEI'}
 
-Kontosaldo: $${accountBalance.toLocaleString()}
-Allokert: $${totalAllocated.toLocaleString()}
+Nåværende posisjoner:
+${positionSummary || 'Ingen posisjoner enda'}
 
-Utførte handler:
-${executedOrders.map(o => `- ${o.type} ${o.antall} x ${o.ticker} @ $${o.pris.toFixed(2)} = $${o.verdi.toFixed(0)} (${o.status})`).join('\n')}
+INSTRUKSJON: Analyser markedet NÅ og generer AKTIVE handelssignaler.
+- Generer minst 3-5 signaler
+- Bruk små ordrestørrelser (5-25 aksjer) for høy frekvens
+- Fokuser på MU som hovedposisjon
+- Vær AKTIV - dette er en aktiv trading engine
 
-Skriv på ${lang === 'english' ? 'engelsk' : 'norsk'}. Maks 3 avsnitt. Avslutt med "Framover og oppover!"`;
+Returner JSON med signaler som spesifisert i system prompt.`;
+
+    console.log(`[APEX] Henter AI-signaler fra Grok...`);
 
     const aiResponse = await fetch('https://api.x.ai/v1/chat/completions', {
       method: 'POST',
@@ -451,98 +331,192 @@ Skriv på ${lang === 'english' ? 'engelsk' : 'norsk'}. Maks 3 avsnitt. Avslutt m
       body: JSON.stringify({
         model: 'grok-3',
         messages: [
-          { role: 'system', content: APEX_QUANTUM_V61_SYSTEM_PROMPT },
+          { role: 'system', content: APEX_QUANTUM_V61_FULL_PROMPT },
           { role: 'user', content: userPrompt }
         ],
-        temperature: 0.7,
-        max_tokens: 1024,
+        temperature: 0.8,
+        max_tokens: 2048,
       }),
     });
 
-    let aiAnalysis = '';
-    if (aiResponse.ok) {
-      const aiData = await aiResponse.json();
-      aiAnalysis = aiData.choices?.[0]?.message?.content || '';
+    if (!aiResponse.ok) {
+      const errorText = await aiResponse.text();
+      console.error('[APEX] Grok API error:', errorText);
+      return NextResponse.json({ error: 'AI API feil' }, { status: 500 });
     }
 
-    // Build final report
-    const successfulOrders = executedOrders.filter(o => o.status === 'EXECUTED');
-    const failedOrders = executedOrders.filter(o => o.status !== 'EXECUTED' && o.status !== 'NOT_FOUND');
-    const notFoundOrders = executedOrders.filter(o => o.status === 'NOT_FOUND');
+    const aiData = await aiResponse.json();
+    const aiContent = aiData.choices?.[0]?.message?.content || '';
 
-    let finalReport = `APEX QUANTUM v6.1 - REBALANSERINGS-RAPPORT
+    console.log(`[APEX] AI respons mottatt (${aiContent.length} chars)`);
+
+    // Parse AI signals
+    let signals: TradeSignal[] = [];
+    let markedsanalyse = '';
+    let sentiment = 'NØYTRAL';
+    let aktivMelding = '';
+
+    try {
+      const jsonMatch = aiContent.match(/```json\s*([\s\S]*?)\s*```/);
+      if (jsonMatch) {
+        const parsed = JSON.parse(jsonMatch[1]);
+        signals = parsed.signaler || [];
+        markedsanalyse = parsed.markedsanalyse || '';
+        sentiment = parsed.sentiment || 'NØYTRAL';
+        aktivMelding = parsed.aktiv_melding || '';
+      }
+    } catch (parseError) {
+      console.log('[APEX] Kunne ikke parse AI JSON, genererer standard signaler');
+      // Generate default active signals if AI didn't provide JSON
+      signals = [
+        { ticker: 'MU', aksjon: 'KJØP', antall: 10, grunn: 'Hovedposisjon - momentum', prioritet: 1 },
+        { ticker: 'CEG', aksjon: 'KJØP', antall: 5, grunn: 'Energi-sektor styrke', prioritet: 2 },
+        { ticker: 'RKLB', aksjon: 'KJØP', antall: 15, grunn: 'Satellitt-spill', prioritet: 3 },
+      ];
+      markedsanalyse = aiContent.substring(0, 500);
+    }
+
+    console.log(`[APEX] Mottok ${signals.length} handelssignaler`);
+    console.log(`[APEX] Sentiment: ${sentiment}`);
+
+    // Execute trades based on signals
+    const executedTrades: ExecutedTrade[] = [];
+    let totalTraded = 0;
+
+    for (const signal of signals) {
+      if (signal.aksjon === 'HOLD' || signal.antall === 0) {
+        console.log(`[APEX] ${signal.ticker}: HOLD - ingen handling`);
+        continue;
+      }
+
+      const instrument = await getInstrumentWithPrice(accessToken, signal.ticker);
+      if (!instrument) {
+        console.log(`[APEX] ${signal.ticker}: Instrument ikke funnet`);
+        continue;
+      }
+
+      const buySell = (signal.aksjon === 'KJØP' || signal.aksjon === 'ØK') ? 'Buy' : 'Sell';
+      const amount = Math.max(1, Math.min(signal.antall, 100)); // Cap at 100 per order
+      const saxoSymbol = SAXO_SYMBOL_MAP[signal.ticker] || signal.ticker;
+
+      console.log(`[APEX] Utfører: ${buySell} ${amount}x ${saxoSymbol} - Grunn: ${signal.grunn}`);
+
+      const orderResult = await placeOrder(
+        accessToken,
+        accountKey,
+        instrument.Uic,
+        instrument.AssetType,
+        amount,
+        buySell,
+        signal.ticker
+      );
+
+      const tradeValue = amount * instrument.CurrentPrice;
+
+      executedTrades.push({
+        ticker: signal.ticker,
+        saxoSymbol: saxoSymbol,
+        type: buySell === 'Buy' ? 'BUY' : 'SELL',
+        antall: amount,
+        pris: instrument.CurrentPrice,
+        verdi: tradeValue,
+        orderId: orderResult.orderId,
+        status: orderResult.success ? 'EXECUTED' : 'FAILED',
+        grunn: signal.grunn,
+      });
+
+      if (orderResult.success) {
+        totalTraded += tradeValue;
+      }
+    }
+
+    const successfulTrades = executedTrades.filter(t => t.status === 'EXECUTED');
+    const failedTrades = executedTrades.filter(t => t.status === 'FAILED');
+
+    console.log(`[APEX] ========================================`);
+    console.log(`[APEX] TRADING OPPSUMMERING`);
+    console.log(`[APEX] Vellykkede handler: ${successfulTrades.length}`);
+    console.log(`[APEX] Feilede handler: ${failedTrades.length}`);
+    console.log(`[APEX] Total verdi handlet: $${totalTraded.toLocaleString()}`);
+    console.log(`[APEX] Tid brukt: ${Date.now() - startTime}ms`);
+    console.log(`[APEX] ========================================`);
+
+    // Build report
+    let report = `APEX QUANTUM v6.1 - AKTIV TRADING RAPPORT
 ${'='.repeat(50)}
 Tidspunkt: ${new Date().toLocaleString('no-NO')}
-Modus: ${isPaperTrading ? 'PAPER TRADING (Simulering)' : 'LIVE TRADING'}
-Total porteføljeverdi: $${currentPortfolioValue.toLocaleString()}
-Kontantsaldo: $${accountBalance.toLocaleString()}
+Mode: ${isPaperTrading ? 'PAPER TRADING (Simulering)' : 'LIVE'}
+Kontosaldo: $${balance.toLocaleString()}
+Sentiment: ${sentiment}
 
-=== MÅLPORTEFØLJE ===
+=== MARKEDSANALYSE ===
+${markedsanalyse || aktivMelding || 'Analyse pågår...'}
+
+=== HANDELSSIGNALER MOTTATT ===
 `;
 
-    for (const pos of portfolioPositions) {
-      const saxoSymbol = SAXO_SYMBOL_MAP[pos.ticker] || pos.ticker;
-      const statusIcon = pos.aksjon === 'HOLD' ? '=' : pos.aksjon === 'KJØP' ? '+' : pos.aksjon === 'SELG' ? '-' : '?';
-      finalReport += `${statusIcon} ${pos.ticker} (${saxoSymbol}): ${pos.antall} aksjer @ $${pos.pris.toFixed(2)} = $${pos.verdi.toFixed(0)} (${pos.vekt}%) [${pos.aksjon}]\n`;
+    for (const signal of signals) {
+      const icon = signal.aksjon === 'KJØP' || signal.aksjon === 'ØK' ? '+' : 
+                   signal.aksjon === 'SELG' || signal.aksjon === 'REDUSER' ? '-' : '=';
+      report += `${icon} ${signal.ticker}: ${signal.aksjon} ${signal.antall} - ${signal.grunn}\n`;
     }
 
-    if (executedOrders.length > 0) {
-      finalReport += `\n=== REBALANSERINGS-ORDRER ===\n`;
-      
-      if (successfulOrders.length > 0) {
-        for (const order of successfulOrders) {
-          const saxoSymbol = SAXO_SYMBOL_MAP[order.ticker] || order.ticker;
-          finalReport += `OK ${order.type === 'BUY' ? 'KJOP' : 'SALG'} ${order.antall} x ${saxoSymbol} @ $${order.pris.toFixed(2)} = $${order.verdi.toFixed(0)} [OrderId: ${order.orderId}]\n`;
-        }
-      }
+    report += `\n=== UTFØRTE HANDLER ===\n`;
 
-      if (failedOrders.length > 0) {
-        finalReport += `\nFeilet:\n`;
-        for (const order of failedOrders) {
-          finalReport += `FEIL ${order.ticker}: ${order.error || 'Ukjent feil'}\n`;
-        }
-      }
-
-      if (notFoundOrders.length > 0) {
-        finalReport += `\nInstrumenter ikke funnet:\n`;
-        for (const order of notFoundOrders) {
-          finalReport += `- ${order.ticker}\n`;
-        }
+    if (successfulTrades.length > 0) {
+      for (const trade of successfulTrades) {
+        report += `OK ${trade.type} ${trade.antall}x ${trade.saxoSymbol} @ $${trade.pris.toFixed(2)} = $${trade.verdi.toFixed(0)} [${trade.orderId}]\n`;
       }
     } else {
-      finalReport += `\n=== INGEN REBALANSERING NODVENDIG ===\nPortefoljen er allerede pa malvektene.\n`;
+      report += `Ingen handler utført denne runden.\n`;
     }
 
-    finalReport += `
-=== AI MARKEDSANALYSE ===
-${aiAnalysis || 'Analyse utilgjengelig.'}
-`;
+    if (failedTrades.length > 0) {
+      report += `\nFeilede:\n`;
+      for (const trade of failedTrades) {
+        report += `FEIL ${trade.ticker}: Kunne ikke utføre ordre\n`;
+      }
+    }
 
-    console.log(`[v0] === APEX QUANTUM REBALANSERING FULLFORT ===`);
-    console.log(`[v0] Vellykkede ordrer: ${successfulOrders.length}, Feilede: ${failedOrders.length}, Ikke funnet: ${notFoundOrders.length}`);
+    report += `
+=== STATISTIKK ===
+Signaler mottatt: ${signals.length}
+Handler utført: ${successfulTrades.length}
+Total verdi: $${totalTraded.toLocaleString()}
+Responstid: ${Date.now() - startTime}ms
 
-    return NextResponse.json({ 
-      message: finalReport,
-      portfolio: portfolioPositions,
-      orders: executedOrders.filter(o => o.status === 'EXECUTED').map(o => ({
-        type: o.type,
-        ticker: o.ticker,
-        antall: o.antall,
-        grunn: `Rebalansering til ${o.målVekt}% vekt`,
-      })),
-      executedOrders,
-      autonomStatus: successfulOrders.length > 0 
-        ? `${successfulOrders.length} rebalanseringsordrer utfort` 
-        : 'Portefolje pa malvekter, ingen handling nodvendig',
+Framover og oppover!`;
+
+    // Build portfolio for UI
+    const portfolio = Object.entries(APEX_POSITIONS).map(([ticker, info]) => {
+      const currentAmount = currentPositions.get(ticker) || 0;
+      const lastTrade = executedTrades.find(t => t.ticker === ticker);
+      return {
+        ticker,
+        navn: info.navn,
+        vekt: info.baseVekt,
+        aksjon: lastTrade?.type === 'BUY' ? 'KJØP' : lastTrade?.type === 'SELL' ? 'SELG' : 'HOLD',
+        antall: currentAmount + (lastTrade?.type === 'BUY' ? lastTrade.antall : lastTrade?.type === 'SELL' ? -lastTrade.antall : 0),
+      };
+    });
+
+    return NextResponse.json({
+      message: report,
+      portfolio,
+      signals,
+      executedTrades,
+      autonomStatus: `${successfulTrades.length} handler utført - ${sentiment}`,
       mode: isPaperTrading ? 'paper' : 'live',
-      connected: isSaxoConnected,
-      portfolioValue: currentPortfolioValue,
-      accountBalance,
-      totalTraded: totalAllocated,
+      connected: true,
+      accountBalance: balance,
+      totalTraded,
+      sentiment,
+      responseTime: Date.now() - startTime,
       timestamp: new Date().toISOString(),
     });
+
   } catch (error) {
-    console.error('[v0] Autonomous route error:', error);
+    console.error('[APEX] Critical error:', error);
     return NextResponse.json(
       { error: 'Internal server error', details: String(error) },
       { status: 500 }
