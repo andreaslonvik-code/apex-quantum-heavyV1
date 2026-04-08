@@ -4,21 +4,16 @@ import { cookies } from 'next/headers';
 // Saxo SIM API endpoints
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
-// Saxo symbol mapping - correct format for Saxo OpenAPI
-const SAXO_SYMBOL_MAP: Record<string, { symbol: string; exchange: string; assetType: string }> = {
-  'MU': { symbol: 'MU:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
-  'CEG': { symbol: 'CEG:xnys', exchange: 'NYSE', assetType: 'Stock' },
-  'VRT': { symbol: 'VRT:xnys', exchange: 'NYSE', assetType: 'Stock' },
-  'RKLB': { symbol: 'RKLB:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
-  'LMND': { symbol: 'LMND:xnys', exchange: 'NYSE', assetType: 'Stock' },
-  'ABSI': { symbol: 'ABSI:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
-  'NAS': { symbol: 'NAS:xosl', exchange: 'OSL', assetType: 'Stock' },
-  'NVDA': { symbol: 'NVDA:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
-  'AAPL': { symbol: 'AAPL:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
-  'MSFT': { symbol: 'MSFT:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
-  'GOOGL': { symbol: 'GOOGL:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
-  'AMZN': { symbol: 'AMZN:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
-  'TSLA': { symbol: 'TSLA:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
+// Saxo symbol mapping - CORRECT format for Saxo OpenAPI
+// xnas = NASDAQ, xnys = NYSE, xosl = Oslo
+const SAXO_SYMBOL_MAP: Record<string, string> = {
+  'MU': 'MU:xnas',      // Micron - NASDAQ
+  'CEG': 'CEG:xnas',    // Constellation Energy - NASDAQ
+  'VRT': 'VRT:xnys',    // Vertiv - NYSE
+  'RKLB': 'RKLB:xnas',  // Rocket Lab - NASDAQ
+  'LMND': 'LMND:xnys',  // Lemonade - NYSE (was NASDAQ, now NYSE)
+  'ABSI': 'ABSI:xnas',  // Absci - NASDAQ
+  'NAS': 'NAS:xosl',    // Norwegian Air - Oslo
 };
 
 // APEX QUANTUM v6.1 TARGET PORTFOLIO - CONCENTRATED EXTREME GROWTH
@@ -52,6 +47,51 @@ MERK: Ordreberegning og -utførelse gjøres automatisk av systemet basert på m�
 
 // Instrument cache
 const instrumentCache = new Map<string, { Uic: number; AssetType: string; CurrentPrice: number }>();
+
+// Get current positions from Saxo
+interface SaxoPosition {
+  ticker: string;
+  uic: number;
+  assetType: string;
+  amount: number;
+  currentPrice: number;
+  marketValue: number;
+}
+
+async function getCurrentPositions(accessToken: string, accountKey: string): Promise<SaxoPosition[]> {
+  try {
+    const response = await fetch(
+      `${SAXO_API_BASE}/port/v1/positions?ClientKey=${accountKey}`,
+      { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    );
+
+    if (!response.ok) {
+      console.log('[v0] Ingen eksisterende posisjoner funnet');
+      return [];
+    }
+
+    const data = await response.json();
+    const positions: SaxoPosition[] = [];
+
+    for (const pos of data.Data || []) {
+      const ticker = pos.DisplayAndFormat?.Symbol?.split(':')[0] || pos.PositionBase?.Uic?.toString();
+      positions.push({
+        ticker: ticker,
+        uic: pos.PositionBase?.Uic,
+        assetType: pos.PositionBase?.AssetType || 'Stock',
+        amount: pos.PositionBase?.Amount || 0,
+        currentPrice: pos.PositionView?.CurrentPrice || 0,
+        marketValue: pos.PositionView?.MarketValue || 0,
+      });
+    }
+
+    console.log(`[v0] Fant ${positions.length} eksisterende posisjoner`);
+    return positions;
+  } catch (error) {
+    console.error('[v0] Feil ved henting av posisjoner:', error);
+    return [];
+  }
+}
 
 // Get account balance from Saxo
 async function getAccountBalance(accessToken: string, accountKey: string): Promise<number> {
@@ -95,9 +135,7 @@ async function getInstrumentWithPrice(
 
   try {
     // Get Saxo symbol mapping
-    const mapping = SAXO_SYMBOL_MAP[ticker.toUpperCase()];
-    const searchSymbol = mapping?.symbol || ticker;
-    const assetType = mapping?.assetType || 'Stock';
+    const searchSymbol = SAXO_SYMBOL_MAP[ticker.toUpperCase()] || ticker;
 
     console.log(`[v0] Søker etter ${ticker} med symbol: ${searchSymbol}`);
 
@@ -282,57 +320,87 @@ export async function POST(request: NextRequest) {
     console.log(`[v0] === APEX QUANTUM AUTONOM HANDEL START ===`);
     console.log(`[v0] Mode: ${mode}, Language: ${lang}, Connected: ${isSaxoConnected}`);
 
-    // STEP 1: Get account balance
+    // STEP 1: Get account balance and current positions
     const accountBalance = await getAccountBalance(accessToken!, accountKey!);
+    const currentPositions = await getCurrentPositions(accessToken!, accountKey!);
+    
+    // Calculate current portfolio value including positions
+    let currentPortfolioValue = accountBalance;
+    for (const pos of currentPositions) {
+      currentPortfolioValue += pos.marketValue;
+    }
+    
     console.log(`[v0] Kontosaldo: $${accountBalance.toLocaleString()}`);
+    console.log(`[v0] Total porteføljeverdi: $${currentPortfolioValue.toLocaleString()}`);
+    console.log(`[v0] Eksisterende posisjoner: ${currentPositions.length}`);
 
-    // STEP 2: Get prices and calculate target positions
+    // STEP 2: Calculate target positions and rebalancing needs
     const portfolioPositions: PortfolioPosition[] = [];
     const executedOrders: ExecutedOrder[] = [];
     let totalAllocated = 0;
 
-    console.log(`[v0] Beregner målposisjoner basert på ${TARGET_PORTFOLIO.length} aksjer...`);
+    console.log(`[v0] === REBALANSERING START ===`);
 
     for (const target of TARGET_PORTFOLIO) {
+      const saxoSymbol = SAXO_SYMBOL_MAP[target.ticker] || target.ticker;
       const instrument = await getInstrumentWithPrice(accessToken!, target.ticker);
       
+      // Find existing position for this ticker
+      const existingPosition = currentPositions.find(p => 
+        p.ticker.toUpperCase() === target.ticker.toUpperCase()
+      );
+      const currentShares = existingPosition?.amount || 0;
+      const currentValue = existingPosition?.marketValue || 0;
+      
       if (instrument && instrument.CurrentPrice > 0) {
-        const targetValue = (accountBalance * target.targetVekt) / 100;
+        // Calculate target based on TOTAL portfolio value
+        const targetValue = (currentPortfolioValue * target.targetVekt) / 100;
         const targetShares = Math.floor(targetValue / instrument.CurrentPrice);
+        const shareDifference = targetShares - currentShares;
+        
         const actualValue = targetShares * instrument.CurrentPrice;
-        const actualWeight = (actualValue / accountBalance) * 100;
+        const actualWeight = (actualValue / currentPortfolioValue) * 100;
 
-        console.log(`[v0] ${target.ticker}: Mål ${target.targetVekt}% = $${targetValue.toFixed(0)} / $${instrument.CurrentPrice.toFixed(2)} = ${targetShares} aksjer`);
+        let aksjon = 'HOLD';
+        if (shareDifference > 0) aksjon = 'KJØP';
+        else if (shareDifference < 0) aksjon = 'SELG';
+
+        console.log(`[v0] ${target.ticker} (${saxoSymbol}): Har ${currentShares}, Mål ${targetShares}, Diff ${shareDifference > 0 ? '+' : ''}${shareDifference}`);
 
         portfolioPositions.push({
           ticker: target.ticker,
           navn: target.navn,
           vekt: Math.round(actualWeight * 10) / 10,
-          aksjon: targetShares > 0 ? 'KJØP' : 'HOLD',
+          aksjon: aksjon,
           antall: targetShares,
           pris: instrument.CurrentPrice,
           verdi: actualValue,
         });
 
-        // STEP 3: Place the order if we have shares to buy
-        if (targetShares > 0) {
+        // STEP 3: Only place order if rebalancing is needed (difference > 0)
+        if (shareDifference !== 0) {
+          const buySell = shareDifference > 0 ? 'Buy' : 'Sell';
+          const orderAmount = Math.abs(shareDifference);
+          
+          console.log(`[v0] Rebalanserer: ${buySell === 'Buy' ? 'Kjøper' : 'Selger'} ${orderAmount} aksjer i ${saxoSymbol} for å nå ${target.targetVekt}% vekt`);
+
           const orderResult = await placeMarketOrder(
             accessToken!,
             accountKey!,
             instrument.Uic,
             instrument.AssetType,
-            targetShares,
-            'Buy',
+            orderAmount,
+            buySell,
             target.ticker
           );
 
           executedOrders.push({
             ticker: target.ticker,
             navn: target.navn,
-            type: 'BUY',
-            antall: targetShares,
+            type: shareDifference > 0 ? 'BUY' : 'SELL',
+            antall: orderAmount,
             pris: instrument.CurrentPrice,
-            verdi: actualValue,
+            verdi: orderAmount * instrument.CurrentPrice,
             målVekt: target.targetVekt,
             status: orderResult.success ? 'EXECUTED' : 'FAILED',
             orderId: orderResult.orderId,
@@ -340,8 +408,10 @@ export async function POST(request: NextRequest) {
           });
 
           if (orderResult.success) {
-            totalAllocated += actualValue;
+            totalAllocated += orderAmount * instrument.CurrentPrice;
           }
+        } else {
+          console.log(`[v0] ${target.ticker}: Allerede på målvekt, ingen handling nødvendig`);
         }
       } else {
         console.log(`[v0] ${target.ticker}: Instrument ikke funnet eller pris utilgjengelig`);
@@ -368,7 +438,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    console.log(`[v0] Totalt allokert: $${totalAllocated.toLocaleString()} av $${accountBalance.toLocaleString()}`);
+    console.log(`[v0] === REBALANSERING FULLFØRT ===`);
+    console.log(`[v0] Totalt handlet: $${totalAllocated.toLocaleString()}`);
 
     // STEP 4: Get AI analysis
     const userPrompt = `Gi en kort markedsanalyse for APEX QUANTUM porteføljen.
@@ -405,61 +476,79 @@ Skriv på ${lang === 'english' ? 'engelsk' : 'norsk'}. Maks 3 avsnitt. Avslutt m
     }
 
     // Build final report
-    let finalReport = `APEX QUANTUM v6.1 - AUTONOM HANDELSRAPPORT
+    const successfulOrders = executedOrders.filter(o => o.status === 'EXECUTED');
+    const failedOrders = executedOrders.filter(o => o.status !== 'EXECUTED' && o.status !== 'NOT_FOUND');
+    const notFoundOrders = executedOrders.filter(o => o.status === 'NOT_FOUND');
+
+    let finalReport = `APEX QUANTUM v6.1 - REBALANSERINGS-RAPPORT
 ${'='.repeat(50)}
 Tidspunkt: ${new Date().toLocaleString('no-NO')}
-Modus: ${isPaperTrading ? 'PAPER TRADING (Simulering)' : 'LIVE'}
-Kontosaldo: $${accountBalance.toLocaleString()}
+Modus: ${isPaperTrading ? 'PAPER TRADING (Simulering)' : 'LIVE TRADING'}
+Total porteføljeverdi: $${currentPortfolioValue.toLocaleString()}
+Kontantsaldo: $${accountBalance.toLocaleString()}
 
-=== PORTEFØLJE BYGGET ===
+=== MÅLPORTEFØLJE ===
 `;
 
     for (const pos of portfolioPositions) {
-      if (pos.antall > 0) {
-        finalReport += `${pos.ticker} (${pos.navn}): ${pos.antall} aksjer @ $${pos.pris.toFixed(2)} = $${pos.verdi.toFixed(0)} (${pos.vekt}%)\n`;
+      const saxoSymbol = SAXO_SYMBOL_MAP[pos.ticker] || pos.ticker;
+      const statusIcon = pos.aksjon === 'HOLD' ? '=' : pos.aksjon === 'KJØP' ? '+' : pos.aksjon === 'SELG' ? '-' : '?';
+      finalReport += `${statusIcon} ${pos.ticker} (${saxoSymbol}): ${pos.antall} aksjer @ $${pos.pris.toFixed(2)} = $${pos.verdi.toFixed(0)} (${pos.vekt}%) [${pos.aksjon}]\n`;
+    }
+
+    if (executedOrders.length > 0) {
+      finalReport += `\n=== REBALANSERINGS-ORDRER ===\n`;
+      
+      if (successfulOrders.length > 0) {
+        for (const order of successfulOrders) {
+          const saxoSymbol = SAXO_SYMBOL_MAP[order.ticker] || order.ticker;
+          finalReport += `OK ${order.type === 'BUY' ? 'KJOP' : 'SALG'} ${order.antall} x ${saxoSymbol} @ $${order.pris.toFixed(2)} = $${order.verdi.toFixed(0)} [OrderId: ${order.orderId}]\n`;
+        }
       }
-    }
 
-    finalReport += `\n=== UTFØRTE ORDRER ===\n`;
-    
-    const successfulOrders = executedOrders.filter(o => o.status === 'EXECUTED');
-    const failedOrders = executedOrders.filter(o => o.status !== 'EXECUTED');
-
-    for (const order of successfulOrders) {
-      finalReport += `✓ KJØP ${order.antall} x ${order.ticker} @ $${order.pris.toFixed(2)} = $${order.verdi.toFixed(0)} [OrderId: ${order.orderId}]\n`;
-    }
-
-    if (failedOrders.length > 0) {
-      finalReport += `\nFeilet:\n`;
-      for (const order of failedOrders) {
-        finalReport += `✗ ${order.ticker}: ${order.status} ${order.error ? `- ${order.error}` : ''}\n`;
+      if (failedOrders.length > 0) {
+        finalReport += `\nFeilet:\n`;
+        for (const order of failedOrders) {
+          finalReport += `FEIL ${order.ticker}: ${order.error || 'Ukjent feil'}\n`;
+        }
       }
+
+      if (notFoundOrders.length > 0) {
+        finalReport += `\nInstrumenter ikke funnet:\n`;
+        for (const order of notFoundOrders) {
+          finalReport += `- ${order.ticker}\n`;
+        }
+      }
+    } else {
+      finalReport += `\n=== INGEN REBALANSERING NODVENDIG ===\nPortefoljen er allerede pa malvektene.\n`;
     }
 
-    finalReport += `\nTotalt investert: $${totalAllocated.toLocaleString()} (${((totalAllocated/accountBalance)*100).toFixed(1)}% av konto)
-
+    finalReport += `
 === AI MARKEDSANALYSE ===
 ${aiAnalysis || 'Analyse utilgjengelig.'}
 `;
 
-    console.log(`[v0] === APEX QUANTUM AUTONOM HANDEL FULLFØRT ===`);
-    console.log(`[v0] Vellykkede ordrer: ${successfulOrders.length}, Feilede: ${failedOrders.length}`);
+    console.log(`[v0] === APEX QUANTUM REBALANSERING FULLFORT ===`);
+    console.log(`[v0] Vellykkede ordrer: ${successfulOrders.length}, Feilede: ${failedOrders.length}, Ikke funnet: ${notFoundOrders.length}`);
 
     return NextResponse.json({ 
       message: finalReport,
       portfolio: portfolioPositions,
-      orders: executedOrders.map(o => ({
+      orders: executedOrders.filter(o => o.status === 'EXECUTED').map(o => ({
         type: o.type,
         ticker: o.ticker,
         antall: o.antall,
-        grunn: `Målvekt ${o.målVekt}%`,
+        grunn: `Rebalansering til ${o.målVekt}% vekt`,
       })),
       executedOrders,
-      autonomStatus: `${successfulOrders.length} ordrer utført, $${totalAllocated.toLocaleString()} investert`,
+      autonomStatus: successfulOrders.length > 0 
+        ? `${successfulOrders.length} rebalanseringsordrer utfort` 
+        : 'Portefolje pa malvekter, ingen handling nodvendig',
       mode: isPaperTrading ? 'paper' : 'live',
       connected: isSaxoConnected,
+      portfolioValue: currentPortfolioValue,
       accountBalance,
-      totalInvested: totalAllocated,
+      totalTraded: totalAllocated,
       timestamp: new Date().toISOString(),
     });
   } catch (error) {
