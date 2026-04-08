@@ -98,23 +98,36 @@ async function getInstrumentWithPrice(
 
   try {
     const searchSymbol = SAXO_SYMBOL_MAP[ticker.toUpperCase()] || ticker;
+    console.log(`[APEX] Soker instrument: ${ticker} -> ${searchSymbol}`);
 
     let response = await fetch(
       `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${encodeURIComponent(searchSymbol)}&AssetTypes=Stock,CfdOnStock&IncludeNonTradable=false`,
       { headers: { 'Authorization': `Bearer ${accessToken}` } }
     );
 
+    if (!response.ok) {
+      console.log(`[APEX] Instrument-sok feilet: ${response.status} ${response.statusText}`);
+      const errorText = await response.text();
+      console.log(`[APEX] Feilmelding: ${errorText}`);
+    }
+
     let data = response.ok ? await response.json() : null;
+    console.log(`[APEX] Sok resultat for ${ticker}: ${data?.Data?.length || 0} instrumenter`);
 
     if (!data?.Data?.length) {
+      console.log(`[APEX] Prover alternativt sok med bare ticker: ${ticker}`);
       response = await fetch(
         `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=Stock,CfdOnStock&IncludeNonTradable=false`,
         { headers: { 'Authorization': `Bearer ${accessToken}` } }
       );
       data = response.ok ? await response.json() : null;
+      console.log(`[APEX] Alternativt sok resultat: ${data?.Data?.length || 0} instrumenter`);
     }
 
-    if (!data?.Data?.length) return null;
+    if (!data?.Data?.length) {
+      console.log(`[APEX] INGEN instrumenter funnet for ${ticker}`);
+      return null;
+    }
 
     const instrument = data.Data.find((i: { Symbol: string }) => 
       i.Symbol?.toUpperCase().includes(ticker.toUpperCase())
@@ -538,10 +551,21 @@ Returner JSON med signaler som spesifisert i system prompt.`;
 
       const instrument = await getInstrumentWithPrice(accessToken, signal.ticker);
       if (!instrument) {
-        console.log(`[APEX] ${signal.ticker}: Instrument ikke funnet - prover CFD`);
-        // Try with CFD asset type directly
+        console.log(`[APEX] ${signal.ticker}: Instrument IKKE FUNNET`);
+        executedTrades.push({
+          ticker: signal.ticker,
+          saxoSymbol: SAXO_SYMBOL_MAP[signal.ticker] || signal.ticker,
+          type: 'BUY',
+          antall: amount,
+          pris: 0,
+          verdi: 0,
+          status: 'FAILED',
+          grunn: 'Instrument ikke funnet i Saxo',
+        });
         continue;
       }
+      
+      console.log(`[APEX] ${signal.ticker}: FUNNET - UIC=${instrument.Uic}, AssetType=${instrument.AssetType}, Pris=$${instrument.CurrentPrice}`);
 
       const buySell = (signal.aksjon === 'KJØP' || signal.aksjon === 'ØK') ? 'Buy' : 'Sell';
       const saxoSymbol = SAXO_SYMBOL_MAP[signal.ticker] || signal.ticker;
@@ -570,7 +594,7 @@ Returner JSON med signaler som spesifisert i system prompt.`;
         verdi: tradeValue,
         orderId: orderResult.orderId,
         status: orderResult.success ? 'EXECUTED' : 'FAILED',
-        grunn: signal.grunn,
+        grunn: orderResult.success ? signal.grunn : `Ordre feilet: ${orderResult.error?.substring(0, 100) || 'Ukjent feil'}`,
       });
 
       if (orderResult.success) {
@@ -625,7 +649,7 @@ ${markedsanalyse || aktivMelding || 'Analyse pågår...'}
     if (failedTrades.length > 0) {
       report += `\nFeilede:\n`;
       for (const trade of failedTrades) {
-        report += `FEIL ${trade.ticker}: Kunne ikke utføre ordre\n`;
+        report += `FEIL ${trade.ticker}: ${trade.grunn}\n`;
       }
     }
 
