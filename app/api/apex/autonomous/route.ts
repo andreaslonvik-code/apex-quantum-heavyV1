@@ -4,14 +4,31 @@ import { cookies } from 'next/headers';
 // Saxo SIM API endpoints
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
+// Saxo symbol mapping - correct format for Saxo OpenAPI
+const SAXO_SYMBOL_MAP: Record<string, { symbol: string; exchange: string; assetType: string }> = {
+  'MU': { symbol: 'MU:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
+  'CEG': { symbol: 'CEG:xnys', exchange: 'NYSE', assetType: 'Stock' },
+  'VRT': { symbol: 'VRT:xnys', exchange: 'NYSE', assetType: 'Stock' },
+  'RKLB': { symbol: 'RKLB:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
+  'LMND': { symbol: 'LMND:xnys', exchange: 'NYSE', assetType: 'Stock' },
+  'ABSI': { symbol: 'ABSI:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
+  'NAS': { symbol: 'NAS:xosl', exchange: 'OSL', assetType: 'Stock' },
+  'NVDA': { symbol: 'NVDA:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
+  'AAPL': { symbol: 'AAPL:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
+  'MSFT': { symbol: 'MSFT:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
+  'GOOGL': { symbol: 'GOOGL:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
+  'AMZN': { symbol: 'AMZN:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
+  'TSLA': { symbol: 'TSLA:xnas', exchange: 'NASDAQ', assetType: 'Stock' },
+};
+
 // APEX QUANTUM v6.1 TARGET PORTFOLIO - CONCENTRATED EXTREME GROWTH
 const TARGET_PORTFOLIO = [
-  { ticker: 'MU', navn: 'Micron Technology', targetVekt: 68, exchange: 'NASDAQ' },
-  { ticker: 'CEG', navn: 'Constellation Energy', targetVekt: 15, exchange: 'NASDAQ' },
-  { ticker: 'VRT', navn: 'Vertiv Holdings', targetVekt: 9, exchange: 'NYSE' },
-  { ticker: 'RKLB', navn: 'Rocket Lab', targetVekt: 3, exchange: 'NASDAQ' },
-  { ticker: 'LMND', navn: 'Lemonade Inc', targetVekt: 3, exchange: 'NYSE' },
-  { ticker: 'ABSI', navn: 'Absci Corporation', targetVekt: 2, exchange: 'NASDAQ' },
+  { ticker: 'MU', navn: 'Micron Technology', targetVekt: 68 },
+  { ticker: 'CEG', navn: 'Constellation Energy', targetVekt: 15 },
+  { ticker: 'VRT', navn: 'Vertiv Holdings', targetVekt: 9 },
+  { ticker: 'RKLB', navn: 'Rocket Lab', targetVekt: 3 },
+  { ticker: 'LMND', navn: 'Lemonade Inc', targetVekt: 3 },
+  { ticker: 'ABSI', navn: 'Absci Corporation', targetVekt: 2 },
 ];
 
 const APEX_QUANTUM_V61_SYSTEM_PROMPT = `APEX QUANTUM v6.1 – GLOBAL 24/7 EXTREME GROWTH EDITION
@@ -66,11 +83,10 @@ async function getAccountBalance(accessToken: string, accountKey: string): Promi
   }
 }
 
-// Search for instrument and get current price
+// Search for instrument and get current price using Saxo symbol mapping
 async function getInstrumentWithPrice(
   accessToken: string, 
-  ticker: string,
-  exchange: string
+  ticker: string
 ): Promise<{ Uic: number; AssetType: string; CurrentPrice: number } | null> {
   // Check cache first
   if (instrumentCache.has(ticker)) {
@@ -78,53 +94,69 @@ async function getInstrumentWithPrice(
   }
 
   try {
-    // Search for instrument
-    const searchResponse = await fetch(
-      `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=Stock,CfdOnStock&IncludeNonTradable=false&ExchangeId=${exchange}`,
+    // Get Saxo symbol mapping
+    const mapping = SAXO_SYMBOL_MAP[ticker.toUpperCase()];
+    const searchSymbol = mapping?.symbol || ticker;
+    const assetType = mapping?.assetType || 'Stock';
+
+    console.log(`[v0] Søker etter ${ticker} med symbol: ${searchSymbol}`);
+
+    // Method 1: Try searching with the mapped symbol (e.g., "MU:xnas")
+    let searchResponse = await fetch(
+      `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${encodeURIComponent(searchSymbol)}&AssetTypes=Stock,CfdOnStock&IncludeNonTradable=false`,
       { headers: { 'Authorization': `Bearer ${accessToken}` } }
     );
 
-    if (!searchResponse.ok) {
-      // Try without exchange
-      const altResponse = await fetch(
-        `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=Stock,CfdOnStock&IncludeNonTradable=false`,
+    let data = searchResponse.ok ? await searchResponse.json() : null;
+
+    // Method 2: If no results, try with just the ticker
+    if (!data?.Data?.length) {
+      console.log(`[v0] Prøver alternativ søk for ${ticker}...`);
+      searchResponse = await fetch(
+        `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=Stock&IncludeNonTradable=false`,
         { headers: { 'Authorization': `Bearer ${accessToken}` } }
       );
-      if (!altResponse.ok) return null;
-      const altData = await altResponse.json();
-      if (!altData.Data?.length) return null;
-      
-      const instrument = altData.Data.find((i: { Symbol: string }) => 
-        i.Symbol?.toUpperCase() === ticker.toUpperCase()
-      ) || altData.Data[0];
-      
-      if (!instrument) return null;
-      
-      // Get price
-      const price = await getInstrumentPrice(accessToken, instrument.Identifier, instrument.AssetType);
-      const result = { Uic: instrument.Identifier, AssetType: instrument.AssetType, CurrentPrice: price };
-      instrumentCache.set(ticker, result);
-      return result;
+      data = searchResponse.ok ? await searchResponse.json() : null;
     }
 
-    const data = await searchResponse.json();
-    if (!data.Data?.length) return null;
+    // Method 3: Try CfdOnStock if Stock doesn't work (Saxo SIM often uses CFDs)
+    if (!data?.Data?.length) {
+      console.log(`[v0] Prøver CFD-søk for ${ticker}...`);
+      searchResponse = await fetch(
+        `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=CfdOnStock&IncludeNonTradable=false`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+      data = searchResponse.ok ? await searchResponse.json() : null;
+    }
 
+    if (!data?.Data?.length) {
+      console.log(`[v0] Ingen instrumenter funnet for ${ticker}`);
+      return null;
+    }
+
+    // Find best match - prefer exact symbol match
     const instrument = data.Data.find((i: { Symbol: string }) => 
-      i.Symbol?.toUpperCase() === ticker.toUpperCase()
+      i.Symbol?.toUpperCase() === ticker.toUpperCase() ||
+      i.Symbol?.toUpperCase() === searchSymbol.toUpperCase() ||
+      i.Symbol?.toUpperCase().startsWith(ticker.toUpperCase() + ':')
     ) || data.Data[0];
 
-    if (!instrument) return null;
+    if (!instrument) {
+      console.log(`[v0] Ingen matching instrument for ${ticker} i resultater`);
+      return null;
+    }
+
+    console.log(`[v0] Fant ${ticker}: UIC=${instrument.Identifier}, Symbol=${instrument.Symbol}, AssetType=${instrument.AssetType}`);
 
     // Get current price
     const price = await getInstrumentPrice(accessToken, instrument.Identifier, instrument.AssetType);
     
     const result = { Uic: instrument.Identifier, AssetType: instrument.AssetType, CurrentPrice: price };
     instrumentCache.set(ticker, result);
-    console.log(`[v0] Found ${ticker}: UIC=${result.Uic}, Price=$${result.CurrentPrice}`);
+    console.log(`[v0] ${ticker}: UIC=${result.Uic}, Pris=$${result.CurrentPrice}`);
     return result;
   } catch (error) {
-    console.error(`[v0] Error searching ${ticker}:`, error);
+    console.error(`[v0] Feil ved søk etter ${ticker}:`, error);
     return null;
   }
 }
@@ -173,7 +205,7 @@ async function placeMarketOrder(
 
     console.log(`[v0] Sender ordre: ${buySell} ${orderBody.Amount} aksjer i ${ticker}`);
 
-    const response = await fetch(`${SAXO_API_BASE}/trade/v2/orders`, {
+    const response = await fetch(`${SAXO_API_BASE}/trade/v1/orders`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -262,7 +294,7 @@ export async function POST(request: NextRequest) {
     console.log(`[v0] Beregner målposisjoner basert på ${TARGET_PORTFOLIO.length} aksjer...`);
 
     for (const target of TARGET_PORTFOLIO) {
-      const instrument = await getInstrumentWithPrice(accessToken!, target.ticker, target.exchange);
+      const instrument = await getInstrumentWithPrice(accessToken!, target.ticker);
       
       if (instrument && instrument.CurrentPrice > 0) {
         const targetValue = (accountBalance * target.targetVekt) / 100;
