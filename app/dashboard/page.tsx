@@ -47,6 +47,7 @@ export default function Dashboard() {
   const [portfolio, setPortfolio] = useState<Position[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<string>('');
+  const [testResult, setTestResult] = useState<string | null>(null);
   
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const isRunningRef = useRef(false);
@@ -141,6 +142,17 @@ export default function Dashboard() {
       isRunningRef.current = false;
     }
   }, []);
+
+  const runTest = async () => {
+    setTestResult('Tester...');
+    try {
+      const res = await fetch('/api/apex/test-order', { credentials: 'include' });
+      const data = await res.json();
+      setTestResult(JSON.stringify(data, null, 2));
+    } catch (err) {
+      setTestResult(`Error: ${err}`);
+    }
+  };
 
   const startTrading = useCallback(() => {
     if (intervalRef.current || !isConnected) return;
@@ -310,6 +322,21 @@ export default function Dashboard() {
               {error}
             </div>
           )}
+
+          {/* Debug Test Button */}
+          <div className="mb-4">
+            <button
+              onClick={runTest}
+              className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded text-sm font-medium"
+            >
+              Test Saxo API
+            </button>
+            {testResult && (
+              <pre className="mt-2 p-3 bg-black/50 rounded text-xs text-green-400 overflow-auto max-h-64">
+                {testResult}
+              </pre>
+            )}
+          </div>
 
           {/* Stats Grid */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
