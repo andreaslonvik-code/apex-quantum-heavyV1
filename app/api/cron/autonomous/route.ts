@@ -3,53 +3,25 @@ import { NextResponse } from 'next/server';
 // Saxo SIM API
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
-// Symbol mapping for US and Oslo Bors
-const SAXO_SYMBOLS: Record<string, string> = {
-  // US
-  'MU': 'MU:xnas', 'CEG': 'CEG:xnas', 'VRT': 'VRT:xnys',
-  'RKLB': 'RKLB:xnas', 'LMND': 'LMND:xnas',
-  // Oslo Bors
-  'EQNR': 'EQNR:xosl', 'MOWI': 'MOWI:xosl', 'NEL': 'NEL:xosl',
-  'NODC': 'NODC:xosl', 'AKRBP': 'AKRBP:xosl', 'NAS': 'NAS:xosl',
+// KNOWN INSTRUMENT UICs - Stable in Saxo SIM, no search needed
+const KNOWN_INSTRUMENTS: Record<string, { uic: number; assetType: string; vekt: number; market: string }> = {
+  // US Stocks (CfdOnStock)
+  'MU': { uic: 211, assetType: 'CfdOnStock', vekt: 45, market: 'US' },
+  'CEG': { uic: 63393, assetType: 'CfdOnStock', vekt: 12, market: 'US' },
+  'VRT': { uic: 49591, assetType: 'CfdOnStock', vekt: 8, market: 'US' },
+  'RKLB': { uic: 57714, assetType: 'CfdOnStock', vekt: 3, market: 'US' },
+  'LMND': { uic: 47877, assetType: 'CfdOnStock', vekt: 2, market: 'US' },
+  // Oslo Bors Stocks (CfdOnStock)
+  'EQNR': { uic: 16256, assetType: 'CfdOnStock', vekt: 10, market: 'OSL' },
+  'MOWI': { uic: 16350, assetType: 'CfdOnStock', vekt: 5, market: 'OSL' },
+  'NEL': { uic: 49164, assetType: 'CfdOnStock', vekt: 5, market: 'OSL' },
+  'NODC': { uic: 45818, assetType: 'CfdOnStock', vekt: 4, market: 'OSL' },
+  'AKRBP': { uic: 39025, assetType: 'CfdOnStock', vekt: 3, market: 'OSL' },
+  'NAS': { uic: 45747, assetType: 'CfdOnStock', vekt: 3, market: 'OSL' },
 };
-
-// Portfolio targets
-const TARGETS = [
-  { ticker: 'MU', vekt: 45 }, { ticker: 'CEG', vekt: 12 }, { ticker: 'VRT', vekt: 8 },
-  { ticker: 'RKLB', vekt: 3 }, { ticker: 'LMND', vekt: 2 },
-  { ticker: 'EQNR', vekt: 8 }, { ticker: 'MOWI', vekt: 5 }, { ticker: 'NEL', vekt: 5 },
-  { ticker: 'NODC', vekt: 5 }, { ticker: 'AKRBP', vekt: 4 }, { ticker: 'NAS', vekt: 3 },
-];
 
 // Helper: sleep
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
-
-// Helper: find instrument
-async function findInstrument(token: string, ticker: string) {
-  const symbol = SAXO_SYMBOLS[ticker] || ticker;
-  const res = await fetch(
-    `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${encodeURIComponent(symbol)}&AssetTypes=Stock,CfdOnStock`,
-    { headers: { 'Authorization': `Bearer ${token}` } }
-  );
-  if (!res.ok) return null;
-  const data = await res.json();
-  if (!data.Data?.length) return null;
-  const inst = data.Data[0];
-  return { uic: inst.Identifier, assetType: inst.AssetType };
-}
-
-// Helper: get price
-async function getPrice(token: string, uic: number, assetType: string): Promise<number> {
-  try {
-    const res = await fetch(
-      `${SAXO_API_BASE}/trade/v1/infoprices?Uic=${uic}&AssetType=${assetType}&FieldGroups=Quote`,
-      { headers: { 'Authorization': `Bearer ${token}` } }
-    );
-    if (!res.ok) return 0;
-    const data = await res.json();
-    return data.Quote?.Ask || data.Quote?.Mid || 0;
-  } catch { return 0; }
-}
 
 // Helper: place order
 async function placeOrder(token: string, accountKey: string, uic: number, assetType: string, amount: number, buySell: 'Buy' | 'Sell') {
@@ -74,30 +46,26 @@ async function placeOrder(token: string, accountKey: string, uic: number, assetT
   } catch { return null; }
 }
 
-// Single trading scan
+// Single trading scan - uses KNOWN UICs directly, no search needed
 async function executeTradingScan(token: string, accountKey: string, scanNumber: number) {
   const results: string[] = [];
+  const tickers = Object.keys(KNOWN_INSTRUMENTS);
   
   // Pick 2-4 random tickers for this scan
-  const shuffled = [...TARGETS].sort(() => Math.random() - 0.5);
+  const shuffled = tickers.sort(() => Math.random() - 0.5);
   const selected = shuffled.slice(0, 2 + Math.floor(Math.random() * 3));
   
-  for (const target of selected) {
-    const inst = await findInstrument(token, target.ticker);
-    if (!inst) continue;
+  for (const ticker of selected) {
+    const inst = KNOWN_INSTRUMENTS[ticker];
     
-    const price = await getPrice(token, inst.uic, inst.assetType);
-    if (price <= 0) continue;
-    
-    // Random momentum decision
-    const momentum = Math.random();
-    const action = momentum > 0.4 ? 'Buy' : 'Sell';
+    // Random momentum decision: 60% buy, 40% sell
+    const action = Math.random() > 0.4 ? 'Buy' : 'Sell';
     const amount = 3 + Math.floor(Math.random() * 12);
     
     const orderId = await placeOrder(token, accountKey, inst.uic, inst.assetType, amount, action);
     
     if (orderId) {
-      results.push(`Scan ${scanNumber}: ${action} ${amount}x ${target.ticker} @ ${price.toFixed(2)} [${orderId}]`);
+      results.push(`Scan ${scanNumber}: ${action} ${amount}x ${ticker} (${inst.market}) [${orderId}]`);
     }
   }
   
