@@ -425,9 +425,11 @@ export default function Dashboard() {
                       padding: '12px',
                     }}
                     labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
-                    formatter={(value: number, name: string) => {
-                      if (name === 'value') return [`$${value.toLocaleString()}`, 'Total Verdi'];
-                      return [value, name];
+                    formatter={(value, name) => {
+                      if (name === 'value' && typeof value === 'number') {
+                        return [`$${value.toLocaleString()}`, 'Total Verdi'];
+                      }
+                      return [String(value ?? ''), String(name)];
                     }}
                   />
                   <ReferenceLine y={100000} stroke="#3f3f46" strokeDasharray="3 3" />
