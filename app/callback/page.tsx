@@ -89,6 +89,7 @@ function CallbackContent() {
         const connectResponse = await fetch('/api/apex/connect-saxo', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ accessToken: data.accessToken }),
         });
 
@@ -124,6 +125,7 @@ function CallbackContent() {
 
         const portfolioResponse = await fetch('/api/apex/get-positions', {
           method: 'GET',
+          credentials: 'include',
         });
 
         let hasExistingPortfolio = false;
@@ -145,6 +147,7 @@ function CallbackContent() {
           const buildResponse = await fetch('/api/apex/autonomous', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
+            credentials: 'include',
             body: JSON.stringify({ 
               mode: 'paper',
               language: 'no',
@@ -174,6 +177,7 @@ function CallbackContent() {
         const tradingResponse = await fetch('/api/apex/autonomous', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
           body: JSON.stringify({ 
             mode: 'paper',
             language: 'no',

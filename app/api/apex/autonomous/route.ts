@@ -350,12 +350,14 @@ function generateActiveSignals(
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
+  console.log(`[APEX] ============ POST /api/apex/autonomous STARTED ============`);
   
   try {
     const body = await request.json();
     const { mode, buildPortfolio } = body;
     const isPaperTrading = mode === 'paper';
     const isInitialBuild = buildPortfolio === true;
+    console.log(`[APEX] Body: mode=${mode}, buildPortfolio=${buildPortfolio}`);
 
     // Get credentials from cookies
     const cookieStore = await cookies();
@@ -363,7 +365,10 @@ export async function POST(request: NextRequest) {
     const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
     const clientKey = cookieStore.get('apex_saxo_client_key')?.value || accountKey;
 
+    console.log(`[APEX] Cookies: token=${accessToken ? 'YES' : 'NO'}, accountKey=${accountKey ? 'YES' : 'NO'}, clientKey=${clientKey ? 'YES' : 'NO'}`);
+
     if (!accessToken || !accountKey) {
+      console.log(`[APEX] MISSING CREDENTIALS - returning 401`);
       return NextResponse.json({
         error: 'Koble til Saxo Simulation forst',
         requiresConnection: true,
