@@ -15,12 +15,13 @@ const APEX_BLUEPRINT: Record<string, {
   saxoSymbol: string;
   market: string;
 }> = {
-  // US Core Positions - 70%
-  MU: { navn: 'Micron Technology', targetVekt: 45, volatilitet: 3, uic: 42315, assetType: 'CfdOnStock', saxoSymbol: 'MU:xnas', market: 'US' },
-  CEG: { navn: 'Constellation Energy', targetVekt: 12, volatilitet: 2, uic: 4928320, assetType: 'CfdOnStock', saxoSymbol: 'CEG:xnas', market: 'US' },
-  VRT: { navn: 'Vertiv Holdings', targetVekt: 8, volatilitet: 2, uic: 21608197, assetType: 'CfdOnStock', saxoSymbol: 'VRT:xnys', market: 'US' },
-  RKLB: { navn: 'Rocket Lab', targetVekt: 3, volatilitet: 4, uic: 24083767, assetType: 'CfdOnStock', saxoSymbol: 'RKLB:xnas', market: 'US' },
-  LMND: { navn: 'Lemonade Inc', targetVekt: 2, volatilitet: 4, uic: 21177364, assetType: 'CfdOnStock', saxoSymbol: 'LMND:xnas', market: 'US' },
+  // US Core Positions - Ekte aksjer (Stock), ikke CFD
+  MU:   { navn: 'Micron Technology',    targetVekt: 40, volatilitet: 3, uic: 42315,    assetType: 'Stock', saxoSymbol: 'MU:xnas',   market: 'US' },
+  CEG:  { navn: 'Constellation Energy', targetVekt: 20, volatilitet: 2, uic: 4928320,  assetType: 'Stock', saxoSymbol: 'CEG:xnas',  market: 'US' },
+  VRT:  { navn: 'Vertiv Holdings',      targetVekt: 15, volatilitet: 2, uic: 21608197, assetType: 'Stock', saxoSymbol: 'VRT:xnys',  market: 'US' },
+  RKLB: { navn: 'Rocket Lab',           targetVekt: 10, volatilitet: 4, uic: 24083767, assetType: 'Stock', saxoSymbol: 'RKLB:xnas', market: 'US' },
+  LMND: { navn: 'Lemonade Inc',         targetVekt: 10, volatilitet: 4, uic: 21177364, assetType: 'Stock', saxoSymbol: 'LMND:xnys', market: 'US' },
+  ABSI: { navn: 'Absci Corporation',    targetVekt: 5,  volatilitet: 5, uic: 24347426, assetType: 'Stock', saxoSymbol: 'ABSI:xnas', market: 'US' },
 };
 
 // Get current price for instrument

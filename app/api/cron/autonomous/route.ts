@@ -3,18 +3,19 @@ import { NextResponse } from 'next/server';
 // Saxo SIM API
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
-// APEX QUANTUM v6.1 Blueprint with Saxo symbols
+// APEX QUANTUM v6.1 Blueprint - Ekte aksjer (Stock), ikke CFD
 const APEX_BLUEPRINT: Record<string, {
   uic: number;
   assetType: string;
   saxoSymbol: string;
   vekt: number;
 }> = {
-  'MU': { uic: 42315, assetType: 'CfdOnStock', saxoSymbol: 'MU:xnas', vekt: 45 },
-  'CEG': { uic: 4928320, assetType: 'CfdOnStock', saxoSymbol: 'CEG:xnas', vekt: 12 },
-  'VRT': { uic: 21608197, assetType: 'CfdOnStock', saxoSymbol: 'VRT:xnys', vekt: 8 },
-  'RKLB': { uic: 24083767, assetType: 'CfdOnStock', saxoSymbol: 'RKLB:xnas', vekt: 3 },
-  'LMND': { uic: 21177364, assetType: 'CfdOnStock', saxoSymbol: 'LMND:xnas', vekt: 2 },
+  'MU':   { uic: 42315,    assetType: 'Stock', saxoSymbol: 'MU:xnas',   vekt: 40 },
+  'CEG':  { uic: 4928320,  assetType: 'Stock', saxoSymbol: 'CEG:xnas',  vekt: 20 },
+  'VRT':  { uic: 21608197, assetType: 'Stock', saxoSymbol: 'VRT:xnys',  vekt: 15 },
+  'RKLB': { uic: 24083767, assetType: 'Stock', saxoSymbol: 'RKLB:xnas', vekt: 10 },
+  'LMND': { uic: 21177364, assetType: 'Stock', saxoSymbol: 'LMND:xnys', vekt: 10 },
+  'ABSI': { uic: 24347426, assetType: 'Stock', saxoSymbol: 'ABSI:xnas', vekt: 5 },
 };
 
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));

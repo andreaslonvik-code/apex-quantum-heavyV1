@@ -98,10 +98,21 @@ export default function Dashboard() {
   const performanceIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isRunningRef = useRef(false);
 
-  // Check connection status on mount
+  // Check connection status on mount and auto-start trading
   useEffect(() => {
     checkConnection();
   }, []);
+
+  // Auto-start trading when connected
+  useEffect(() => {
+    if (isConnected && !isLoading && !isTrading && !intervalRef.current) {
+      // Auto-start after connection verified
+      const timer = setTimeout(() => {
+        startTrading();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [isConnected, isLoading, isTrading, startTrading]);
 
   // Fetch performance data every 3 seconds when trading
   useEffect(() => {
