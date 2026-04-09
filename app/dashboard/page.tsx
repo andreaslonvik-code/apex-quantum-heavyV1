@@ -251,8 +251,8 @@ export default function Dashboard() {
           </Link>
           
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-green-500/20 text-green-400 rounded-full text-sm">
-              <span className="w-2 h-2 bg-green-400 rounded-full" />
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-500/20 text-blue-400 rounded-full text-sm">
+              <span className="w-2 h-2 bg-blue-400 rounded-full" />
               Koblet til Saxo SIM
             </div>
             <button
@@ -292,10 +292,10 @@ export default function Dashboard() {
               <h2 className="text-xl font-semibold">Aktiv Trading Engine</h2>
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
                 isTrading 
-                  ? 'bg-green-500/20 text-green-400' 
+                  ? 'bg-blue-500/20 text-blue-400' 
                   : 'bg-muted text-muted-foreground'
               }`}>
-                <span className={`w-2 h-2 rounded-full ${isTrading ? 'bg-green-400 animate-pulse' : 'bg-muted-foreground'}`} />
+                <span className={`w-2 h-2 rounded-full ${isTrading ? 'bg-blue-400 animate-pulse' : 'bg-muted-foreground'}`} />
                 {isTrading ? 'AKTIV' : 'STOPPET'}
               </span>
             </div>
@@ -303,7 +303,7 @@ export default function Dashboard() {
             {!isTrading ? (
               <button
                 onClick={startTrading}
-                className="px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-semibold transition-colors"
+                className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors"
               >
                 Start Autonom Trading
               </button>
@@ -332,7 +332,7 @@ export default function Dashboard() {
               Test Saxo API
             </button>
             {testResult && (
-              <pre className="mt-2 p-3 bg-black/50 rounded text-xs text-green-400 overflow-auto max-h-64">
+              <pre className="mt-2 p-3 bg-black/50 rounded text-xs text-blue-400 overflow-auto max-h-64">
                 {testResult}
               </pre>
             )}
@@ -346,7 +346,7 @@ export default function Dashboard() {
             </div>
             <div className="bg-muted/30 rounded-lg p-4">
               <div className="text-xs text-muted-foreground mb-1">Total Kjopt</div>
-              <div className="text-2xl font-bold text-green-400">${totalBought.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-blue-400">${totalBought.toLocaleString()}</div>
             </div>
             <div className="bg-muted/30 rounded-lg p-4">
               <div className="text-xs text-muted-foreground mb-1">Total Solgt</div>
@@ -354,7 +354,7 @@ export default function Dashboard() {
             </div>
             <div className="bg-muted/30 rounded-lg p-4">
               <div className="text-xs text-muted-foreground mb-1">Netto</div>
-              <div className={`text-2xl font-bold ${totalSold - totalBought >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              <div className={`text-2xl font-bold ${totalSold - totalBought >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
                 ${(totalSold - totalBought).toLocaleString()}
               </div>
             </div>
@@ -378,13 +378,13 @@ export default function Dashboard() {
                     key={i}
                     className={`flex items-center justify-between p-3 rounded-lg ${
                       signal.action === 'BUY' 
-                        ? 'bg-green-500/10 border border-green-500/30' 
+                        ? 'bg-blue-500/10 border border-blue-500/30' 
                         : 'bg-red-500/10 border border-red-500/30'
                     }`}
                   >
                     <div className="flex items-center gap-3">
                       <span className={`px-2 py-1 rounded text-xs font-bold ${
-                        signal.action === 'BUY' ? 'bg-green-500/30 text-green-400' : 'bg-red-500/30 text-red-400'
+                        signal.action === 'BUY' ? 'bg-blue-500/30 text-blue-400' : 'bg-red-500/30 text-red-400'
                       }`}>
                         {signal.action}
                       </span>
@@ -407,7 +407,7 @@ export default function Dashboard() {
                 {successfulTrades.map((trade, i) => (
                   <div key={i} className="flex items-center justify-between p-2 bg-muted/30 rounded">
                     <div className="flex items-center gap-2">
-                      <span className={trade.action === 'BUY' ? 'text-green-400' : 'text-red-400'}>
+                      <span className={trade.action === 'BUY' ? 'text-blue-400' : 'text-red-400'}>
                         {trade.action === 'BUY' ? '+' : '-'}{trade.amount}
                       </span>
                       <span className="font-medium">{trade.ticker}</span>
@@ -457,7 +457,7 @@ export default function Dashboard() {
                       <td className="text-right py-3 px-3 font-medium">{pos.vekt}%</td>
                       <td className="text-right py-3 px-3">
                         <span className={`px-2 py-0.5 rounded text-xs ${
-                          pos.aksjon === 'KJOPT' ? 'bg-green-500/20 text-green-400' :
+                          pos.aksjon === 'KJOPT' ? 'bg-blue-500/20 text-blue-400' :
                           pos.aksjon === 'SOLGT' ? 'bg-red-500/20 text-red-400' :
                           'bg-muted text-muted-foreground'
                         }`}>
@@ -481,7 +481,7 @@ export default function Dashboard() {
               {tradeHistory.map((trade, i) => (
                 <div key={i} className="flex items-center justify-between py-2 px-3 bg-muted/20 rounded text-sm">
                   <div className="flex items-center gap-3">
-                    <span className={`w-16 text-xs font-medium ${trade.action === 'BUY' ? 'text-green-400' : 'text-red-400'}`}>
+                    <span className={`w-16 text-xs font-medium ${trade.action === 'BUY' ? 'text-blue-400' : 'text-red-400'}`}>
                       {trade.action}
                     </span>
                     <span>{trade.amount}x {trade.ticker}</span>
