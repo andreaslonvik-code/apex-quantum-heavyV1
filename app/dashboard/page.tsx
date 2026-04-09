@@ -98,21 +98,10 @@ export default function Dashboard() {
   const performanceIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isRunningRef = useRef(false);
 
-  // Check connection status on mount and auto-start trading
+  // Check connection status on mount
   useEffect(() => {
     checkConnection();
   }, []);
-
-  // Auto-start trading when connected
-  useEffect(() => {
-    if (isConnected && !isLoading && !isTrading && !intervalRef.current) {
-      // Auto-start after connection verified
-      const timer = setTimeout(() => {
-        startTrading();
-      }, 1000);
-      return () => clearTimeout(timer);
-    }
-  }, [isConnected, isLoading, isTrading, startTrading]);
 
   // Fetch performance data every 3 seconds when trading
   useEffect(() => {
@@ -233,16 +222,26 @@ export default function Dashboard() {
     }
   }, []);
 
-  const startTrading = useCallback(() => {
-    if (intervalRef.current || !isConnected) return;
-    
-    setIsTrading(true);
-    setError(null);
-    
-    runScan();
-    intervalRef.current = setInterval(runScan, 2000);
+const startTrading = useCallback(() => {
+  if (intervalRef.current || !isConnected) return;
+  
+  setIsTrading(true);
+  setError(null);
+  
+  runScan();
+  intervalRef.current = setInterval(runScan, 2000);
   }, [runScan, isConnected]);
 
+  // Auto-start trading when connected
+  useEffect(() => {
+    if (isConnected && !isLoading && !isTrading && !intervalRef.current) {
+      const timer = setTimeout(() => {
+        startTrading();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [isConnected, isLoading, isTrading, startTrading]);
+  
   const stopTrading = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
