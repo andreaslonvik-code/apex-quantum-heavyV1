@@ -172,6 +172,15 @@ export default function Dashboard() {
     }
   };
 
+  // Define stopTrading first so it can be used in runScan
+  const stopTrading = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    setIsTrading(false);
+  }, []);
+
   const runScan = useCallback(async () => {
     if (isRunningRef.current) return;
     isRunningRef.current = true;
@@ -189,7 +198,12 @@ export default function Dashboard() {
       if (!res.ok) {
         if (res.status === 401) {
           setError('Saxo-tilkobling utlopt. Vennligst koble til pa nytt.');
-          stopTrading();
+          // Stop trading on auth error
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
+          setIsTrading(false);
           setIsConnected(false);
         } else {
           setError(data.error || 'Feil ved scan');
@@ -241,14 +255,6 @@ const startTrading = useCallback(() => {
       return () => clearTimeout(timer);
     }
   }, [isConnected, isLoading, isTrading, startTrading]);
-  
-  const stopTrading = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    setIsTrading(false);
-  }, []);
 
   useEffect(() => {
     return () => {
