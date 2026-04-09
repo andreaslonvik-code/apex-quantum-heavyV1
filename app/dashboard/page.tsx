@@ -258,6 +258,10 @@ export default function Dashboard() {
           <div className="flex items-center justify-center gap-4 flex-wrap text-sm">
             <span className="text-cyan-400 font-medium">PAPER TRADING</span>
             <span className="text-muted-foreground">|</span>
+            <span className="text-muted-foreground">Markeder:</span>
+            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs">US</span>
+            <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs">Oslo Bors</span>
+            <span className="text-muted-foreground">|</span>
             <span>Konto: <span className="font-medium">{accountInfo?.accountId}</span></span>
             <span className="text-muted-foreground">|</span>
             <span>Saldo: <span className="font-medium text-accent">${accountInfo?.balance?.toLocaleString() || '100,000'}</span></span>
@@ -404,7 +408,7 @@ export default function Dashboard() {
         {/* Portfolio */}
         {portfolio.length > 0 && (
           <div className="mt-6 bg-card border border-border rounded-lg p-6">
-            <h3 className="font-semibold mb-4">AI-Portefolje (v6.1 Blueprint)</h3>
+            <h3 className="font-semibold mb-4">AI-Portefolje (v6.1 Blueprint) - US + Oslo Bors</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>

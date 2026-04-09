@@ -4,24 +4,46 @@ import { cookies } from 'next/headers';
 // Saxo SIM API endpoints
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
-// Saxo symbol mapping
+// Saxo symbol mapping - US (xnas/xnys) and Oslo Bors (xosl)
 const SAXO_SYMBOL_MAP: Record<string, string> = {
+  // US Stocks
   'MU': 'MU:xnas',
   'CEG': 'CEG:xnas',
   'VRT': 'VRT:xnys',
   'RKLB': 'RKLB:xnas',
   'LMND': 'LMND:xnas',
   'ABSI': 'ABSI:xnas',
+  // Oslo Bors Stocks
+  'NAS': 'NAS:xosl',       // Norwegian Air Shuttle
+  'EQNR': 'EQNR:xosl',     // Equinor
+  'DNB': 'DNB:xosl',       // DNB Bank
+  'MOWI': 'MOWI:xosl',     // Mowi (oppdrett)
+  'TEL': 'TEL:xosl',       // Telenor
+  'ORK': 'ORK:xosl',       // Orkla
+  'YAR': 'YAR:xosl',       // Yara International
+  'AKRBP': 'AKRBP:xosl',   // Aker BP
+  'SALM': 'SALM:xosl',     // SalMar
+  'KAHOT': 'KAHOT:xosl',   // Kahoot
+  'NEL': 'NEL:xosl',       // Nel Hydrogen
+  'RECSI': 'RECSI:xosl',   // REC Silicon
+  'NODC': 'NODC:xosl',     // Nordic Semiconductor
 };
 
-// APEX QUANTUM v6.1 Blueprint - Core positions
+// APEX QUANTUM v6.1 Blueprint - US Core + Oslo Bors
 const APEX_BLUEPRINT = {
-  MU: { navn: 'Micron Technology', targetVekt: 68, volatilitet: 3 },
-  CEG: { navn: 'Constellation Energy', targetVekt: 15, volatilitet: 2 },
-  VRT: { navn: 'Vertiv Holdings', targetVekt: 9, volatilitet: 2 },
-  RKLB: { navn: 'Rocket Lab', targetVekt: 3, volatilitet: 4 },
-  LMND: { navn: 'Lemonade Inc', targetVekt: 3, volatilitet: 4 },
-  ABSI: { navn: 'Absci Corporation', targetVekt: 2, volatilitet: 5 },
+  // US Core Positions (70%)
+  MU: { navn: 'Micron Technology', targetVekt: 45, volatilitet: 3, market: 'US' },
+  CEG: { navn: 'Constellation Energy', targetVekt: 12, volatilitet: 2, market: 'US' },
+  VRT: { navn: 'Vertiv Holdings', targetVekt: 8, volatilitet: 2, market: 'US' },
+  RKLB: { navn: 'Rocket Lab', targetVekt: 3, volatilitet: 4, market: 'US' },
+  LMND: { navn: 'Lemonade Inc', targetVekt: 2, volatilitet: 4, market: 'US' },
+  // Oslo Bors Positions (30%)
+  EQNR: { navn: 'Equinor', targetVekt: 8, volatilitet: 2, market: 'OSL' },
+  MOWI: { navn: 'Mowi', targetVekt: 5, volatilitet: 3, market: 'OSL' },
+  NEL: { navn: 'Nel Hydrogen', targetVekt: 5, volatilitet: 5, market: 'OSL' },
+  NODC: { navn: 'Nordic Semiconductor', targetVekt: 5, volatilitet: 4, market: 'OSL' },
+  AKRBP: { navn: 'Aker BP', targetVekt: 4, volatilitet: 3, market: 'OSL' },
+  NAS: { navn: 'Norwegian Air', targetVekt: 3, volatilitet: 5, market: 'OSL' },
 };
 
 // Search instrument by ticker

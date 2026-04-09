@@ -1,228 +1,162 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextResponse } from 'next/server';
 
-// APEX QUANTUM 24/7 HIGH-FREQUENCY TRADING CRON
-// Runs every minute, executes 30 trading cycles (2 seconds each) per invocation
-// Total: ~30 trades per minute = 1800 scans per hour
-
+// Saxo SIM API
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
-const SCAN_INTERVAL_MS = 2000; // 2 seconds between scans
-const SCANS_PER_INVOCATION = 25; // 25 scans x 2 sec = 50 seconds (leave buffer for API latency)
 
-// Sleep utility
-const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Saxo symbol mapping
+// Symbol mapping for US and Oslo Bors
 const SAXO_SYMBOLS: Record<string, string> = {
-  'MU': 'MU:xnas',
-  'CEG': 'CEG:xnas',
-  'VRT': 'VRT:xnys',
-  'RKLB': 'RKLB:xnas',
-  'LMND': 'LMND:xnas',
-  'ABSI': 'ABSI:xnas',
+  // US
+  'MU': 'MU:xnas', 'CEG': 'CEG:xnas', 'VRT': 'VRT:xnys',
+  'RKLB': 'RKLB:xnas', 'LMND': 'LMND:xnas',
+  // Oslo Bors
+  'EQNR': 'EQNR:xosl', 'MOWI': 'MOWI:xosl', 'NEL': 'NEL:xosl',
+  'NODC': 'NODC:xosl', 'AKRBP': 'AKRBP:xosl', 'NAS': 'NAS:xosl',
 };
 
-// Target portfolio weights
-const TARGET_PORTFOLIO = [
-  { ticker: 'MU', vekt: 68 },
-  { ticker: 'CEG', vekt: 15 },
-  { ticker: 'VRT', vekt: 9 },
-  { ticker: 'RKLB', vekt: 3 },
-  { ticker: 'LMND', vekt: 3 },
-  { ticker: 'ABSI', vekt: 2 },
+// Portfolio targets
+const TARGETS = [
+  { ticker: 'MU', vekt: 45 }, { ticker: 'CEG', vekt: 12 }, { ticker: 'VRT', vekt: 8 },
+  { ticker: 'RKLB', vekt: 3 }, { ticker: 'LMND', vekt: 2 },
+  { ticker: 'EQNR', vekt: 8 }, { ticker: 'MOWI', vekt: 5 }, { ticker: 'NEL', vekt: 5 },
+  { ticker: 'NODC', vekt: 5 }, { ticker: 'AKRBP', vekt: 4 }, { ticker: 'NAS', vekt: 3 },
 ];
 
-// Cache for instruments (reset each cron invocation)
-const instrumentCache = new Map<string, { Uic: number; AssetType: string; Price: number }>();
+// Helper: sleep
+const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-async function getInstrument(accessToken: string, ticker: string) {
-  if (instrumentCache.has(ticker)) {
-    return instrumentCache.get(ticker)!;
-  }
-
+// Helper: find instrument
+async function findInstrument(token: string, ticker: string) {
   const symbol = SAXO_SYMBOLS[ticker] || ticker;
-  const response = await fetch(
+  const res = await fetch(
     `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${encodeURIComponent(symbol)}&AssetTypes=Stock,CfdOnStock`,
-    { headers: { 'Authorization': `Bearer ${accessToken}` } }
+    { headers: { 'Authorization': `Bearer ${token}` } }
   );
-
-  if (!response.ok) return null;
-  const data = await response.json();
+  if (!res.ok) return null;
+  const data = await res.json();
   if (!data.Data?.length) return null;
-
-  const instrument = data.Data[0];
-  
-  // Get price
-  const priceRes = await fetch(
-    `${SAXO_API_BASE}/trade/v1/infoprices?Uic=${instrument.Identifier}&AssetType=${instrument.AssetType}`,
-    { headers: { 'Authorization': `Bearer ${accessToken}` } }
-  );
-  
-  let price = 100;
-  if (priceRes.ok) {
-    const priceData = await priceRes.json();
-    price = priceData.Quote?.Ask || priceData.Quote?.Mid || priceData.LastTraded?.Price || 100;
-  }
-
-  const result = { Uic: instrument.Identifier, AssetType: instrument.AssetType, Price: price };
-  instrumentCache.set(ticker, result);
-  return result;
+  const inst = data.Data[0];
+  return { uic: inst.Identifier, assetType: inst.AssetType };
 }
 
-async function placeOrder(
-  accessToken: string,
-  accountKey: string,
-  uic: number,
-  assetType: string,
-  amount: number,
-  buySell: 'Buy' | 'Sell'
-) {
-  const orderBody = {
-    AccountKey: accountKey,
-    Uic: uic,
-    AssetType: assetType,
-    Amount: amount,
-    BuySell: buySell,
-    OrderType: 'Market',
-    OrderDuration: { DurationType: 'DayOrder' },
-    ManualOrder: false,
-    ExternalReference: `APEX-CRON-${Date.now()}`,
-  };
-
-  const response = await fetch(`${SAXO_API_BASE}/trade/v1/orders`, {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(orderBody),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    return { success: false, error };
-  }
-
-  const data = await response.json();
-  return { success: true, orderId: data.OrderId };
+// Helper: get price
+async function getPrice(token: string, uic: number, assetType: string): Promise<number> {
+  try {
+    const res = await fetch(
+      `${SAXO_API_BASE}/trade/v1/infoprices?Uic=${uic}&AssetType=${assetType}&FieldGroups=Quote`,
+      { headers: { 'Authorization': `Bearer ${token}` } }
+    );
+    if (!res.ok) return 0;
+    const data = await res.json();
+    return data.Quote?.Ask || data.Quote?.Mid || 0;
+  } catch { return 0; }
 }
 
-async function executeTradingScan(accessToken: string, accountKey: string, scanNumber: number) {
-  const trades: Array<{ ticker: string; action: string; amount: number; success: boolean; orderId?: string }> = [];
+// Helper: place order
+async function placeOrder(token: string, accountKey: string, uic: number, assetType: string, amount: number, buySell: 'Buy' | 'Sell') {
+  try {
+    const res = await fetch(`${SAXO_API_BASE}/trade/v1/orders`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        AccountKey: accountKey,
+        Amount: Math.floor(amount),
+        AssetType: assetType,
+        BuySell: buySell,
+        OrderType: 'Market',
+        OrderDuration: { DurationType: 'DayOrder' },
+        Uic: uic,
+        ManualOrder: false,
+      }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.OrderId;
+  } catch { return null; }
+}
+
+// Single trading scan
+async function executeTradingScan(token: string, accountKey: string, scanNumber: number) {
+  const results: string[] = [];
   
-  // Generate trading signals - random momentum-based decisions
-  for (const target of TARGET_PORTFOLIO) {
-    // Skip ABSI sometimes (lowest weight)
-    if (target.ticker === 'ABSI' && Math.random() > 0.3) continue;
+  // Pick 2-4 random tickers for this scan
+  const shuffled = [...TARGETS].sort(() => Math.random() - 0.5);
+  const selected = shuffled.slice(0, 2 + Math.floor(Math.random() * 3));
+  
+  for (const target of selected) {
+    const inst = await findInstrument(token, target.ticker);
+    if (!inst) continue;
     
-    const instrument = await getInstrument(accessToken, target.ticker);
-    if (!instrument) continue;
-
-    // Generate signal: 60% buy, 30% hold, 10% sell
-    const rand = Math.random();
-    let action: 'buy' | 'sell' | 'hold' = 'hold';
-    let amount = 0;
-
-    if (rand < 0.6) {
-      action = 'buy';
-      amount = Math.floor(Math.random() * 10) + 3; // 3-12 shares
-    } else if (rand < 0.7) {
-      action = 'sell';
-      amount = Math.floor(Math.random() * 5) + 1; // 1-5 shares
-    }
-
-    if (action !== 'hold' && amount > 0) {
-      const result = await placeOrder(
-        accessToken,
-        accountKey,
-        instrument.Uic,
-        instrument.AssetType,
-        amount,
-        action === 'buy' ? 'Buy' : 'Sell'
-      );
-
-      trades.push({
-        ticker: target.ticker,
-        action,
-        amount,
-        success: result.success,
-        orderId: result.orderId,
-      });
+    const price = await getPrice(token, inst.uic, inst.assetType);
+    if (price <= 0) continue;
+    
+    // Random momentum decision
+    const momentum = Math.random();
+    const action = momentum > 0.4 ? 'Buy' : 'Sell';
+    const amount = 3 + Math.floor(Math.random() * 12);
+    
+    const orderId = await placeOrder(token, accountKey, inst.uic, inst.assetType, amount, action);
+    
+    if (orderId) {
+      results.push(`Scan ${scanNumber}: ${action} ${amount}x ${target.ticker} @ ${price.toFixed(2)} [${orderId}]`);
     }
   }
-
-  return trades;
+  
+  return results;
 }
 
-export async function GET(request: NextRequest) {
+// Cron endpoint - runs every minute with 25x 2-sec iterations
+export async function GET(request: Request) {
+  // Verify cron secret
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
-
+  
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-
+  
+  // Get stored credentials from env (for cron jobs)
+  const token = process.env.APEX_SAXO_TOKEN;
+  const accountKey = process.env.APEX_SAXO_ACCOUNT_KEY;
+  
+  if (!token || !accountKey) {
+    return NextResponse.json({ 
+      error: 'Missing APEX_SAXO_TOKEN or APEX_SAXO_ACCOUNT_KEY env vars',
+      note: 'Set these in Vercel dashboard for cron jobs to work',
+    }, { status: 400 });
+  }
+  
   const startTime = Date.now();
-  console.log(`[CRON] === APEX QUANTUM HIGH-FREQUENCY TRADING START ===`);
-  console.log(`[CRON] Time: ${new Date().toISOString()}`);
-  console.log(`[CRON] Planned scans: ${SCANS_PER_INVOCATION} @ ${SCAN_INTERVAL_MS}ms intervals`);
-
-  const storedToken = process.env.APEX_SAXO_TOKEN;
-  const storedAccountKey = process.env.APEX_SAXO_ACCOUNT_KEY;
-
-  if (!storedToken || !storedAccountKey) {
-    console.log('[CRON] Missing Saxo credentials');
-    return NextResponse.json({
-      success: false,
-      error: 'Missing APEX_SAXO_TOKEN or APEX_SAXO_ACCOUNT_KEY',
-    });
-  }
-
-  const allTrades: Array<{ scan: number; trades: Array<{ ticker: string; action: string; amount: number; success: boolean }> }> = [];
-  let totalOrders = 0;
-  let successfulOrders = 0;
-
-  // Execute high-frequency trading loop
-  for (let scan = 1; scan <= SCANS_PER_INVOCATION; scan++) {
-    console.log(`[CRON] Scan ${scan}/${SCANS_PER_INVOCATION}...`);
-    
+  const allResults: string[] = [];
+  const ITERATIONS = 25; // 25 iterations x 2 sec = 50 sec (under 60 sec limit)
+  
+  console.log(`[CRON] Starting ${ITERATIONS} trading scans (US + Oslo Bors)`);
+  
+  for (let i = 1; i <= ITERATIONS; i++) {
     try {
-      const trades = await executeTradingScan(storedToken, storedAccountKey, scan);
+      const scanResults = await executeTradingScan(token, accountKey, i);
+      allResults.push(...scanResults);
       
-      if (trades.length > 0) {
-        allTrades.push({ scan, trades });
-        totalOrders += trades.length;
-        successfulOrders += trades.filter(t => t.success).length;
-        
-        for (const trade of trades) {
-          console.log(`[CRON] Scan ${scan}: ${trade.action.toUpperCase()} ${trade.amount}x ${trade.ticker} - ${trade.success ? 'OK' : 'FAIL'}`);
-        }
+      if (scanResults.length > 0) {
+        console.log(`[CRON] ${scanResults.join(' | ')}`);
       }
-    } catch (error) {
-      console.error(`[CRON] Scan ${scan} error:`, error);
-    }
-
-    // Wait before next scan (except for last scan)
-    if (scan < SCANS_PER_INVOCATION) {
-      await sleep(SCAN_INTERVAL_MS);
+      
+      // Wait 2 seconds before next scan (except last)
+      if (i < ITERATIONS) {
+        await sleep(2000);
+      }
+    } catch (e) {
+      console.error(`[CRON] Scan ${i} error:`, e);
     }
   }
-
-  const duration = Date.now() - startTime;
-  console.log(`[CRON] === TRADING COMPLETE ===`);
-  console.log(`[CRON] Duration: ${duration}ms`);
-  console.log(`[CRON] Total orders: ${totalOrders}, Successful: ${successfulOrders}`);
-
+  
+  const elapsed = Date.now() - startTime;
+  
   return NextResponse.json({
     success: true,
-    timestamp: new Date().toISOString(),
-    scansCompleted: SCANS_PER_INVOCATION,
-    totalOrders,
-    successfulOrders,
-    durationMs: duration,
-    trades: allTrades,
+    scans: ITERATIONS,
+    trades: allResults.length,
+    results: allResults.slice(-20), // Last 20 trades
+    elapsed: `${elapsed}ms`,
+    markets: ['US (NASDAQ/NYSE)', 'Oslo Bors'],
   });
-}
-
-export async function POST(request: NextRequest) {
-  return GET(request);
 }
