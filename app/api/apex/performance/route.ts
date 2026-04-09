@@ -13,7 +13,7 @@ const performanceHistory: Map<string, Array<{
   pnlPercent: number;
 }>> = new Map();
 
-const INITIAL_VALUE = 100000; // Starting capital
+const INITIAL_VALUE = 1000000; // Starting capital 1M NOK
 
 export async function GET() {
   try {

@@ -156,7 +156,7 @@ export default function Dashboard() {
         } else {
           setAccountInfo({
             accountId: data.accountKey || 'SIM',
-            balance: 100000,
+            balance: 1000000,
             currency: 'NOK',
           });
         }
@@ -313,7 +313,7 @@ const startTrading = useCallback(() => {
   // Performance calculations
   const pnl = performanceData?.current?.pnl || 0;
   const pnlPercent = performanceData?.current?.pnlPercent || 0;
-  const totalValue = performanceData?.current?.totalValue || accountInfo?.balance || 100000;
+  const totalValue = performanceData?.current?.totalValue || accountInfo?.balance || 1000000;
   const chartData = performanceData?.chartData || [];
   const isPositive = pnl >= 0;
 
@@ -442,7 +442,7 @@ const startTrading = useCallback(() => {
                       return [String(value ?? ''), String(name)];
                     }}
                   />
-                  <ReferenceLine y={100000} stroke="#3f3f46" strokeDasharray="3 3" />
+                  <ReferenceLine y={1000000} stroke="#3f3f46" strokeDasharray="3 3" />
                   <Area
                     type="monotone"
                     dataKey="value"
