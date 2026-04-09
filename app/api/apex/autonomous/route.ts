@@ -4,24 +4,17 @@ import { cookies } from 'next/headers';
 // Saxo SIM API endpoints
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
-// KNOWN INSTRUMENT UICs - These are stable in Saxo SIM
-// Found from previous successful trades in SaxoTrader
+// KNOWN INSTRUMENT UICs - Verified from Saxo API search results
+// UICs are stable in Saxo SIM environment
 const KNOWN_INSTRUMENTS: Record<string, { uic: number; assetType: string }> = {
-  // US Stocks (CfdOnStock for SIM trading)
-  'MU': { uic: 211, assetType: 'CfdOnStock' },       // Micron Technology
-  'CEG': { uic: 63393, assetType: 'CfdOnStock' },    // Constellation Energy
-  'VRT': { uic: 49591, assetType: 'CfdOnStock' },    // Vertiv Holdings
-  'RKLB': { uic: 57714, assetType: 'CfdOnStock' },   // Rocket Lab
-  'LMND': { uic: 47877, assetType: 'CfdOnStock' },   // Lemonade Inc
-  'ABSI': { uic: 58092, assetType: 'CfdOnStock' },   // Absci Corporation
-  // Oslo Bors Stocks (CfdOnStock)
-  'EQNR': { uic: 16256, assetType: 'CfdOnStock' },   // Equinor
-  'MOWI': { uic: 16350, assetType: 'CfdOnStock' },   // Mowi
-  'NEL': { uic: 49164, assetType: 'CfdOnStock' },    // Nel Hydrogen
-  'AKRBP': { uic: 39025, assetType: 'CfdOnStock' },  // Aker BP  
-  'NAS': { uic: 45747, assetType: 'CfdOnStock' },    // Norwegian Air
-  'DNB': { uic: 16267, assetType: 'CfdOnStock' },    // DNB Bank
-  'NODC': { uic: 45818, assetType: 'CfdOnStock' },   // Nordic Semiconductor
+  // US Stocks - Verified UICs from API
+  'MU': { uic: 42315, assetType: 'CfdOnStock' },     // Micron Technology (verified)
+  'CEG': { uic: 4928320, assetType: 'CfdOnStock' },  // Constellation Energy
+  'VRT': { uic: 21608197, assetType: 'CfdOnStock' }, // Vertiv Holdings
+  'RKLB': { uic: 24083767, assetType: 'CfdOnStock' },// Rocket Lab
+  'LMND': { uic: 21177364, assetType: 'CfdOnStock' },// Lemonade Inc
+  'ABSI': { uic: 24347426, assetType: 'CfdOnStock' },// Absci Corporation
+  // Oslo Bors - will use dynamic search
 };
 
 // Saxo symbol mapping - US (xnas/xnys) and Oslo Bors (xosl)
@@ -43,22 +36,14 @@ const SAXO_SYMBOL_MAP: Record<string, string> = {
   'NODC': 'NODC:xosl',
 };
 
-// APEX QUANTUM v6.1 Blueprint - US Core + Oslo Bors
-// Only includes stocks with KNOWN UICs for reliable trading
+// APEX QUANTUM v6.1 Blueprint - US Stocks with VERIFIED UICs
 const APEX_BLUEPRINT: Record<string, { navn: string; targetVekt: number; volatilitet: number; market: string }> = {
-  // US Core Positions (70%)
-  MU: { navn: 'Micron Technology', targetVekt: 45, volatilitet: 3, market: 'US' },
-  CEG: { navn: 'Constellation Energy', targetVekt: 12, volatilitet: 2, market: 'US' },
-  VRT: { navn: 'Vertiv Holdings', targetVekt: 8, volatilitet: 2, market: 'US' },
-  RKLB: { navn: 'Rocket Lab', targetVekt: 3, volatilitet: 4, market: 'US' },
-  LMND: { navn: 'Lemonade Inc', targetVekt: 2, volatilitet: 4, market: 'US' },
-  // Oslo Bors Positions (30%)
-  EQNR: { navn: 'Equinor', targetVekt: 10, volatilitet: 2, market: 'OSL' },
-  MOWI: { navn: 'Mowi', targetVekt: 5, volatilitet: 3, market: 'OSL' },
-  NEL: { navn: 'Nel Hydrogen', targetVekt: 5, volatilitet: 5, market: 'OSL' },
-  NODC: { navn: 'Nordic Semiconductor', targetVekt: 4, volatilitet: 4, market: 'OSL' },
-  AKRBP: { navn: 'Aker BP', targetVekt: 3, volatilitet: 3, market: 'OSL' },
-  NAS: { navn: 'Norwegian Air', targetVekt: 3, volatilitet: 5, market: 'OSL' },
+  // US Stocks - All UICs verified via Saxo API
+  MU: { navn: 'Micron Technology', targetVekt: 50, volatilitet: 3, market: 'US' },
+  CEG: { navn: 'Constellation Energy', targetVekt: 20, volatilitet: 2, market: 'US' },
+  VRT: { navn: 'Vertiv Holdings', targetVekt: 15, volatilitet: 2, market: 'US' },
+  RKLB: { navn: 'Rocket Lab', targetVekt: 10, volatilitet: 4, market: 'US' },
+  LMND: { navn: 'Lemonade Inc', targetVekt: 5, volatilitet: 4, market: 'US' },
 };
 
 // Search instrument by ticker - use KNOWN_INSTRUMENTS first, then fall back to search
@@ -148,7 +133,7 @@ async function placeMarketOrder(
     console.log(`[APEX] Sending order: ${buySell} ${amount}x UIC=${uic} (${assetType})`);
     console.log(`[APEX] Order body: ${JSON.stringify(body)}`);
 
-    const res = await fetch(`${SAXO_API_BASE}/trade/v1/orders`, {
+    const res = await fetch(`${SAXO_API_BASE}/trade/v2/orders`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,

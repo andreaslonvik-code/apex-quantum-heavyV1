@@ -3,21 +3,14 @@ import { NextResponse } from 'next/server';
 // Saxo SIM API
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
-// KNOWN INSTRUMENT UICs - Stable in Saxo SIM, no search needed
+// KNOWN INSTRUMENT UICs - Verified from Saxo API
 const KNOWN_INSTRUMENTS: Record<string, { uic: number; assetType: string; vekt: number; market: string }> = {
-  // US Stocks (CfdOnStock)
-  'MU': { uic: 211, assetType: 'CfdOnStock', vekt: 45, market: 'US' },
-  'CEG': { uic: 63393, assetType: 'CfdOnStock', vekt: 12, market: 'US' },
-  'VRT': { uic: 49591, assetType: 'CfdOnStock', vekt: 8, market: 'US' },
-  'RKLB': { uic: 57714, assetType: 'CfdOnStock', vekt: 3, market: 'US' },
-  'LMND': { uic: 47877, assetType: 'CfdOnStock', vekt: 2, market: 'US' },
-  // Oslo Bors Stocks (CfdOnStock)
-  'EQNR': { uic: 16256, assetType: 'CfdOnStock', vekt: 10, market: 'OSL' },
-  'MOWI': { uic: 16350, assetType: 'CfdOnStock', vekt: 5, market: 'OSL' },
-  'NEL': { uic: 49164, assetType: 'CfdOnStock', vekt: 5, market: 'OSL' },
-  'NODC': { uic: 45818, assetType: 'CfdOnStock', vekt: 4, market: 'OSL' },
-  'AKRBP': { uic: 39025, assetType: 'CfdOnStock', vekt: 3, market: 'OSL' },
-  'NAS': { uic: 45747, assetType: 'CfdOnStock', vekt: 3, market: 'OSL' },
+  // US Stocks - Verified UICs
+  'MU': { uic: 42315, assetType: 'CfdOnStock', vekt: 45, market: 'US' },
+  'CEG': { uic: 4928320, assetType: 'CfdOnStock', vekt: 12, market: 'US' },
+  'VRT': { uic: 21608197, assetType: 'CfdOnStock', vekt: 8, market: 'US' },
+  'RKLB': { uic: 24083767, assetType: 'CfdOnStock', vekt: 3, market: 'US' },
+  'LMND': { uic: 21177364, assetType: 'CfdOnStock', vekt: 2, market: 'US' },
 };
 
 // Helper: sleep
@@ -26,7 +19,7 @@ const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 // Helper: place order
 async function placeOrder(token: string, accountKey: string, uic: number, assetType: string, amount: number, buySell: 'Buy' | 'Sell') {
   try {
-    const res = await fetch(`${SAXO_API_BASE}/trade/v1/orders`, {
+    const res = await fetch(`${SAXO_API_BASE}/trade/v2/orders`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
