@@ -26,21 +26,31 @@ export async function GET() {
       return NextResponse.json({ error: 'Not connected' }, { status: 401 });
     }
 
-    // Get current balance
-    let balance = INITIAL_VALUE;
+    // Get total account value from Saxo (this is the full account value including positions)
+    let totalValue = INITIAL_VALUE;
+    let cashBalance = 0;
+    let positionsValue = 0;
+    
     try {
+      // First try to get TotalValue from balances endpoint
       const balRes = await fetch(
         `${SAXO_API_BASE}/port/v1/balances?AccountKey=${accountKey}&ClientKey=${clientKey}`,
         { headers: { 'Authorization': `Bearer ${accessToken}` } }
       );
       if (balRes.ok) {
         const balData = await balRes.json();
-        balance = balData.CashAvailableForTrading || balData.TotalValue || INITIAL_VALUE;
+        // TotalValue is the complete account value (cash + positions)
+        // This matches "Kontoverdi" in SaxoTrader
+        totalValue = balData.TotalValue || INITIAL_VALUE;
+        cashBalance = balData.CashAvailableForTrading || balData.CashBalance || 0;
+        
+        console.log(`[APEX-PERF] TotalValue from Saxo: ${totalValue}, Cash: ${cashBalance}`);
       }
-    } catch {}
+    } catch (e) {
+      console.log(`[APEX-PERF] Balance fetch error: ${e}`);
+    }
 
-    // Get positions value
-    let positionsValue = 0;
+    // Get positions value separately for display
     try {
       const posRes = await fetch(
         `${SAXO_API_BASE}/port/v1/positions?ClientKey=${clientKey}&FieldGroups=PositionBase,PositionView`,
@@ -53,8 +63,13 @@ export async function GET() {
         }
       }
     } catch {}
-
-    const totalValue = balance + positionsValue;
+    
+    // Use positions + cash as fallback if TotalValue seems wrong
+    const calculatedTotal = cashBalance + positionsValue;
+    if (totalValue < calculatedTotal * 0.5 && calculatedTotal > 0) {
+      console.log(`[APEX-PERF] Using calculated total: ${calculatedTotal} instead of ${totalValue}`);
+      totalValue = calculatedTotal;
+    }
     const pnl = totalValue - INITIAL_VALUE;
     const pnlPercent = ((totalValue - INITIAL_VALUE) / INITIAL_VALUE) * 100;
 
@@ -71,7 +86,7 @@ export async function GET() {
     // Add new data point (max 1000 points, ~3 sec intervals = ~50 min of data)
     history.push({
       timestamp: now,
-      balance,
+      balance: cashBalance,
       portfolioValue: totalValue,
       pnl,
       pnlPercent,
@@ -112,7 +127,7 @@ export async function GET() {
 
     return NextResponse.json({
       current: {
-        balance,
+        balance: cashBalance,
         positionsValue,
         totalValue,
         pnl,

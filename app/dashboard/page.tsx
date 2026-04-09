@@ -151,7 +151,7 @@ export default function Dashboard() {
           setAccountInfo({
             accountId: data.accountInfo.accountId,
             balance: data.accountInfo.balance,
-            currency: data.accountInfo.currency || 'USD',
+            currency: data.accountInfo.currency || 'NOK',
           });
         } else {
           setAccountInfo({

@@ -74,13 +74,15 @@ export async function POST(request: NextRequest) {
       }
     );
 
-    let balance = 100000;
-    let currency = 'USD';
+    let balance = 1000000;
+    let currency = 'NOK';
 
     if (balanceResponse.ok) {
       const balanceData: SaxoBalanceResponse = await balanceResponse.json();
-      balance = balanceData.TotalValue || balanceData.CashBalance || 100000;
-      currency = balanceData.Currency || primaryAccount.Currency || 'USD';
+      // Use TotalValue which is the complete account value (Kontoverdi in SaxoTrader)
+      balance = balanceData.TotalValue || balanceData.CashBalance || 1000000;
+      currency = balanceData.Currency || primaryAccount.Currency || 'NOK';
+      console.log(`[APEX] Balance data: TotalValue=${balanceData.TotalValue}, CashBalance=${balanceData.CashBalance}`);
     }
 
     // Store access token in secure HTTP-only cookie
