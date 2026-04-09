@@ -8,6 +8,7 @@ import { Features } from './components/features';
 import { LiveReport } from './components/live-report';
 import { BrokerConnect } from './components/broker-connect';
 import { Footer } from './components/footer';
+import { ActiveTrader } from './components/active-trader';
 import { Suspense } from 'react';
 
 function StatusBanner({ accountInfo }: { accountInfo: { accountId: string; balance: number; currency: string } | null }) {
@@ -183,12 +184,22 @@ function ApexQuantumContent() {
     );
   }
 
-  // Connected - show full dashboard with portfolio and reports
+  // Connected - show full dashboard with ActiveTrader and reports
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Header language={language} onLanguageChange={setLanguage} />
       <StatusBanner accountInfo={accountInfo} />
-      <main>
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+        {/* Active Trading Engine - runs every 2 seconds when started */}
+        <ActiveTrader 
+          autoStart={true}
+          intervalMs={2000}
+          onTradeExecuted={(trades) => {
+            console.log('[v0] Trades executed:', trades);
+          }}
+        />
+        
+        {/* Live Report Section */}
         <LiveReport
           content={content}
           isLoading={isLoading}
