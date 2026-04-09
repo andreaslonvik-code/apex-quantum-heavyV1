@@ -3,25 +3,39 @@ import { NextResponse } from 'next/server';
 // Saxo SIM API
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
-// KNOWN INSTRUMENT UICs - Verified from Saxo API
-const KNOWN_INSTRUMENTS: Record<string, { uic: number; assetType: string; vekt: number; market: string }> = {
-  // US Stocks - Verified UICs
-  'MU': { uic: 42315, assetType: 'CfdOnStock', vekt: 45, market: 'US' },
-  'CEG': { uic: 4928320, assetType: 'CfdOnStock', vekt: 12, market: 'US' },
-  'VRT': { uic: 21608197, assetType: 'CfdOnStock', vekt: 8, market: 'US' },
-  'RKLB': { uic: 24083767, assetType: 'CfdOnStock', vekt: 3, market: 'US' },
-  'LMND': { uic: 21177364, assetType: 'CfdOnStock', vekt: 2, market: 'US' },
+// APEX QUANTUM v6.1 Blueprint with Saxo symbols
+const APEX_BLUEPRINT: Record<string, {
+  uic: number;
+  assetType: string;
+  saxoSymbol: string;
+  vekt: number;
+}> = {
+  'MU': { uic: 42315, assetType: 'CfdOnStock', saxoSymbol: 'MU:xnas', vekt: 45 },
+  'CEG': { uic: 4928320, assetType: 'CfdOnStock', saxoSymbol: 'CEG:xnas', vekt: 12 },
+  'VRT': { uic: 21608197, assetType: 'CfdOnStock', saxoSymbol: 'VRT:xnys', vekt: 8 },
+  'RKLB': { uic: 24083767, assetType: 'CfdOnStock', saxoSymbol: 'RKLB:xnas', vekt: 3 },
+  'LMND': { uic: 21177364, assetType: 'CfdOnStock', saxoSymbol: 'LMND:xnas', vekt: 2 },
 };
 
-// Helper: sleep
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-// Helper: place order
-async function placeOrder(token: string, accountKey: string, uic: number, assetType: string, amount: number, buySell: 'Buy' | 'Sell') {
+// Place order to Saxo
+async function placeOrder(
+  token: string,
+  accountKey: string,
+  uic: number,
+  assetType: string,
+  amount: number,
+  buySell: 'Buy' | 'Sell',
+  saxoSymbol: string
+): Promise<string | null> {
   try {
     const res = await fetch(`${SAXO_API_BASE}/trade/v2/orders`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
       body: JSON.stringify({
         AccountKey: accountKey,
         Amount: Math.floor(amount),
@@ -33,32 +47,50 @@ async function placeOrder(token: string, accountKey: string, uic: number, assetT
         ManualOrder: false,
       }),
     });
-    if (!res.ok) return null;
+
+    if (!res.ok) {
+      console.log(`[CRON] Order FAILED for ${saxoSymbol}: ${res.status}`);
+      return null;
+    }
+
     const data = await res.json();
+    console.log(`[CRON] >>> Utforer: ${buySell.toUpperCase()} ${amount}x ${saxoSymbol} [${data.OrderId}]`);
     return data.OrderId;
-  } catch { return null; }
+  } catch (e) {
+    console.log(`[CRON] Order ERROR: ${e}`);
+    return null;
+  }
 }
 
-// Single trading scan - uses KNOWN UICs directly, no search needed
+// Single trading scan with multiple signals
 async function executeTradingScan(token: string, accountKey: string, scanNumber: number) {
   const results: string[] = [];
-  const tickers = Object.keys(KNOWN_INSTRUMENTS);
+  const tickers = Object.keys(APEX_BLUEPRINT);
   
   // Pick 2-4 random tickers for this scan
-  const shuffled = tickers.sort(() => Math.random() - 0.5);
+  const shuffled = [...tickers].sort(() => Math.random() - 0.5);
   const selected = shuffled.slice(0, 2 + Math.floor(Math.random() * 3));
   
   for (const ticker of selected) {
-    const inst = KNOWN_INSTRUMENTS[ticker];
+    const info = APEX_BLUEPRINT[ticker];
     
-    // Random momentum decision: 60% buy, 40% sell
-    const action = Math.random() > 0.4 ? 'Buy' : 'Sell';
-    const amount = 3 + Math.floor(Math.random() * 12);
+    // Active trading: 65% buy, 35% sell
+    const momentum = Math.random();
+    const action = momentum > 0.35 ? 'Buy' : 'Sell';
+    const amount = 5 + Math.floor(Math.random() * 15);
     
-    const orderId = await placeOrder(token, accountKey, inst.uic, inst.assetType, amount, action);
+    const orderId = await placeOrder(
+      token,
+      accountKey,
+      info.uic,
+      info.assetType,
+      amount,
+      action,
+      info.saxoSymbol
+    );
     
     if (orderId) {
-      results.push(`Scan ${scanNumber}: ${action} ${amount}x ${ticker} (${inst.market}) [${orderId}]`);
+      results.push(`Scan ${scanNumber}: ${action} ${amount}x ${info.saxoSymbol} [${orderId}]`);
     }
   }
   
@@ -81,25 +113,25 @@ export async function GET(request: Request) {
   
   if (!token || !accountKey) {
     return NextResponse.json({ 
-      error: 'Missing APEX_SAXO_TOKEN or APEX_SAXO_ACCOUNT_KEY env vars',
-      note: 'Set these in Vercel dashboard for cron jobs to work',
+      error: 'Missing APEX_SAXO_TOKEN or APEX_SAXO_ACCOUNT_KEY',
+      help: 'Set these in Vercel Environment Variables for cron to work',
     }, { status: 400 });
   }
   
   const startTime = Date.now();
   const allResults: string[] = [];
-  const ITERATIONS = 25; // 25 iterations x 2 sec = 50 sec (under 60 sec limit)
+  const ITERATIONS = 25; // 25 iterations x 2 sec = ~50 sec
   
-  console.log(`[CRON] Starting ${ITERATIONS} trading scans (US + Oslo Bors)`);
+  console.log(`[CRON] ========== APEX QUANTUM v6.1 CRON START ==========`);
+  console.log(`[CRON] Running ${ITERATIONS} scans with 2-sec intervals`);
+  
+  let totalOrders = 0;
   
   for (let i = 1; i <= ITERATIONS; i++) {
     try {
       const scanResults = await executeTradingScan(token, accountKey, i);
       allResults.push(...scanResults);
-      
-      if (scanResults.length > 0) {
-        console.log(`[CRON] ${scanResults.join(' | ')}`);
-      }
+      totalOrders += scanResults.length;
       
       // Wait 2 seconds before next scan (except last)
       if (i < ITERATIONS) {
@@ -112,12 +144,20 @@ export async function GET(request: Request) {
   
   const elapsed = Date.now() - startTime;
   
+  console.log(`[CRON] ========== CRON COMPLETE ==========`);
+  console.log(`[CRON] ${totalOrders} orders in ${elapsed}ms`);
+  
   return NextResponse.json({
     success: true,
+    version: 'APEX QUANTUM v6.1',
     scans: ITERATIONS,
-    trades: allResults.length,
-    results: allResults.slice(-20), // Last 20 trades
+    totalOrders,
+    results: allResults.slice(-30),
     elapsed: `${elapsed}ms`,
-    markets: ['US (NASDAQ/NYSE)', 'Oslo Bors'],
+    blueprint: Object.entries(APEX_BLUEPRINT).map(([ticker, info]) => ({
+      ticker,
+      saxoSymbol: info.saxoSymbol,
+      vekt: info.vekt,
+    })),
   });
 }
