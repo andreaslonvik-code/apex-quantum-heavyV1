@@ -63,18 +63,29 @@ export default function Dashboard() {
       const res = await fetch('/api/apex/connect-saxo', { method: 'GET' });
       const data = await res.json();
       
-      if (data.connected && data.accountInfo) {
+
+      
+      if (data.connected) {
         setIsConnected(true);
-        setAccountInfo({
-          accountId: data.accountInfo.accountId,
-          balance: data.accountInfo.balance,
-          currency: data.accountInfo.currency || 'USD',
-        });
+        if (data.accountInfo) {
+          setAccountInfo({
+            accountId: data.accountInfo.accountId,
+            balance: data.accountInfo.balance,
+            currency: data.accountInfo.currency || 'USD',
+          });
+        } else {
+          // Connected but no account info - use defaults
+          setAccountInfo({
+            accountId: data.accountKey || 'SIM',
+            balance: 100000,
+            currency: 'USD',
+          });
+        }
       } else {
-        // Not connected - redirect to connect
+        // Not connected
         setIsConnected(false);
       }
-    } catch (e) {
+    } catch {
       setIsConnected(false);
     } finally {
       setIsLoading(false);
@@ -197,13 +208,13 @@ export default function Dashboard() {
             Du må koble til din Saxo Simulation-konto for å bruke Apex Quantum.
           </p>
           <Link
-            href="/"
+            href="/saxo-simulation"
             className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-accent text-accent-foreground rounded-lg font-medium hover:bg-accent/90 transition-colors"
           >
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
             </svg>
-            Koble til Saxo
+            Koble til Saxo Simulation
           </Link>
         </div>
       </div>

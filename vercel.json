@@ -2,7 +2,12 @@
   "crons": [
     {
       "path": "/api/cron/autonomous",
-      "schedule": "*/10 * * * *"
+      "schedule": "* * * * *"
     }
-  ]
+  ],
+  "functions": {
+    "app/api/cron/autonomous/route.ts": {
+      "maxDuration": 60
+    }
+  }
 }
