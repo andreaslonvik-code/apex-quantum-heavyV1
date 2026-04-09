@@ -138,10 +138,10 @@ export function ActiveTrader({ onTradeExecuted, autoStart = false, intervalMs = 
           <h3 className="text-lg font-semibold">Aktiv Trading Engine</h3>
           <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium ${
             state.isActive 
-              ? 'bg-green-500/20 text-green-400' 
+              ? 'bg-blue-500/20 text-blue-400' 
               : 'bg-muted text-muted-foreground'
           }`}>
-            <span className={`w-2 h-2 rounded-full ${state.isActive ? 'bg-green-400 animate-pulse' : 'bg-muted-foreground'}`} />
+            <span className={`w-2 h-2 rounded-full ${state.isActive ? 'bg-blue-400 animate-pulse' : 'bg-muted-foreground'}`} />
             {state.isActive ? 'AKTIV' : 'STOPPET'}
           </span>
         </div>
@@ -150,7 +150,7 @@ export function ActiveTrader({ onTradeExecuted, autoStart = false, intervalMs = 
           {!state.isActive ? (
             <button
               onClick={startTrading}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-md text-sm font-medium transition-colors"
+              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-sm font-medium transition-colors"
             >
               Start Trading
             </button>
@@ -179,7 +179,7 @@ export function ActiveTrader({ onTradeExecuted, autoStart = false, intervalMs = 
         </div>
         <div className="bg-muted/30 rounded-md p-3">
           <div className="text-xs text-muted-foreground">Kjopt</div>
-          <div className="text-xl font-bold text-green-400">${state.totalBought.toLocaleString()}</div>
+          <div className="text-xl font-bold text-blue-400">${state.totalBought.toLocaleString()}</div>
         </div>
         <div className="bg-muted/30 rounded-md p-3">
           <div className="text-xs text-muted-foreground">Solgt</div>
@@ -201,7 +201,7 @@ export function ActiveTrader({ onTradeExecuted, autoStart = false, intervalMs = 
                 key={i}
                 className={`inline-flex items-center gap-1 px-2 py-1 rounded text-xs font-medium ${
                   signal.action === 'BUY' 
-                    ? 'bg-green-500/20 text-green-400' 
+                    ? 'bg-blue-500/20 text-blue-400' 
                     : 'bg-red-500/20 text-red-400'
                 }`}
               >
@@ -219,7 +219,7 @@ export function ActiveTrader({ onTradeExecuted, autoStart = false, intervalMs = 
           <div className="space-y-1 max-h-32 overflow-y-auto">
             {successfulTrades.map((trade, i) => (
               <div key={i} className="flex items-center justify-between text-xs py-1 border-b border-border/50">
-                <span className={trade.action === 'BUY' ? 'text-green-400' : 'text-red-400'}>
+                <span className={trade.action === 'BUY' ? 'text-blue-400' : 'text-red-400'}>
                   {trade.action} {trade.amount}x {trade.ticker}
                 </span>
                 <span className="text-muted-foreground">${trade.value.toFixed(0)}</span>
@@ -242,7 +242,7 @@ export function ActiveTrader({ onTradeExecuted, autoStart = false, intervalMs = 
           <div className="space-y-1 max-h-40 overflow-y-auto text-xs">
             {recentTrades.map((trade, i) => (
               <div key={i} className="flex items-center justify-between py-1">
-                <span className={trade.action === 'BUY' ? 'text-green-400' : 'text-red-400'}>
+                <span className={trade.action === 'BUY' ? 'text-blue-400' : 'text-red-400'}>
                   {trade.action} {trade.amount}x {trade.ticker} @ ${trade.price.toFixed(2)}
                 </span>
                 <span className="text-muted-foreground font-mono">{trade.orderId?.slice(0, 8)}</span>
