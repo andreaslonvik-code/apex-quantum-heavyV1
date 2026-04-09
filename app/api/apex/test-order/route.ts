@@ -79,7 +79,7 @@ export async function GET() {
         
         console.log(`[TEST] Order body: ${JSON.stringify(orderBody)}`);
         
-        const orderRes = await fetch(`${SAXO_API_BASE}/trade/v1/orders`, {
+        const orderRes = await fetch(`${SAXO_API_BASE}/trade/v2/orders`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${accessToken}`,
