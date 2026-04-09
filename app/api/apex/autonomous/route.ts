@@ -413,7 +413,6 @@ Responstid: ${elapsed}ms`;
           saxoSymbol: info.saxoSymbol,
           navn: info.navn,
           targetVekt: info.targetVekt,
-          uic: info.uic,
           antall: pos?.amount || 0,
           verdi: pos?.marketValue || 0,
         };
