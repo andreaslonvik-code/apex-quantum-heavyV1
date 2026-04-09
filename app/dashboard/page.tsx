@@ -222,16 +222,26 @@ export default function Dashboard() {
     }
   }, []);
 
-  const startTrading = useCallback(() => {
-    if (intervalRef.current || !isConnected) return;
-    
-    setIsTrading(true);
-    setError(null);
-    
-    runScan();
-    intervalRef.current = setInterval(runScan, 2000);
+const startTrading = useCallback(() => {
+  if (intervalRef.current || !isConnected) return;
+  
+  setIsTrading(true);
+  setError(null);
+  
+  runScan();
+  intervalRef.current = setInterval(runScan, 2000);
   }, [runScan, isConnected]);
 
+  // Auto-start trading when connected
+  useEffect(() => {
+    if (isConnected && !isLoading && !isTrading && !intervalRef.current) {
+      const timer = setTimeout(() => {
+        startTrading();
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [isConnected, isLoading, isTrading, startTrading]);
+  
   const stopTrading = useCallback(() => {
     if (intervalRef.current) {
       clearInterval(intervalRef.current);
