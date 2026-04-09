@@ -156,7 +156,7 @@ export default function Dashboard() {
         } else {
           setAccountInfo({
             accountId: data.accountKey || 'SIM',
-            balance: 100000,
+            balance: 1000000,
             currency: 'NOK',
           });
         }
@@ -171,6 +171,15 @@ export default function Dashboard() {
       setIsLoading(false);
     }
   };
+
+  // Define stopTrading first so it can be used in runScan
+  const stopTrading = useCallback(() => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    setIsTrading(false);
+  }, []);
 
   const runScan = useCallback(async () => {
     if (isRunningRef.current) return;
@@ -189,7 +198,12 @@ export default function Dashboard() {
       if (!res.ok) {
         if (res.status === 401) {
           setError('Saxo-tilkobling utlopt. Vennligst koble til pa nytt.');
-          stopTrading();
+          // Stop trading on auth error
+          if (intervalRef.current) {
+            clearInterval(intervalRef.current);
+            intervalRef.current = null;
+          }
+          setIsTrading(false);
           setIsConnected(false);
         } else {
           setError(data.error || 'Feil ved scan');
@@ -241,14 +255,6 @@ const startTrading = useCallback(() => {
       return () => clearTimeout(timer);
     }
   }, [isConnected, isLoading, isTrading, startTrading]);
-  
-  const stopTrading = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
-    setIsTrading(false);
-  }, []);
 
   useEffect(() => {
     return () => {
@@ -313,7 +319,7 @@ const startTrading = useCallback(() => {
   // Performance calculations
   const pnl = performanceData?.current?.pnl || 0;
   const pnlPercent = performanceData?.current?.pnlPercent || 0;
-  const totalValue = performanceData?.current?.totalValue || accountInfo?.balance || 100000;
+  const totalValue = performanceData?.current?.totalValue || accountInfo?.balance || 1000000;
   const chartData = performanceData?.chartData || [];
   const isPositive = pnl >= 0;
 
@@ -442,7 +448,7 @@ const startTrading = useCallback(() => {
                       return [String(value ?? ''), String(name)];
                     }}
                   />
-                  <ReferenceLine y={100000} stroke="#3f3f46" strokeDasharray="3 3" />
+                  <ReferenceLine y={1000000} stroke="#3f3f46" strokeDasharray="3 3" />
                   <Area
                     type="monotone"
                     dataKey="value"
