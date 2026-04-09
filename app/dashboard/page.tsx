@@ -157,7 +157,7 @@ export default function Dashboard() {
           setAccountInfo({
             accountId: data.accountKey || 'SIM',
             balance: 100000,
-            currency: 'USD',
+            currency: 'NOK',
           });
         }
         // Initial performance fetch
@@ -359,7 +359,7 @@ const startTrading = useCallback(() => {
             <span>Konto: <span className="font-medium">{accountInfo?.accountId}</span></span>
             <span className="text-muted-foreground">|</span>
             <span>Saldo: <span className={`font-medium ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-              ${totalValue.toLocaleString()}
+              {totalValue.toLocaleString()} kr
             </span></span>
           </div>
         </div>
@@ -375,7 +375,7 @@ const startTrading = useCallback(() => {
               <h2 className="text-xl font-semibold mb-1">Avkastning &amp; Performance</h2>
               <div className="flex items-baseline gap-3">
                 <span className={`text-3xl font-bold ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {isPositive ? '+' : ''}{pnl >= 0 ? '$' : '-$'}{Math.abs(pnl).toLocaleString()}
+                  {isPositive ? '+' : '-'}{Math.abs(pnl).toLocaleString()} kr
                 </span>
                 <span className={`text-lg font-medium ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
                   ({isPositive ? '+' : ''}{pnlPercent.toFixed(2)}%)
@@ -424,7 +424,7 @@ const startTrading = useCallback(() => {
                     fontSize={11}
                     tickLine={false}
                     axisLine={false}
-                    tickFormatter={(value) => `$${(value / 1000).toFixed(0)}k`}
+                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}k kr`}
                     domain={['dataMin - 1000', 'dataMax + 1000']}
                   />
                   <Tooltip
@@ -437,7 +437,7 @@ const startTrading = useCallback(() => {
                     labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
                     formatter={(value, name) => {
                       if (name === 'value' && typeof value === 'number') {
-                        return [`$${value.toLocaleString()}`, 'Total Verdi'];
+                        return [`${value.toLocaleString()} kr`, 'Total Verdi'];
                       }
                       return [String(value ?? ''), String(name)];
                     }}
@@ -472,15 +472,15 @@ const startTrading = useCallback(() => {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-border">
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Startverdi</div>
-                <div className="font-semibold">${performanceData.current.initialValue.toLocaleString()}</div>
+                <div className="font-semibold">{performanceData.current.initialValue.toLocaleString()} kr</div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Novarende</div>
-                <div className="font-semibold">${performanceData.current.totalValue.toLocaleString()}</div>
+                <div className="font-semibold">{performanceData.current.totalValue.toLocaleString()} kr</div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Topp</div>
-                <div className="font-semibold">${performanceData.session.peak.toLocaleString()}</div>
+                <div className="font-semibold">{performanceData.session.peak.toLocaleString()} kr</div>
               </div>
               <div>
                 <div className="text-xs text-muted-foreground mb-1">Max Drawdown</div>
@@ -536,16 +536,16 @@ const startTrading = useCallback(() => {
             </div>
             <div className="bg-muted/30 rounded-lg p-4">
               <div className="text-xs text-muted-foreground mb-1">Total Kjopt</div>
-              <div className="text-2xl font-bold text-emerald-400">${totalBought.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-emerald-400">{totalBought.toLocaleString()} kr</div>
             </div>
             <div className="bg-muted/30 rounded-lg p-4">
               <div className="text-xs text-muted-foreground mb-1">Total Solgt</div>
-              <div className="text-2xl font-bold text-red-400">${totalSold.toLocaleString()}</div>
+              <div className="text-2xl font-bold text-red-400">{totalSold.toLocaleString()} kr</div>
             </div>
             <div className="bg-muted/30 rounded-lg p-4">
               <div className="text-xs text-muted-foreground mb-1">Netto</div>
               <div className={`text-2xl font-bold ${totalSold - totalBought >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                ${(totalSold - totalBought).toLocaleString()}
+                {(totalSold - totalBought).toLocaleString()} kr
               </div>
             </div>
             <div className="bg-muted/30 rounded-lg p-4">
@@ -603,7 +603,7 @@ const startTrading = useCallback(() => {
                       <span className="font-medium">{trade.saxoSymbol || trade.ticker}</span>
                     </div>
                     <div className="text-right">
-                      <div className="text-sm">${trade.value.toFixed(0)}</div>
+                      <div className="text-sm">{trade.value.toFixed(0)} kr</div>
                       <div className="text-xs text-muted-foreground font-mono">{trade.orderId?.slice(0, 10)}</div>
                     </div>
                   </div>

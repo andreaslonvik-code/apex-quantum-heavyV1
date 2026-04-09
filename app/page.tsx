@@ -183,6 +183,17 @@ function ApexQuantumContent() {
     );
   }
 
+  const handleLogout = () => {
+    localStorage.removeItem('apex_saxo_connected');
+    localStorage.removeItem('apex_saxo_account');
+    localStorage.removeItem('apex_first_report');
+    localStorage.removeItem('apex_portfolio');
+    localStorage.removeItem('apex_trading_active');
+    fetch('/api/apex/disconnect', { method: 'POST' }).then(() => {
+      window.location.href = '/';
+    });
+  };
+
   // Connected - redirect to dashboard for trading
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -200,15 +211,26 @@ function ApexQuantumContent() {
           <p className="text-muted-foreground mb-6">
             Din konto er koblet til. Ga til dashbordet for a starte autonom trading.
           </p>
-          <a
-            href="/dashboard"
-            className="inline-flex items-center justify-center gap-2 px-8 py-3 bg-accent text-accent-foreground rounded-lg font-semibold hover:bg-accent/90 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            Apne Trading Dashboard
-          </a>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+            <a
+              href="/dashboard"
+              className="inline-flex items-center justify-center gap-2 px-8 py-3 bg-accent text-accent-foreground rounded-lg font-semibold hover:bg-accent/90 transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+              </svg>
+              Apne Trading Dashboard
+            </a>
+            <button
+              onClick={handleLogout}
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-muted text-muted-foreground hover:bg-muted/80 hover:text-foreground rounded-lg font-medium transition-colors"
+            >
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              Logg ut
+            </button>
+          </div>
         </div>
         
         {/* Live Report Section */}
