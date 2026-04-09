@@ -7,20 +7,20 @@ interface HeroProps {
 export function Hero({ language }: HeroProps) {
   const content = {
     no: {
-      badge: 'AI-drevet porteføljerådgivning',
-      title: 'Følg porteføljen.',
-      titleAccent: 'Se resultatene.',
+      badge: 'Autonom AI-trading',
+      title: 'AI handler for deg.',
+      titleAccent: 'Automatisk.',
       description:
-        'Motta daglige porteføljeanbefalinger fra vår AI som analyserer globale markeder 24/7. Følg anbefalingene og oppnå eksepsjonell avkastning.',
+        'Apex Quantum analyserer markedet og utforer handler autonomt hvert 2. sekund. Koble til din Saxo-konto og la AI-en bygge portefoljen din.',
       cta: 'Start nå',
       price: '499 kr/mnd',
     },
     en: {
-      badge: 'AI-Powered Portfolio Advice',
-      title: 'Follow the portfolio.',
-      titleAccent: 'See the results.',
+      badge: 'Autonomous AI Trading',
+      title: 'AI trades for you.',
+      titleAccent: 'Automatically.',
       description:
-        'Receive daily portfolio recommendations from our AI analyzing global markets 24/7. Follow the recommendations and achieve exceptional returns.',
+        'Apex Quantum analyzes the market and executes trades autonomously every 2 seconds. Connect your Saxo account and let the AI build your portfolio.',
       cta: 'Get Started',
       price: '499 NOK/mo',
     },
