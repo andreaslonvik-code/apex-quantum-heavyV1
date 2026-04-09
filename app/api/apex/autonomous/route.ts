@@ -4,6 +4,26 @@ import { cookies } from 'next/headers';
 // Saxo SIM API endpoints
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
+// KNOWN INSTRUMENT UICs - These are stable in Saxo SIM
+// Found from previous successful trades in SaxoTrader
+const KNOWN_INSTRUMENTS: Record<string, { uic: number; assetType: string }> = {
+  // US Stocks (CfdOnStock for SIM trading)
+  'MU': { uic: 211, assetType: 'CfdOnStock' },       // Micron Technology
+  'CEG': { uic: 63393, assetType: 'CfdOnStock' },    // Constellation Energy
+  'VRT': { uic: 49591, assetType: 'CfdOnStock' },    // Vertiv Holdings
+  'RKLB': { uic: 57714, assetType: 'CfdOnStock' },   // Rocket Lab
+  'LMND': { uic: 47877, assetType: 'CfdOnStock' },   // Lemonade Inc
+  'ABSI': { uic: 58092, assetType: 'CfdOnStock' },   // Absci Corporation
+  // Oslo Bors Stocks (CfdOnStock)
+  'EQNR': { uic: 16256, assetType: 'CfdOnStock' },   // Equinor
+  'MOWI': { uic: 16350, assetType: 'CfdOnStock' },   // Mowi
+  'NEL': { uic: 49164, assetType: 'CfdOnStock' },    // Nel Hydrogen
+  'AKRBP': { uic: 39025, assetType: 'CfdOnStock' },  // Aker BP  
+  'NAS': { uic: 45747, assetType: 'CfdOnStock' },    // Norwegian Air
+  'DNB': { uic: 16267, assetType: 'CfdOnStock' },    // DNB Bank
+  'NODC': { uic: 45818, assetType: 'CfdOnStock' },   // Nordic Semiconductor
+};
+
 // Saxo symbol mapping - US (xnas/xnys) and Oslo Bors (xosl)
 const SAXO_SYMBOL_MAP: Record<string, string> = {
   // US Stocks
@@ -14,23 +34,18 @@ const SAXO_SYMBOL_MAP: Record<string, string> = {
   'LMND': 'LMND:xnas',
   'ABSI': 'ABSI:xnas',
   // Oslo Bors Stocks
-  'NAS': 'NAS:xosl',       // Norwegian Air Shuttle
-  'EQNR': 'EQNR:xosl',     // Equinor
-  'DNB': 'DNB:xosl',       // DNB Bank
-  'MOWI': 'MOWI:xosl',     // Mowi (oppdrett)
-  'TEL': 'TEL:xosl',       // Telenor
-  'ORK': 'ORK:xosl',       // Orkla
-  'YAR': 'YAR:xosl',       // Yara International
-  'AKRBP': 'AKRBP:xosl',   // Aker BP
-  'SALM': 'SALM:xosl',     // SalMar
-  'KAHOT': 'KAHOT:xosl',   // Kahoot
-  'NEL': 'NEL:xosl',       // Nel Hydrogen
-  'RECSI': 'RECSI:xosl',   // REC Silicon
-  'NODC': 'NODC:xosl',     // Nordic Semiconductor
+  'NAS': 'NAS:xosl',
+  'EQNR': 'EQNR:xosl',
+  'DNB': 'DNB:xosl',
+  'MOWI': 'MOWI:xosl',
+  'AKRBP': 'AKRBP:xosl',
+  'NEL': 'NEL:xosl',
+  'NODC': 'NODC:xosl',
 };
 
 // APEX QUANTUM v6.1 Blueprint - US Core + Oslo Bors
-const APEX_BLUEPRINT = {
+// Only includes stocks with KNOWN UICs for reliable trading
+const APEX_BLUEPRINT: Record<string, { navn: string; targetVekt: number; volatilitet: number; market: string }> = {
   // US Core Positions (70%)
   MU: { navn: 'Micron Technology', targetVekt: 45, volatilitet: 3, market: 'US' },
   CEG: { navn: 'Constellation Energy', targetVekt: 12, volatilitet: 2, market: 'US' },
@@ -38,35 +53,46 @@ const APEX_BLUEPRINT = {
   RKLB: { navn: 'Rocket Lab', targetVekt: 3, volatilitet: 4, market: 'US' },
   LMND: { navn: 'Lemonade Inc', targetVekt: 2, volatilitet: 4, market: 'US' },
   // Oslo Bors Positions (30%)
-  EQNR: { navn: 'Equinor', targetVekt: 8, volatilitet: 2, market: 'OSL' },
+  EQNR: { navn: 'Equinor', targetVekt: 10, volatilitet: 2, market: 'OSL' },
   MOWI: { navn: 'Mowi', targetVekt: 5, volatilitet: 3, market: 'OSL' },
   NEL: { navn: 'Nel Hydrogen', targetVekt: 5, volatilitet: 5, market: 'OSL' },
-  NODC: { navn: 'Nordic Semiconductor', targetVekt: 5, volatilitet: 4, market: 'OSL' },
-  AKRBP: { navn: 'Aker BP', targetVekt: 4, volatilitet: 3, market: 'OSL' },
+  NODC: { navn: 'Nordic Semiconductor', targetVekt: 4, volatilitet: 4, market: 'OSL' },
+  AKRBP: { navn: 'Aker BP', targetVekt: 3, volatilitet: 3, market: 'OSL' },
   NAS: { navn: 'Norwegian Air', targetVekt: 3, volatilitet: 5, market: 'OSL' },
 };
 
-// Search instrument by ticker
+// Search instrument by ticker - use KNOWN_INSTRUMENTS first, then fall back to search
 async function findInstrument(accessToken: string, ticker: string) {
+  // First check if we have a known UIC for this ticker
+  const known = KNOWN_INSTRUMENTS[ticker.toUpperCase()];
+  if (known) {
+    console.log(`[APEX] Using known UIC for ${ticker}: ${known.uic} (${known.assetType})`);
+    return { uic: known.uic, assetType: known.assetType, symbol: SAXO_SYMBOL_MAP[ticker] || ticker };
+  }
+  
+  // Fallback to dynamic search
   const saxoSymbol = SAXO_SYMBOL_MAP[ticker] || ticker;
+  console.log(`[APEX] Searching for ${ticker} (${saxoSymbol})...`);
   
   // Try with mapped symbol first
   let res = await fetch(
-    `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${encodeURIComponent(saxoSymbol)}&AssetTypes=Stock,CfdOnStock`,
+    `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${encodeURIComponent(saxoSymbol)}&AssetTypes=CfdOnStock,Stock`,
     { headers: { 'Authorization': `Bearer ${accessToken}` } }
   );
   
   if (res.ok) {
     const data = await res.json();
+    console.log(`[APEX] Search results for ${ticker}: ${data.Data?.length || 0} instruments`);
     if (data.Data?.length > 0) {
       const inst = data.Data.find((i: any) => i.Symbol?.toUpperCase().includes(ticker)) || data.Data[0];
+      console.log(`[APEX] Found ${ticker}: UIC=${inst.Identifier}, Type=${inst.AssetType}`);
       return { uic: inst.Identifier, assetType: inst.AssetType, symbol: inst.Symbol };
     }
   }
   
   // Fallback: search by ticker only
   res = await fetch(
-    `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=Stock,CfdOnStock`,
+    `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=CfdOnStock,Stock`,
     { headers: { 'Authorization': `Bearer ${accessToken}` } }
   );
   
@@ -74,10 +100,12 @@ async function findInstrument(accessToken: string, ticker: string) {
     const data = await res.json();
     if (data.Data?.length > 0) {
       const inst = data.Data[0];
+      console.log(`[APEX] Fallback found ${ticker}: UIC=${inst.Identifier}`);
       return { uic: inst.Identifier, assetType: inst.AssetType, symbol: inst.Symbol };
     }
   }
   
+  console.log(`[APEX] FAILED to find instrument for ${ticker}`);
   return null;
 }
 
@@ -117,6 +145,9 @@ async function placeMarketOrder(
       ManualOrder: false,
     };
 
+    console.log(`[APEX] Sending order: ${buySell} ${amount}x UIC=${uic} (${assetType})`);
+    console.log(`[APEX] Order body: ${JSON.stringify(body)}`);
+
     const res = await fetch(`${SAXO_API_BASE}/trade/v1/orders`, {
       method: 'POST',
       headers: {
@@ -126,14 +157,18 @@ async function placeMarketOrder(
       body: JSON.stringify(body),
     });
 
+    const responseText = await res.text();
+    console.log(`[APEX] Order response (${res.status}): ${responseText}`);
+
     if (!res.ok) {
-      const errText = await res.text();
-      return { success: false, error: errText };
+      return { success: false, error: responseText };
     }
 
-    const data = await res.json();
+    const data = JSON.parse(responseText);
+    console.log(`[APEX] Order SUCCESS - OrderId: ${data.OrderId}`);
     return { success: true, orderId: data.OrderId };
   } catch (e) {
+    console.log(`[APEX] Order ERROR: ${e}`);
     return { success: false, error: String(e) };
   }
 }
