@@ -194,7 +194,7 @@ function CallbackContent() {
         // Redirect to dashboard
         setSubMessage('Omdirigerer til dashboard...');
         setTimeout(() => {
-          router.push('/?connected=1');
+          router.push('/dashboard');
         }, 1000);
 
       } catch (err) {

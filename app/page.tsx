@@ -8,7 +8,6 @@ import { Features } from './components/features';
 import { LiveReport } from './components/live-report';
 import { BrokerConnect } from './components/broker-connect';
 import { Footer } from './components/footer';
-import { ActiveTrader } from './components/active-trader';
 import { Suspense } from 'react';
 
 function StatusBanner({ accountInfo }: { accountInfo: { accountId: string; balance: number; currency: string } | null }) {
@@ -184,20 +183,33 @@ function ApexQuantumContent() {
     );
   }
 
-  // Connected - show full dashboard with ActiveTrader and reports
+  // Connected - redirect to dashboard for trading
   return (
     <div className="min-h-screen bg-background text-foreground">
       <Header language={language} onLanguageChange={setLanguage} />
       <StatusBanner accountInfo={accountInfo} />
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-        {/* Active Trading Engine - runs every 2 seconds when started */}
-        <ActiveTrader 
-          autoStart={true}
-          intervalMs={2000}
-          onTradeExecuted={(trades) => {
-            console.log('[v0] Trades executed:', trades);
-          }}
-        />
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Connected Banner with Dashboard Link */}
+        <div className="bg-card border border-accent/30 rounded-lg p-8 text-center mb-8">
+          <div className="w-16 h-16 bg-accent/20 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-8 h-8 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+          </div>
+          <h2 className="text-2xl font-bold mb-2">Saxo Simulation Tilkoblet</h2>
+          <p className="text-muted-foreground mb-6">
+            Din konto er koblet til. Ga til dashbordet for a starte autonom trading.
+          </p>
+          <a
+            href="/dashboard"
+            className="inline-flex items-center justify-center gap-2 px-8 py-3 bg-accent text-accent-foreground rounded-lg font-semibold hover:bg-accent/90 transition-colors"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+            </svg>
+            Apne Trading Dashboard
+          </a>
+        </div>
         
         {/* Live Report Section */}
         <LiveReport
