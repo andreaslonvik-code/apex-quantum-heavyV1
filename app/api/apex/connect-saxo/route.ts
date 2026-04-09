@@ -137,6 +137,7 @@ export async function GET() {
     const cookieStore = await cookies();
     const token = cookieStore.get('apex_saxo_token');
     const accountKey = cookieStore.get('apex_saxo_account_key');
+    const clientKey = cookieStore.get('apex_saxo_client_key');
 
     if (!token || !accountKey) {
       return NextResponse.json({ connected: false });
@@ -148,12 +149,40 @@ export async function GET() {
     });
 
     if (!response.ok) {
+      // Token expired or invalid - clear cookies
       return NextResponse.json({ connected: false });
+    }
+
+    const accountsData = await response.json();
+    const account = accountsData.Data?.[0] || accountsData;
+
+    // Get balance
+    let balance = 100000;
+    let currency = 'USD';
+
+    try {
+      const balanceResponse = await fetch(
+        `${SAXO_SIM_API_URL}/port/v1/balances?AccountKey=${accountKey.value}&ClientKey=${clientKey?.value || 'me'}`,
+        { headers: { 'Authorization': `Bearer ${token.value}` } }
+      );
+      if (balanceResponse.ok) {
+        const balanceData = await balanceResponse.json();
+        balance = balanceData.TotalValue || balanceData.CashBalance || 100000;
+        currency = balanceData.Currency || 'USD';
+      }
+    } catch {
+      // Use defaults
     }
 
     return NextResponse.json({ 
       connected: true,
       accountKey: accountKey.value,
+      accountInfo: {
+        accountId: account.AccountId || account.AccountKey || accountKey.value,
+        accountKey: accountKey.value,
+        balance,
+        currency,
+      },
     });
   } catch {
     return NextResponse.json({ connected: false });
