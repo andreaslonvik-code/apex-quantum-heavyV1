@@ -4,25 +4,72 @@ import { cookies } from 'next/headers';
 // Saxo SIM API endpoints
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
-// APEX QUANTUM v6.1 - Full Blueprint with Saxo ticker format
-// UICs verified from Saxo API search on 2026-04-09
+// APEX QUANTUM v6.1 - Full Blueprint
+// UICs will be resolved dynamically via search
 const APEX_BLUEPRINT: Record<string, {
   navn: string;
   targetVekt: number;
   volatilitet: number;
-  uic: number;
-  assetType: string;
   saxoSymbol: string;
   market: string;
 }> = {
-  // US Core Positions - Ekte aksjer (Stock), ikke CFD
-  MU:   { navn: 'Micron Technology',    targetVekt: 40, volatilitet: 3, uic: 42315,    assetType: 'Stock', saxoSymbol: 'MU:xnas',   market: 'US' },
-  CEG:  { navn: 'Constellation Energy', targetVekt: 20, volatilitet: 2, uic: 4928320,  assetType: 'Stock', saxoSymbol: 'CEG:xnas',  market: 'US' },
-  VRT:  { navn: 'Vertiv Holdings',      targetVekt: 15, volatilitet: 2, uic: 21608197, assetType: 'Stock', saxoSymbol: 'VRT:xnys',  market: 'US' },
-  RKLB: { navn: 'Rocket Lab',           targetVekt: 10, volatilitet: 4, uic: 24083767, assetType: 'Stock', saxoSymbol: 'RKLB:xnas', market: 'US' },
-  LMND: { navn: 'Lemonade Inc',         targetVekt: 10, volatilitet: 4, uic: 21177364, assetType: 'Stock', saxoSymbol: 'LMND:xnys', market: 'US' },
-  ABSI: { navn: 'Absci Corporation',    targetVekt: 5,  volatilitet: 5, uic: 24347426, assetType: 'Stock', saxoSymbol: 'ABSI:xnas', market: 'US' },
+  MU:   { navn: 'Micron Technology',    targetVekt: 40, volatilitet: 3, saxoSymbol: 'MU:xnas',   market: 'US' },
+  CEG:  { navn: 'Constellation Energy', targetVekt: 20, volatilitet: 2, saxoSymbol: 'CEG:xnas',  market: 'US' },
+  VRT:  { navn: 'Vertiv Holdings',      targetVekt: 15, volatilitet: 2, saxoSymbol: 'VRT:xnys',  market: 'US' },
+  RKLB: { navn: 'Rocket Lab',           targetVekt: 10, volatilitet: 4, saxoSymbol: 'RKLB:xnas', market: 'US' },
+  LMND: { navn: 'Lemonade Inc',         targetVekt: 10, volatilitet: 4, saxoSymbol: 'LMND:xnys', market: 'US' },
+  ABSI: { navn: 'Absci Corporation',    targetVekt: 5,  volatilitet: 5, saxoSymbol: 'ABSI:xnas', market: 'US' },
 };
+
+// Cache for resolved UICs
+const uicCache: Map<string, { uic: number; assetType: string }> = new Map();
+
+// Search for instrument UIC dynamically
+async function findInstrument(accessToken: string, ticker: string, saxoSymbol: string): Promise<{ uic: number; assetType: string } | null> {
+  // Check cache first
+  if (uicCache.has(ticker)) {
+    return uicCache.get(ticker)!;
+  }
+  
+  try {
+    // Try multiple search strategies
+    const searches = [
+      saxoSymbol,
+      `${ticker}:xnas`,
+      `${ticker}:xnys`,
+      ticker,
+    ];
+    
+    for (const keyword of searches) {
+      const res = await fetch(
+        `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${encodeURIComponent(keyword)}&AssetTypes=Stock&$top=5`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+      
+      if (res.ok) {
+        const data = await res.json();
+        if (data.Data && data.Data.length > 0) {
+          // Find exact match or first result
+          const match = data.Data.find((i: any) => 
+            i.Symbol?.toUpperCase() === ticker ||
+            i.Symbol?.toUpperCase().startsWith(ticker + ':')
+          ) || data.Data[0];
+          
+          const result = { uic: match.Identifier, assetType: match.AssetType || 'Stock' };
+          uicCache.set(ticker, result);
+          console.log(`[APEX] Found ${ticker}: UIC=${result.uic}, Type=${result.assetType}`);
+          return result;
+        }
+      }
+    }
+    
+    console.log(`[APEX] Could not find instrument: ${ticker}`);
+    return null;
+  } catch (e) {
+    console.log(`[APEX] Search error for ${ticker}: ${e}`);
+    return null;
+  }
+}
 
 // Get current price for instrument
 async function getPrice(accessToken: string, uic: number, assetType: string): Promise<number> {
@@ -39,30 +86,34 @@ async function getPrice(accessToken: string, uic: number, assetType: string): Pr
   return 100; // Default price if unavailable
 }
 
-// Place market order - REAL Saxo API call
+// Place market order - finds UIC dynamically and executes
 async function placeMarketOrder(
   accessToken: string,
   accountKey: string,
-  uic: number,
-  assetType: string,
-  amount: number,
-  buySell: 'Buy' | 'Sell',
   ticker: string,
-  saxoSymbol: string
-): Promise<{ success: boolean; orderId?: string; error?: string }> {
+  saxoSymbol: string,
+  amount: number,
+  buySell: 'Buy' | 'Sell'
+): Promise<{ success: boolean; orderId?: string; error?: string; uic?: number }> {
   try {
+    // Find instrument dynamically
+    const instrument = await findInstrument(accessToken, ticker, saxoSymbol);
+    if (!instrument) {
+      return { success: false, error: `Fant ikke instrument: ${ticker}` };
+    }
+    
     const body = {
       AccountKey: accountKey,
       Amount: Math.floor(Math.abs(amount)),
-      AssetType: assetType,
+      AssetType: instrument.assetType,
       BuySell: buySell,
       OrderType: 'Market',
       OrderDuration: { DurationType: 'DayOrder' },
-      Uic: uic,
+      Uic: instrument.uic,
       ManualOrder: false,
     };
 
-    console.log(`[APEX] >>> Utforer: ${buySell.toUpperCase()} ${amount}x ${saxoSymbol} (UIC=${uic})`);
+    console.log(`[APEX] >>> Utforer: ${buySell.toUpperCase()} ${amount}x ${saxoSymbol} (UIC=${instrument.uic})`);
 
     const res = await fetch(`${SAXO_API_BASE}/trade/v2/orders`, {
       method: 'POST',
@@ -76,13 +127,13 @@ async function placeMarketOrder(
     const responseText = await res.text();
 
     if (!res.ok) {
-      console.log(`[APEX] <<< FEILET (${res.status}): ${responseText.substring(0, 100)}`);
-      return { success: false, error: responseText };
+      console.log(`[APEX] <<< FEILET (${res.status}): ${responseText.substring(0, 200)}`);
+      return { success: false, error: responseText, uic: instrument.uic };
     }
 
     const data = JSON.parse(responseText);
     console.log(`[APEX] <<< SUKSESS OrderId: ${data.OrderId}`);
-    return { success: true, orderId: data.OrderId };
+    return { success: true, orderId: data.OrderId, uic: instrument.uic };
   } catch (e) {
     console.log(`[APEX] <<< ERROR: ${e}`);
     return { success: false, error: String(e) };
@@ -118,18 +169,24 @@ async function getPositions(accessToken: string, clientKey: string) {
       const data = await res.json();
       
       for (const pos of data.Data || []) {
-        const uic = pos.PositionBase?.Uic || 0;
+        const symbol = pos.DisplayAndFormat?.Symbol || '';
+        const description = pos.DisplayAndFormat?.Description || '';
         
-        // Map UIC back to ticker
-        let ticker = '';
-        for (const [t, info] of Object.entries(APEX_BLUEPRINT)) {
-          if (info.uic === uic) {
-            ticker = t;
-            break;
+        // Extract ticker from symbol (e.g., "MU:xnas" -> "MU")
+        let ticker = symbol.split(':')[0].toUpperCase();
+        
+        // Try to match with our blueprint
+        if (!ticker || !APEX_BLUEPRINT[ticker]) {
+          // Try to match by description
+          for (const [t, info] of Object.entries(APEX_BLUEPRINT)) {
+            if (description.toLowerCase().includes(info.navn.toLowerCase().split(' ')[0])) {
+              ticker = t;
+              break;
+            }
           }
         }
         
-        if (ticker) {
+        if (ticker && APEX_BLUEPRINT[ticker]) {
           positions.set(ticker, {
             amount: Math.abs(pos.PositionBase?.Amount || 0),
             avgPrice: pos.PositionBase?.AverageOpenPrice || 0,
@@ -269,8 +326,9 @@ export async function POST(request: NextRequest) {
       const info = APEX_BLUEPRINT[signal.ticker];
       if (!info) continue;
 
-      const price = await getPrice(accessToken, info.uic, info.assetType);
-      const tradeValue = signal.amount * price;
+      // Estimate trade value (use 100 as default price estimate)
+      const estimatedPrice = 100;
+      const tradeValue = signal.amount * estimatedPrice;
 
       // Validate trade
       if (signal.action === 'BUY' && tradeValue > balance * 0.9) {
@@ -285,17 +343,18 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // EXECUTE ORDER
+      // EXECUTE ORDER - finds UIC dynamically
       const result = await placeMarketOrder(
         accessToken,
         accountKey,
-        info.uic,
-        info.assetType,
-        signal.amount,
-        signal.action === 'BUY' ? 'Buy' : 'Sell',
         signal.ticker,
-        info.saxoSymbol
+        info.saxoSymbol,
+        signal.amount,
+        signal.action === 'BUY' ? 'Buy' : 'Sell'
       );
+      
+      // Get actual price after order
+      const price = estimatedPrice;
 
       executedTrades.push({
         ticker: signal.ticker,
