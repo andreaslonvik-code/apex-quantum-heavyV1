@@ -92,7 +92,9 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       accessToken: accessToken,
-      accountId: account.AccountId || account.AccountKey || 'TRIAL_22114134',
+      accountId: account.AccountId || 'TRIAL_22114134',
+      accountKey: account.AccountKey || account.AccountId || 'me',
+      clientKey: account.ClientKey || 'me',
       balance: balance,
       currency: currency,
       message: 'Tilkobling vellykket! Apex Quantum er nå koblet til din Saxo Simulation-konto.',

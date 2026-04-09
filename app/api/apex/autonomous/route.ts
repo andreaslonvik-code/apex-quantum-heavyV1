@@ -188,31 +188,90 @@ async function getBalance(accessToken: string, accountKey: string): Promise<numb
   return 100000;
 }
 
-// Get current positions
-async function getPositions(accessToken: string, accountKey: string) {
-  const positions: Map<string, { amount: number; avgPrice: number; marketValue: number }> = new Map();
+// Get current positions from Saxo
+async function getPositions(accessToken: string, accountKey: string, clientKey: string) {
+  const positions: Map<string, { amount: number; avgPrice: number; marketValue: number; uic: number }> = new Map();
   
   try {
-    const res = await fetch(
-      `${SAXO_API_BASE}/port/v1/positions?ClientKey=${accountKey}`,
+    // Try with ClientKey first
+    let res = await fetch(
+      `${SAXO_API_BASE}/port/v1/positions?ClientKey=${clientKey}&FieldGroups=PositionBase,PositionView,DisplayAndFormat`,
       { headers: { 'Authorization': `Bearer ${accessToken}` } }
     );
     
+    console.log(`[APEX] Positions API (ClientKey): ${res.status}`);
+    
+    // If that fails, try with AccountKey
+    if (!res.ok) {
+      res = await fetch(
+        `${SAXO_API_BASE}/port/v1/positions?AccountKey=${accountKey}&FieldGroups=PositionBase,PositionView,DisplayAndFormat`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+      console.log(`[APEX] Positions API (AccountKey): ${res.status}`);
+    }
+    
+    // If still no luck, try /me endpoint
+    if (!res.ok) {
+      res = await fetch(
+        `${SAXO_API_BASE}/port/v1/positions/me?FieldGroups=PositionBase,PositionView,DisplayAndFormat`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+      console.log(`[APEX] Positions API (/me): ${res.status}`);
+    }
+    
     if (res.ok) {
       const data = await res.json();
+      console.log(`[APEX] Fant ${data.Data?.length || 0} posisjoner fra Saxo`);
+      
       for (const pos of data.Data || []) {
+        // Get ticker from Symbol or Description
         const symbol = pos.DisplayAndFormat?.Symbol || '';
-        const ticker = symbol.split(':')[0].toUpperCase();
+        const description = pos.DisplayAndFormat?.Description || '';
+        const uic = pos.PositionBase?.Uic || 0;
+        
+        // Extract ticker (before colon if present)
+        let ticker = symbol.split(':')[0].toUpperCase();
+        
+        // Map UIC back to our known tickers
+        if (!ticker) {
+          for (const [t, info] of Object.entries(KNOWN_INSTRUMENTS)) {
+            if (info.uic === uic) {
+              ticker = t;
+              break;
+            }
+          }
+        }
+        
+        // Also check description for common names
+        if (!ticker && description) {
+          if (description.includes('Micron')) ticker = 'MU';
+          else if (description.includes('Constellation')) ticker = 'CEG';
+          else if (description.includes('Vertiv')) ticker = 'VRT';
+          else if (description.includes('Rocket Lab')) ticker = 'RKLB';
+          else if (description.includes('Lemonade')) ticker = 'LMND';
+          else if (description.includes('Absci')) ticker = 'ABSI';
+          else if (description.includes('Equinor')) ticker = 'EQNR';
+          else if (description.includes('Mowi')) ticker = 'MOWI';
+          else if (description.includes('Nel')) ticker = 'NEL';
+          else if (description.includes('Nordic Semi')) ticker = 'NODC';
+          else if (description.includes('Aker BP')) ticker = 'AKRBP';
+          else if (description.includes('Norwegian Air')) ticker = 'NAS';
+        }
+        
         if (ticker) {
-          positions.set(ticker, {
-            amount: pos.PositionBase?.Amount || 0,
-            avgPrice: pos.PositionBase?.AverageOpenPrice || 0,
-            marketValue: pos.PositionView?.MarketValue || 0,
-          });
+          const amount = Math.abs(pos.PositionBase?.Amount || 0);
+          const avgPrice = pos.PositionBase?.AverageOpenPrice || 0;
+          const marketValue = Math.abs(pos.PositionView?.MarketValue || pos.PositionView?.CurrentPrice * amount || 0);
+          
+          console.log(`[APEX] Posisjon: ${ticker} = ${amount} aksjer @ $${avgPrice.toFixed(2)} (verdi: $${marketValue.toFixed(0)})`);
+          
+          positions.set(ticker, { amount, avgPrice, marketValue, uic });
         }
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.log(`[APEX] Feil ved henting av posisjoner: ${e}`);
+  }
   
   return positions;
 }
@@ -291,19 +350,25 @@ function generateActiveSignals(
 
 export async function POST(request: NextRequest) {
   const startTime = Date.now();
+  console.log(`[APEX] ============ POST /api/apex/autonomous STARTED ============`);
   
   try {
     const body = await request.json();
     const { mode, buildPortfolio } = body;
     const isPaperTrading = mode === 'paper';
     const isInitialBuild = buildPortfolio === true;
+    console.log(`[APEX] Body: mode=${mode}, buildPortfolio=${buildPortfolio}`);
 
     // Get credentials from cookies
     const cookieStore = await cookies();
     const accessToken = cookieStore.get('apex_saxo_token')?.value;
     const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
+    const clientKey = cookieStore.get('apex_saxo_client_key')?.value || accountKey;
+
+    console.log(`[APEX] Cookies: token=${accessToken ? 'YES' : 'NO'}, accountKey=${accountKey ? 'YES' : 'NO'}, clientKey=${clientKey ? 'YES' : 'NO'}`);
 
     if (!accessToken || !accountKey) {
+      console.log(`[APEX] MISSING CREDENTIALS - returning 401`);
       return NextResponse.json({
         error: 'Koble til Saxo Simulation forst',
         requiresConnection: true,
@@ -311,11 +376,12 @@ export async function POST(request: NextRequest) {
     }
 
     console.log(`[APEX] === AKTIV TRADING SCAN @ ${new Date().toISOString()} ===`);
+    console.log(`[APEX] AccountKey: ${accountKey}, ClientKey: ${clientKey}`);
 
     // Fetch account state
     const [balance, positions] = await Promise.all([
       getBalance(accessToken, accountKey),
-      getPositions(accessToken, accountKey),
+      getPositions(accessToken, accountKey, clientKey || accountKey),
     ]);
 
     // Calculate total portfolio value

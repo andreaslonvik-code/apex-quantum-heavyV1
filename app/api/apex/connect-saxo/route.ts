@@ -85,10 +85,13 @@ export async function POST(request: NextRequest) {
 
     // Store access token in secure HTTP-only cookie
     const cookieStore = await cookies();
+    
+    console.log(`[APEX] Storing cookies - AccountKey: ${primaryAccount.AccountKey}, ClientKey: ${primaryAccount.ClientKey}`);
+    
     cookieStore.set('apex_saxo_token', accessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax', // Allow cross-site for OAuth redirects
       maxAge: 60 * 60 * 24, // 24 hours
       path: '/',
     });
@@ -97,7 +100,7 @@ export async function POST(request: NextRequest) {
     cookieStore.set('apex_saxo_account_key', primaryAccount.AccountKey, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 60 * 60 * 24,
       path: '/',
     });
@@ -105,7 +108,7 @@ export async function POST(request: NextRequest) {
     cookieStore.set('apex_saxo_client_key', primaryAccount.ClientKey, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
+      sameSite: 'lax',
       maxAge: 60 * 60 * 24,
       path: '/',
     });

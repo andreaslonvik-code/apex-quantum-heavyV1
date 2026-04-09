@@ -60,7 +60,7 @@ export default function Dashboard() {
     setIsLoading(true);
     try {
       // Check if we have valid Saxo connection via API
-      const res = await fetch('/api/apex/connect-saxo', { method: 'GET' });
+      const res = await fetch('/api/apex/connect-saxo', { method: 'GET', credentials: 'include' });
       const data = await res.json();
       
 
@@ -100,6 +100,7 @@ export default function Dashboard() {
       const res = await fetch('/api/apex/autonomous', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ mode: 'paper' }),
       });
       
