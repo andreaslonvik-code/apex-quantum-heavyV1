@@ -611,7 +611,6 @@ export async function POST(request: NextRequest) {
         orderId: result.orderId,
         status: result.success ? 'OK' : 'FEIL',
         reason: result.success ? signal.reason : 'Ordre feilet',
-        lockedProfit: lockedThisTrade,
       });
 
       if (!result.success) {
