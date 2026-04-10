@@ -4,41 +4,52 @@ import { cookies } from 'next/headers';
 // Saxo SIM API endpoints
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
-// APEX QUANTUM v6.1 - Full Blueprint
-// UICs will be resolved dynamically via search
+// APEX QUANTUM v6.1 - Full Blueprint with Saxo symbol mapping
+// Intra-day swing trader configuration
 const APEX_BLUEPRINT: Record<string, {
   navn: string;
   targetVekt: number;
   volatilitet: number;
   saxoSymbol: string;
+  assetType: string;
   market: string;
 }> = {
-  MU:   { navn: 'Micron Technology',    targetVekt: 40, volatilitet: 3, saxoSymbol: 'MU:xnas',   market: 'US' },
-  CEG:  { navn: 'Constellation Energy', targetVekt: 20, volatilitet: 2, saxoSymbol: 'CEG:xnas',  market: 'US' },
-  VRT:  { navn: 'Vertiv Holdings',      targetVekt: 15, volatilitet: 2, saxoSymbol: 'VRT:xnys',  market: 'US' },
-  RKLB: { navn: 'Rocket Lab',           targetVekt: 10, volatilitet: 4, saxoSymbol: 'RKLB:xnas', market: 'US' },
-  LMND: { navn: 'Lemonade Inc',         targetVekt: 10, volatilitet: 4, saxoSymbol: 'LMND:xnys', market: 'US' },
-  ABSI: { navn: 'Absci Corporation',    targetVekt: 5,  volatilitet: 5, saxoSymbol: 'ABSI:xnas', market: 'US' },
+  MU:   { navn: 'Micron Technology',    targetVekt: 45, volatilitet: 3, saxoSymbol: 'MU:xnas',   assetType: 'Stock', market: 'US' },
+  CEG:  { navn: 'Constellation Energy', targetVekt: 12, volatilitet: 2, saxoSymbol: 'CEG:xnas',  assetType: 'Stock', market: 'US' },
+  VRT:  { navn: 'Vertiv Holdings',      targetVekt: 8,  volatilitet: 2, saxoSymbol: 'VRT:xnys',  assetType: 'Stock', market: 'US' },
+  RKLB: { navn: 'Rocket Lab',           targetVekt: 3,  volatilitet: 4, saxoSymbol: 'RKLB:xnas', assetType: 'Stock', market: 'US' },
+  LMND: { navn: 'Lemonade Inc',         targetVekt: 2,  volatilitet: 4, saxoSymbol: 'LMND:xnys', assetType: 'Stock', market: 'US' },
+  ABSI: { navn: 'Absci Corporation',    targetVekt: 30, volatilitet: 5, saxoSymbol: 'ABSI:xnas', assetType: 'Stock', market: 'US' },
 };
+
+// Momentum tracking for intra-day swings
+interface PricePoint {
+  price: number;
+  timestamp: number;
+}
+
+interface MomentumData {
+  prices: PricePoint[];
+  localHigh: number;
+  localLow: number;
+  rsi: number;
+  trend: 'UP' | 'DOWN' | 'NEUTRAL';
+}
+
+// Price history for momentum analysis (in-memory, resets on cold start)
+const priceHistory: Map<string, PricePoint[]> = new Map();
 
 // Cache for resolved UICs
 const uicCache: Map<string, { uic: number; assetType: string }> = new Map();
 
 // Search for instrument UIC dynamically
 async function findInstrument(accessToken: string, ticker: string, saxoSymbol: string): Promise<{ uic: number; assetType: string } | null> {
-  // Check cache first
   if (uicCache.has(ticker)) {
     return uicCache.get(ticker)!;
   }
   
   try {
-    // Try multiple search strategies
-    const searches = [
-      saxoSymbol,
-      `${ticker}:xnas`,
-      `${ticker}:xnys`,
-      ticker,
-    ];
+    const searches = [saxoSymbol, `${ticker}:xnas`, `${ticker}:xnys`, ticker];
     
     for (const keyword of searches) {
       const res = await fetch(
@@ -49,7 +60,6 @@ async function findInstrument(accessToken: string, ticker: string, saxoSymbol: s
       if (res.ok) {
         const data = await res.json();
         if (data.Data && data.Data.length > 0) {
-          // Find exact match or first result
           const match = data.Data.find((i: any) => 
             i.Symbol?.toUpperCase() === ticker ||
             i.Symbol?.toUpperCase().startsWith(ticker + ':')
@@ -57,13 +67,11 @@ async function findInstrument(accessToken: string, ticker: string, saxoSymbol: s
           
           const result = { uic: match.Identifier, assetType: match.AssetType || 'Stock' };
           uicCache.set(ticker, result);
-          console.log(`[APEX] Found ${ticker}: UIC=${result.uic}, Type=${result.assetType}`);
+          console.log(`[APEX] Found ${ticker}: UIC=${result.uic}`);
           return result;
         }
       }
     }
-    
-    console.log(`[APEX] Could not find instrument: ${ticker}`);
     return null;
   } catch (e) {
     console.log(`[APEX] Search error for ${ticker}: ${e}`);
@@ -71,32 +79,95 @@ async function findInstrument(accessToken: string, ticker: string, saxoSymbol: s
   }
 }
 
-// Get current price for instrument
-async function getPrice(accessToken: string, uic: number, assetType: string): Promise<number> {
+// Get current price with bid/ask spread
+async function getPrice(accessToken: string, uic: number, assetType: string): Promise<{ bid: number; ask: number; mid: number; last: number }> {
   try {
     const res = await fetch(
-      `${SAXO_API_BASE}/trade/v1/infoprices?Uic=${uic}&AssetType=${assetType}&FieldGroups=Quote`,
+      `${SAXO_API_BASE}/trade/v1/infoprices?Uic=${uic}&AssetType=${assetType}&FieldGroups=Quote,PriceInfo`,
       { headers: { 'Authorization': `Bearer ${accessToken}` } }
     );
     if (res.ok) {
       const data = await res.json();
-      return data.Quote?.Ask || data.Quote?.Mid || data.Quote?.Last || 100;
+      const bid = data.Quote?.Bid || data.Quote?.Last || 100;
+      const ask = data.Quote?.Ask || data.Quote?.Last || 100;
+      const mid = (bid + ask) / 2;
+      const last = data.Quote?.Last || data.PriceInfo?.LastTraded || mid;
+      return { bid, ask, mid, last };
     }
   } catch {}
-  return 100; // Default price if unavailable
+  return { bid: 100, ask: 100, mid: 100, last: 100 };
 }
 
-// Place market order - finds UIC dynamically and executes
+// Calculate RSI from price history (14-period simplified)
+function calculateRSI(prices: PricePoint[]): number {
+  if (prices.length < 5) return 50;
+  
+  const recent = prices.slice(-15);
+  let gains = 0, losses = 0, count = 0;
+  
+  for (let i = 1; i < recent.length; i++) {
+    const change = recent[i].price - recent[i-1].price;
+    if (change > 0) gains += change;
+    else losses += Math.abs(change);
+    count++;
+  }
+  
+  if (count === 0) return 50;
+  const avgGain = gains / count;
+  const avgLoss = losses / count;
+  
+  if (avgLoss === 0) return 100;
+  const rs = avgGain / avgLoss;
+  return 100 - (100 / (1 + rs));
+}
+
+// Analyze momentum for a ticker
+function analyzeMomentum(ticker: string, currentPrice: number): MomentumData {
+  const history = priceHistory.get(ticker) || [];
+  
+  // Add current price to history
+  const now = Date.now();
+  history.push({ price: currentPrice, timestamp: now });
+  
+  // Keep only last 15 minutes of data (assuming ~2 sec scans = ~450 points max)
+  const fifteenMinAgo = now - 15 * 60 * 1000;
+  const recentHistory = history.filter(p => p.timestamp > fifteenMinAgo);
+  priceHistory.set(ticker, recentHistory);
+  
+  if (recentHistory.length < 3) {
+    return { prices: recentHistory, localHigh: currentPrice, localLow: currentPrice, rsi: 50, trend: 'NEUTRAL' };
+  }
+  
+  // Find local high and low in last 5 minutes
+  const fiveMinAgo = now - 5 * 60 * 1000;
+  const fiveMinPrices = recentHistory.filter(p => p.timestamp > fiveMinAgo);
+  
+  const localHigh = Math.max(...fiveMinPrices.map(p => p.price));
+  const localLow = Math.min(...fiveMinPrices.map(p => p.price));
+  
+  // Calculate RSI
+  const rsi = calculateRSI(recentHistory);
+  
+  // Determine trend
+  const avgRecent = fiveMinPrices.slice(-3).reduce((s, p) => s + p.price, 0) / 3;
+  const avgOlder = fiveMinPrices.slice(0, 3).reduce((s, p) => s + p.price, 0) / Math.min(3, fiveMinPrices.length);
+  const trend = avgRecent > avgOlder * 1.002 ? 'UP' : avgRecent < avgOlder * 0.998 ? 'DOWN' : 'NEUTRAL';
+  
+  return { prices: recentHistory, localHigh, localLow, rsi, trend };
+}
+
+// Place market order with full logging
 async function placeMarketOrder(
   accessToken: string,
   accountKey: string,
   ticker: string,
   saxoSymbol: string,
+  assetType: string,
   amount: number,
-  buySell: 'Buy' | 'Sell'
+  buySell: 'Buy' | 'Sell',
+  reason: string
 ): Promise<{ success: boolean; orderId?: string; error?: string; uic?: number }> {
   try {
-    // Find instrument dynamically
     const instrument = await findInstrument(accessToken, ticker, saxoSymbol);
     if (!instrument) {
       return { success: false, error: `Fant ikke instrument: ${ticker}` };
@@ -105,7 +176,7 @@ async function placeMarketOrder(
     const body = {
       AccountKey: accountKey,
       Amount: Math.floor(Math.abs(amount)),
-      AssetType: instrument.assetType,
+      AssetType: assetType,
       BuySell: buySell,
       OrderType: 'Market',
       OrderDuration: { DurationType: 'DayOrder' },
@@ -113,7 +184,8 @@ async function placeMarketOrder(
       ManualOrder: false,
     };
 
-    console.log(`[APEX] >>> Utforer: ${buySell.toUpperCase()} ${amount}x ${saxoSymbol} (UIC=${instrument.uic})`);
+    const actionText = buySell === 'Buy' ? 'KJOPER PA DIP' : 'TAR PROFITT PA PEAK';
+    console.log(`[APEX] >>> ${actionText}: ${buySell === 'Buy' ? '+' : '-'}${amount} ${saxoSymbol} - ${reason}`);
 
     const res = await fetch(`${SAXO_API_BASE}/trade/v2/orders`, {
       method: 'POST',
@@ -149,13 +221,13 @@ async function getBalance(accessToken: string, accountKey: string): Promise<numb
     );
     if (res.ok) {
       const data = await res.json();
-      return data.CashAvailableForTrading || data.TotalValue || 100000;
+      return data.CashAvailableForTrading || data.TotalValue || 1000000;
     }
   } catch {}
-  return 100000;
+  return 1000000;
 }
 
-// Get current positions from Saxo
+// Get current positions
 async function getPositions(accessToken: string, clientKey: string) {
   const positions: Map<string, { amount: number; avgPrice: number; marketValue: number }> = new Map();
   
@@ -171,13 +243,9 @@ async function getPositions(accessToken: string, clientKey: string) {
       for (const pos of data.Data || []) {
         const symbol = pos.DisplayAndFormat?.Symbol || '';
         const description = pos.DisplayAndFormat?.Description || '';
-        
-        // Extract ticker from symbol (e.g., "MU:xnas" -> "MU")
         let ticker = symbol.split(':')[0].toUpperCase();
         
-        // Try to match with our blueprint
         if (!ticker || !APEX_BLUEPRINT[ticker]) {
-          // Try to match by description
           for (const [t, info] of Object.entries(APEX_BLUEPRINT)) {
             if (description.toLowerCase().includes(info.navn.toLowerCase().split(' ')[0])) {
               ticker = t;
@@ -200,70 +268,166 @@ async function getPositions(accessToken: string, clientKey: string) {
   return positions;
 }
 
-// Generate ACTIVE trading signals - multiple per scan
-function generateActiveSignals(
+// DIP DETECTION THRESHOLDS
+const DIP_THRESHOLD = 0.006;   // 0.6% drop from local high = BUY signal
+const PEAK_THRESHOLD = 0.008;  // 0.8% rise from local low = SELL signal
+const RSI_OVERSOLD = 35;       // RSI below this = oversold, aggressive buy
+const RSI_OVERBOUGHT = 65;     // RSI above this = overbought, take profit
+
+// Generate AGGRESSIVE intra-day swing signals
+async function generateSwingSignals(
+  accessToken: string,
   positions: Map<string, { amount: number; avgPrice: number; marketValue: number }>,
   balance: number,
   totalValue: number
-): Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string }> {
-  const signals: Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string }> = [];
+): Promise<Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData }>> {
+  const signals: Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData }> = [];
   
   for (const [ticker, info] of Object.entries(APEX_BLUEPRINT)) {
+    // Find instrument and get current price
+    const instrument = await findInstrument(accessToken, ticker, info.saxoSymbol);
+    if (!instrument) continue;
+    
+    const priceData = await getPrice(accessToken, instrument.uic, info.assetType);
+    const currentPrice = priceData.last;
+    
+    // Analyze momentum
+    const momentum = analyzeMomentum(ticker, currentPrice);
     const pos = positions.get(ticker);
     const currentValue = pos?.marketValue || 0;
     const targetValue = (totalValue * info.targetVekt) / 100;
     const deviation = targetValue > 0 ? ((currentValue - targetValue) / targetValue) * 100 : -100;
     
-    // Momentum factor
-    const momentum = (Math.random() - 0.5) * 20;
-    const baseSize = Math.max(3, Math.floor(8 + Math.random() * 12));
+    // Calculate drop from local high and rise from local low
+    const dropFromHigh = momentum.localHigh > 0 ? (momentum.localHigh - currentPrice) / momentum.localHigh : 0;
+    const riseFromLow = momentum.localLow > 0 ? (currentPrice - momentum.localLow) / momentum.localLow : 0;
     
-    // AKTIV TRADING LOGIKK
+    // Calculate aggressive order size based on volatility and opportunity
+    const baseSize = Math.max(5, Math.floor((balance * 0.03) / currentPrice)); // 3% of balance per trade
+    const volatilityMultiplier = 1 + (info.volatilitet - 2) * 0.2;
+    
+    // ============ DIP BUYING LOGIC ============
+    if (dropFromHigh >= DIP_THRESHOLD) {
+      // Price dropped from local high - BUY THE DIP
+      const dipStrength = Math.min(3, dropFromHigh / DIP_THRESHOLD);
+      const orderSize = Math.floor(baseSize * dipStrength * volatilityMultiplier);
+      
+      if (orderSize > 0 && balance > orderSize * currentPrice) {
+        signals.push({
+          ticker,
+          action: 'BUY',
+          amount: orderSize,
+          reason: `DIP -${(dropFromHigh * 100).toFixed(2)}% fra topp, RSI=${momentum.rsi.toFixed(0)}`,
+          price: currentPrice,
+          momentum,
+        });
+        console.log(`[APEX] DIP DETECTED: ${ticker} -${(dropFromHigh * 100).toFixed(2)}% -> KJOP ${orderSize}`);
+      }
+    }
+    
+    // RSI oversold - aggressive buy
+    if (momentum.rsi < RSI_OVERSOLD && balance > baseSize * currentPrice) {
+      const orderSize = Math.floor(baseSize * 1.5 * volatilityMultiplier);
+      signals.push({
+        ticker,
+        action: 'BUY',
+        amount: orderSize,
+        reason: `RSI OVERSOLD (${momentum.rsi.toFixed(0)}), aggressiv kjop`,
+        price: currentPrice,
+        momentum,
+      });
+      console.log(`[APEX] RSI OVERSOLD: ${ticker} RSI=${momentum.rsi.toFixed(0)} -> KJOP ${orderSize}`);
+    }
+    
+    // ============ PEAK SELLING LOGIC ============
+    if (riseFromLow >= PEAK_THRESHOLD && pos && pos.amount > 3) {
+      // Price rose from local low - TAKE PROFIT ON PEAK
+      const peakStrength = Math.min(3, riseFromLow / PEAK_THRESHOLD);
+      const sellSize = Math.floor(Math.min(pos.amount * 0.25, baseSize * peakStrength));
+      
+      if (sellSize > 0) {
+        signals.push({
+          ticker,
+          action: 'SELL',
+          amount: sellSize,
+          reason: `PEAK +${(riseFromLow * 100).toFixed(2)}% fra bunn, RSI=${momentum.rsi.toFixed(0)}`,
+          price: currentPrice,
+          momentum,
+        });
+        console.log(`[APEX] PEAK DETECTED: ${ticker} +${(riseFromLow * 100).toFixed(2)}% -> SELG ${sellSize}`);
+      }
+    }
+    
+    // RSI overbought - take profit
+    if (momentum.rsi > RSI_OVERBOUGHT && pos && pos.amount > 5) {
+      const sellSize = Math.floor(pos.amount * 0.15);
+      if (sellSize > 0) {
+        signals.push({
+          ticker,
+          action: 'SELL',
+          amount: sellSize,
+          reason: `RSI OVERBOUGHT (${momentum.rsi.toFixed(0)}), ta profitt`,
+          price: currentPrice,
+          momentum,
+        });
+        console.log(`[APEX] RSI OVERBOUGHT: ${ticker} RSI=${momentum.rsi.toFixed(0)} -> SELG ${sellSize}`);
+      }
+    }
+    
+    // ============ PORTFOLIO BUILDING LOGIC ============
     if (!pos || pos.amount === 0) {
-      // Ingen posisjon - KJOP
-      signals.push({
-        ticker,
-        action: 'BUY',
-        amount: baseSize * 2,
-        reason: `Bygger mot ${info.targetVekt}%`,
-      });
-    } else if (deviation < -20) {
-      // Kraftig undervektet
-      signals.push({
-        ticker,
-        action: 'BUY',
-        amount: baseSize,
-        reason: `Undervektet (${deviation.toFixed(0)}%)`,
-      });
-    } else if (deviation > 20 && pos.amount > 5) {
-      // Overvektet - ta gevinst
-      signals.push({
-        ticker,
-        action: 'SELL',
-        amount: Math.min(baseSize, Math.floor(pos.amount * 0.15)),
-        reason: `Overvektet (${deviation.toFixed(0)}%), gevinst`,
-      });
-    } else if (momentum > 6 && balance > 2000) {
-      // Positivt momentum
-      signals.push({
-        ticker,
-        action: 'BUY',
-        amount: Math.floor(baseSize * 0.7),
-        reason: `Momentum +${momentum.toFixed(1)}`,
-      });
-    } else if (momentum < -6 && pos && pos.amount > 3) {
-      // Negativt momentum
-      signals.push({
-        ticker,
-        action: 'SELL',
-        amount: Math.min(3, Math.floor(pos.amount * 0.1)),
-        reason: `Momentum ${momentum.toFixed(1)}`,
-      });
+      // No position - build towards target
+      const buildSize = Math.floor(baseSize * 2);
+      if (balance > buildSize * currentPrice) {
+        signals.push({
+          ticker,
+          action: 'BUY',
+          amount: buildSize,
+          reason: `Bygger posisjon mot ${info.targetVekt}%`,
+          price: currentPrice,
+          momentum,
+        });
+      }
+    } else if (deviation < -30) {
+      // Significantly underweight - add to position
+      const addSize = Math.floor(baseSize * 1.2);
+      if (balance > addSize * currentPrice) {
+        signals.push({
+          ticker,
+          action: 'BUY',
+          amount: addSize,
+          reason: `Undervektet (${deviation.toFixed(0)}%), oker posisjon`,
+          price: currentPrice,
+          momentum,
+        });
+      }
+    } else if (deviation > 30 && pos.amount > 10) {
+      // Significantly overweight - reduce position
+      const reduceSize = Math.floor(pos.amount * 0.1);
+      if (reduceSize > 0) {
+        signals.push({
+          ticker,
+          action: 'SELL',
+          amount: reduceSize,
+          reason: `Overvektet (${deviation.toFixed(0)}%), reduserer`,
+          price: currentPrice,
+          momentum,
+        });
+      }
     }
   }
   
-  // Return 3-6 signals per scan for active trading
-  return signals.slice(0, 6);
+  // Sort by priority: DIP/PEAK signals first, then portfolio building
+  signals.sort((a, b) => {
+    const aIsDipPeak = a.reason.includes('DIP') || a.reason.includes('PEAK') || a.reason.includes('RSI');
+    const bIsDipPeak = b.reason.includes('DIP') || b.reason.includes('PEAK') || b.reason.includes('RSI');
+    if (aIsDipPeak && !bIsDipPeak) return -1;
+    if (!aIsDipPeak && bIsDipPeak) return 1;
+    return 0;
+  });
+  
+  // Execute up to 8 signals per scan for aggressive trading
+  return signals.slice(0, 8);
 }
 
 export async function POST(request: NextRequest) {
@@ -271,10 +435,8 @@ export async function POST(request: NextRequest) {
   
   try {
     const body = await request.json();
-    const { mode, buildPortfolio } = body;
-    const isInitialBuild = buildPortfolio === true;
+    const { mode } = body;
 
-    // Get credentials from cookies
     const cookieStore = await cookies();
     const accessToken = cookieStore.get('apex_saxo_token')?.value;
     const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
@@ -287,9 +449,8 @@ export async function POST(request: NextRequest) {
       }, { status: 401 });
     }
 
-    console.log(`[APEX] ========== AKTIV TRADING SCAN ==========`);
+    console.log(`[APEX] ========== INTRA-DAY SWING SCAN ==========`);
 
-    // Fetch account state
     const [balance, positions] = await Promise.all([
       getBalance(accessToken, accountKey),
       getPositions(accessToken, clientKey || accountKey),
@@ -300,9 +461,8 @@ export async function POST(request: NextRequest) {
       portfolioValue += pos.marketValue;
     }
 
-    console.log(`[APEX] Saldo: $${balance.toLocaleString()} | Total: $${portfolioValue.toLocaleString()}`);
+    console.log(`[APEX] Saldo: ${balance.toLocaleString()} kr | Total: ${portfolioValue.toLocaleString()} kr`);
 
-    // Track executed trades
     const executedTrades: Array<{
       ticker: string;
       saxoSymbol: string;
@@ -317,21 +477,19 @@ export async function POST(request: NextRequest) {
 
     const failedTickers: string[] = [];
 
-    // Generate signals
-    const signals = generateActiveSignals(positions, balance, portfolioValue);
-    console.log(`[APEX] Genererte ${signals.length} signaler`);
+    // Generate swing signals with real price data
+    const signals = await generateSwingSignals(accessToken, positions, balance, portfolioValue);
+    console.log(`[APEX] Genererte ${signals.length} swing-signaler`);
 
     // Execute each signal
     for (const signal of signals) {
       const info = APEX_BLUEPRINT[signal.ticker];
       if (!info) continue;
 
-      // Estimate trade value (use 100 as default price estimate)
-      const estimatedPrice = 100;
-      const tradeValue = signal.amount * estimatedPrice;
+      const tradeValue = signal.amount * signal.price;
 
       // Validate trade
-      if (signal.action === 'BUY' && tradeValue > balance * 0.9) {
+      if (signal.action === 'BUY' && tradeValue > balance * 0.95) {
         console.log(`[APEX] Skip ${signal.ticker} - ikke nok saldo`);
         continue;
       }
@@ -343,25 +501,24 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // EXECUTE ORDER - finds UIC dynamically
+      // Execute order
       const result = await placeMarketOrder(
         accessToken,
         accountKey,
         signal.ticker,
         info.saxoSymbol,
+        info.assetType,
         signal.amount,
-        signal.action === 'BUY' ? 'Buy' : 'Sell'
+        signal.action === 'BUY' ? 'Buy' : 'Sell',
+        signal.reason
       );
-      
-      // Get actual price after order
-      const price = estimatedPrice;
 
       executedTrades.push({
         ticker: signal.ticker,
         saxoSymbol: info.saxoSymbol,
         action: signal.action,
         amount: signal.amount,
-        price,
+        price: signal.price,
         value: tradeValue,
         orderId: result.orderId,
         status: result.success ? 'OK' : 'FEIL',
@@ -373,7 +530,6 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Build response
     const successful = executedTrades.filter(t => t.status === 'OK');
     const failed = executedTrades.filter(t => t.status === 'FEIL');
     const totalBought = successful.filter(t => t.action === 'BUY').reduce((s, t) => s + t.value, 0);
@@ -381,50 +537,31 @@ export async function POST(request: NextRequest) {
     
     const elapsed = Date.now() - startTime;
 
-    // Generate rapport with clear execution status
-    let report = `APEX QUANTUM v6.1 - AKTIV TRADING
-${'='.repeat(45)}
+    // Build detailed report
+    let report = `APEX QUANTUM v6.1 - INTRA-DAY SWING TRADER
+${'='.repeat(50)}
 Tid: ${new Date().toLocaleString('no-NO')}
-Mode: PAPER TRADING
-Saldo: $${balance.toLocaleString()} | Portefolje: $${portfolioValue.toLocaleString()}
+Mode: PAPER TRADING | Strategi: AGGRESSIV DIP/PEAK
+Saldo: ${balance.toLocaleString()} kr | Total: ${portfolioValue.toLocaleString()} kr
 
-=== SIGNALER (${signals.length}) ===
-${signals.map(s => `+ ${s.ticker}: ${s.action} ${s.amount} - ${s.reason}`).join('\n')}
+=== SWING SIGNALER (${signals.length}) ===
+${signals.map(s => {
+  const icon = s.action === 'BUY' ? '🟢' : '🔴';
+  return `${icon} ${s.ticker}: ${s.action} ${s.amount} @ ${s.price.toFixed(2)} - ${s.reason}`;
+}).join('\n')}
 
 === UTFORTE HANDLER (${successful.length}/${executedTrades.length}) ===
 ${successful.length > 0 
-  ? successful.map(t => `>>> Utforer: ${t.action} ${t.amount}x ${t.saxoSymbol} @ $${t.price.toFixed(2)} [${t.orderId}]`).join('\n')
+  ? successful.map(t => {
+      const icon = t.action === 'BUY' ? 'Kjoper pa dip:' : 'Tar profitt pa peak:';
+      return `>>> ${icon} ${t.action === 'BUY' ? '+' : '-'}${t.amount} ${t.saxoSymbol} @ ${t.price.toFixed(2)} [${t.orderId}]`;
+    }).join('\n')
   : 'Ingen handler utfort'}
 
-${failed.length > 0 ? `FEILET:
-${failed.map(t => `- ${t.saxoSymbol}: ${t.reason}`).join('\n')}` : ''}
+${failed.length > 0 ? `FEILET: ${failed.map(t => t.saxoSymbol).join(', ')}` : ''}
 
-Kjopt: $${totalBought.toLocaleString()} | Solgt: $${totalSold.toLocaleString()}
+Kjopt: ${totalBought.toLocaleString()} kr | Solgt: ${totalSold.toLocaleString()} kr
 Responstid: ${elapsed}ms`;
-
-    // Memory export format
-    const memoryExport = {
-      version: '6.1',
-      timestamp: new Date().toISOString(),
-      portfolio: Object.entries(APEX_BLUEPRINT).map(([ticker, info]) => {
-        const pos = positions.get(ticker);
-        return {
-          ticker,
-          saxoSymbol: info.saxoSymbol,
-          navn: info.navn,
-          targetVekt: info.targetVekt,
-          antall: pos?.amount || 0,
-          verdi: pos?.marketValue || 0,
-        };
-      }),
-      lastTrades: executedTrades.slice(-10),
-      stats: {
-        balance,
-        portfolioValue,
-        totalBought,
-        totalSold,
-      },
-    };
 
     return NextResponse.json({
       message: report,
@@ -433,7 +570,10 @@ Responstid: ${elapsed}ms`;
         saxoSymbol: APEX_BLUEPRINT[s.ticker]?.saxoSymbol || s.ticker,
         action: s.action,
         amount: s.amount,
+        price: s.price,
         reason: s.reason,
+        rsi: s.momentum.rsi,
+        trend: s.momentum.trend,
         targetVekt: APEX_BLUEPRINT[s.ticker]?.targetVekt || 0,
       })),
       executedTrades,
@@ -458,7 +598,6 @@ Responstid: ${elapsed}ms`;
         successful: successful.length,
         failed: failed.length,
       },
-      memoryExport,
       mode: 'paper',
       timestamp: new Date().toISOString(),
       responseTime: elapsed,
