@@ -42,6 +42,17 @@ const priceHistory: Map<string, PricePoint[]> = new Map();
 // Cache for resolved UICs
 const uicCache: Map<string, { uic: number; assetType: string }> = new Map();
 
+// ============ PROFIT LOCK SYSTEM ============
+// Trading uses ONLY 1,000,000 NOK base capital
+// All profits are locked away and not reinvested
+const BASE_TRADING_CAPITAL = 1000000; // 1 million NOK
+
+// Track realized profits per account (in-memory, persists during runtime)
+const lockedProfits: Map<string, number> = new Map();
+
+// Track purchase prices for profit calculation
+const purchasePrices: Map<string, Map<string, number>> = new Map(); // accountKey -> ticker -> avgPrice
+
 // Search for instrument UIC dynamically
 async function findInstrument(accessToken: string, ticker: string, saxoSymbol: string): Promise<{ uic: number; assetType: string } | null> {
   if (uicCache.has(ticker)) {
@@ -212,8 +223,8 @@ async function placeMarketOrder(
   }
 }
 
-// Get account balance
-async function getBalance(accessToken: string, accountKey: string): Promise<number> {
+// Get account balance and total value
+async function getBalance(accessToken: string, accountKey: string): Promise<{ cash: number; total: number }> {
   try {
     const res = await fetch(
       `${SAXO_API_BASE}/port/v1/balances?AccountKey=${accountKey}&ClientKey=${accountKey}`,
@@ -221,10 +232,69 @@ async function getBalance(accessToken: string, accountKey: string): Promise<numb
     );
     if (res.ok) {
       const data = await res.json();
-      return data.CashAvailableForTrading || data.TotalValue || 1000000;
+      return {
+        cash: data.CashAvailableForTrading || 0,
+        total: data.TotalValue || BASE_TRADING_CAPITAL,
+      };
     }
   } catch {}
-  return 1000000;
+  return { cash: BASE_TRADING_CAPITAL, total: BASE_TRADING_CAPITAL };
+}
+
+// Calculate and lock profits from a SELL trade
+function lockProfit(accountKey: string, ticker: string, sellPrice: number, sellAmount: number): number {
+  // Get purchase prices for this account
+  if (!purchasePrices.has(accountKey)) {
+    purchasePrices.set(accountKey, new Map());
+  }
+  const prices = purchasePrices.get(accountKey)!;
+  const avgPurchasePrice = prices.get(ticker) || sellPrice; // Default to sellPrice if no record
+  
+  // Calculate profit per share
+  const profitPerShare = sellPrice - avgPurchasePrice;
+  const totalProfit = profitPerShare * sellAmount;
+  
+  // Only lock positive profits
+  if (totalProfit > 0) {
+    const currentLocked = lockedProfits.get(accountKey) || 0;
+    lockedProfits.set(accountKey, currentLocked + totalProfit);
+    console.log(`[APEX] PROFIT LOCK: +${totalProfit.toFixed(2)} kr fra ${ticker} (${sellAmount} x ${profitPerShare.toFixed(2)} kr/aksje)`);
+    return totalProfit;
+  }
+  
+  return 0;
+}
+
+// Record purchase price for profit tracking
+function recordPurchase(accountKey: string, ticker: string, price: number, amount: number): void {
+  if (!purchasePrices.has(accountKey)) {
+    purchasePrices.set(accountKey, new Map());
+  }
+  const prices = purchasePrices.get(accountKey)!;
+  
+  // Weighted average if adding to existing position
+  const existingPrice = prices.get(ticker) || price;
+  const existingAmount = 0; // Simplified - just use new price for now
+  const newAvgPrice = ((existingPrice * existingAmount) + (price * amount)) / (existingAmount + amount);
+  
+  prices.set(ticker, newAvgPrice);
+}
+
+// Get available trading capital (base capital minus what we should keep in reserve)
+function getAvailableTradingCapital(actualCash: number, totalAccountValue: number, accountKey: string): number {
+  const locked = lockedProfits.get(accountKey) || 0;
+  
+  // The actual profit in the account
+  const currentProfit = totalAccountValue - BASE_TRADING_CAPITAL;
+  
+  // We only trade with the base capital, keeping profits locked
+  // If totalAccountValue is 1,003,000 and base is 1,000,000, we have 3,000 profit
+  // We should only use 1,000,000 for trading, not the 1,003,000
+  const tradingCapital = Math.min(actualCash, BASE_TRADING_CAPITAL);
+  
+  console.log(`[APEX] Kapital: Kontoverdi=${totalAccountValue.toLocaleString()} kr, Profitt=${currentProfit.toLocaleString()} kr, Last inn=${locked.toLocaleString()} kr, Tilgjengelig=${tradingCapital.toLocaleString()} kr`);
+  
+  return tradingCapital;
 }
 
 // Get current positions
@@ -451,17 +521,23 @@ export async function POST(request: NextRequest) {
 
     console.log(`[APEX] ========== INTRA-DAY SWING SCAN ==========`);
 
-    const [balance, positions] = await Promise.all([
+    const [balanceData, positions] = await Promise.all([
       getBalance(accessToken, accountKey),
       getPositions(accessToken, clientKey || accountKey),
     ]);
 
-    let portfolioValue = balance;
-    for (const pos of positions.values()) {
-      portfolioValue += pos.marketValue;
-    }
+    // Get total account value from Saxo
+    const actualTotalValue = balanceData.total;
+    const actualCash = balanceData.cash;
+    
+    // Calculate current profit
+    const currentProfit = actualTotalValue - BASE_TRADING_CAPITAL;
+    const locked = lockedProfits.get(accountKey) || 0;
+    
+    // Only trade with base capital, not profits
+    const tradingCapital = getAvailableTradingCapital(actualCash, actualTotalValue, accountKey);
 
-    console.log(`[APEX] Saldo: ${balance.toLocaleString()} kr | Total: ${portfolioValue.toLocaleString()} kr`);
+    console.log(`[APEX] Kontoverdi: ${actualTotalValue.toLocaleString()} kr | Profitt: ${currentProfit.toLocaleString()} kr | Last: ${locked.toLocaleString()} kr`);
 
     const executedTrades: Array<{
       ticker: string;
@@ -477,8 +553,8 @@ export async function POST(request: NextRequest) {
 
     const failedTickers: string[] = [];
 
-    // Generate swing signals with real price data
-    const signals = await generateSwingSignals(accessToken, positions, balance, portfolioValue);
+    // Generate swing signals with real price data - use BASE_TRADING_CAPITAL for allocation
+    const signals = await generateSwingSignals(accessToken, positions, tradingCapital, BASE_TRADING_CAPITAL);
     console.log(`[APEX] Genererte ${signals.length} swing-signaler`);
 
     // Execute each signal
@@ -488,9 +564,9 @@ export async function POST(request: NextRequest) {
 
       const tradeValue = signal.amount * signal.price;
 
-      // Validate trade
-      if (signal.action === 'BUY' && tradeValue > balance * 0.95) {
-        console.log(`[APEX] Skip ${signal.ticker} - ikke nok saldo`);
+      // Validate trade - use tradingCapital not actual balance
+      if (signal.action === 'BUY' && tradeValue > tradingCapital * 0.95) {
+        console.log(`[APEX] Skip ${signal.ticker} - ikke nok trading-kapital (${tradingCapital.toLocaleString()} kr)`);
         continue;
       }
       
@@ -512,6 +588,18 @@ export async function POST(request: NextRequest) {
         signal.action === 'BUY' ? 'Buy' : 'Sell',
         signal.reason
       );
+
+      let lockedThisTrade = 0;
+      
+      if (result.success) {
+        if (signal.action === 'SELL') {
+          // Lock profits from this sale
+          lockedThisTrade = lockProfit(accountKey, signal.ticker, signal.price, signal.amount);
+        } else if (signal.action === 'BUY') {
+          // Record purchase price for future profit calculation
+          recordPurchase(accountKey, signal.ticker, signal.price, signal.amount);
+        }
+      }
 
       executedTrades.push({
         ticker: signal.ticker,
@@ -538,11 +626,19 @@ export async function POST(request: NextRequest) {
     const elapsed = Date.now() - startTime;
 
     // Build detailed report
+    const totalLockedProfits = lockedProfits.get(accountKey) || 0;
+    
     let report = `APEX QUANTUM v6.1 - INTRA-DAY SWING TRADER
 ${'='.repeat(50)}
 Tid: ${new Date().toLocaleString('no-NO')}
 Mode: PAPER TRADING | Strategi: AGGRESSIV DIP/PEAK
-Saldo: ${balance.toLocaleString()} kr | Total: ${portfolioValue.toLocaleString()} kr
+
+=== PROFIT LOCK STATUS ===
+Startkapital: ${BASE_TRADING_CAPITAL.toLocaleString()} kr
+Kontoverdi: ${actualTotalValue.toLocaleString()} kr
+Aktuell profitt: ${currentProfit >= 0 ? '+' : ''}${currentProfit.toLocaleString()} kr
+Last inn profitt: ${totalLockedProfits.toLocaleString()} kr
+Trading-kapital: ${tradingCapital.toLocaleString()} kr
 
 === SWING SIGNALER (${signals.length}) ===
 ${signals.map(s => {
@@ -591,8 +687,11 @@ Responstid: ${elapsed}ms`;
         };
       }),
       stats: {
-        balance,
-        portfolioValue,
+        baseCapital: BASE_TRADING_CAPITAL,
+        actualTotalValue,
+        currentProfit,
+        lockedProfits: totalLockedProfits,
+        tradingCapital,
         totalBought,
         totalSold,
         successful: successful.length,
