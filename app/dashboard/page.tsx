@@ -83,6 +83,7 @@ export default function Dashboard() {
   const [scanCount, setScanCount] = useState(0);
   const [totalBought, setTotalBought] = useState(0);
   const [totalSold, setTotalSold] = useState(0);
+  const [lockedProfitsTotal, setLockedProfitsTotal] = useState(0);
   const [signals, setSignals] = useState<Signal[]>([]);
   const [lastTrades, setLastTrades] = useState<Trade[]>([]);
   const [tradeHistory, setTradeHistory] = useState<Trade[]>([]);
@@ -211,13 +212,14 @@ export default function Dashboard() {
         return;
       }
       
-      setError(null);
-      setScanCount(prev => prev + 1);
-      setTotalBought(prev => prev + (data.stats?.totalBought || 0));
-      setTotalSold(prev => prev + (data.stats?.totalSold || 0));
-      setSignals(data.signals || []);
-      setLastTrades(data.executedTrades || []);
-      setLastUpdate(new Date().toLocaleTimeString('no-NO'));
+  setError(null);
+  setScanCount(prev => prev + 1);
+  setTotalBought(prev => prev + (data.stats?.totalBought || 0));
+  setTotalSold(prev => prev + (data.stats?.totalSold || 0));
+  setLockedProfitsTotal(data.stats?.lockedProfits || 0);
+  setSignals(data.signals || []);
+  setLastTrades(data.executedTrades || []);
+  setLastUpdate(new Date().toLocaleTimeString('no-NO'));
       
       if (data.portfolio) {
         setPortfolio(data.portfolio);
@@ -535,7 +537,7 @@ const startTrading = useCallback(() => {
           )}
 
           {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
             <div className="bg-muted/30 rounded-lg p-4">
               <div className="text-xs text-muted-foreground mb-1">Scans</div>
               <div className="text-2xl font-bold">{scanCount}</div>
@@ -553,6 +555,10 @@ const startTrading = useCallback(() => {
               <div className={`text-2xl font-bold ${totalSold - totalBought >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                 {(totalSold - totalBought).toLocaleString()} kr
               </div>
+            </div>
+            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+              <div className="text-xs text-amber-400 mb-1">Last Profitt</div>
+              <div className="text-2xl font-bold text-amber-400">{lockedProfitsTotal.toLocaleString()} kr</div>
             </div>
             <div className="bg-muted/30 rounded-lg p-4">
               <div className="text-xs text-muted-foreground mb-1">Siste Scan</div>
