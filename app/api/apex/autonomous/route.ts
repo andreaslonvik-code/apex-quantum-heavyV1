@@ -4,22 +4,72 @@ import { cookies } from 'next/headers';
 // Saxo SIM API endpoints
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
-// APEX QUANTUM v6.1 - Full Blueprint with Saxo symbol mapping
-// Intra-day swing trader configuration
+// ============ MARKET HOURS LOGIC (CET) ============
+// Oslo Børs: 09:00 - 17:20 CET
+// Nasdaq/US: 15:30 - 22:00 CET
+interface MarketStatus {
+  osloOpen: boolean;
+  usOpen: boolean;
+  activeMarkets: ('OSL' | 'US')[];
+  message: string;
+}
+
+function getMarketStatus(): MarketStatus {
+  // Get current time in CET/CEST (Europe/Oslo timezone)
+  const now = new Date();
+  const cetTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Oslo' }));
+  const hours = cetTime.getHours();
+  const minutes = cetTime.getMinutes();
+  const timeInMinutes = hours * 60 + minutes;
+  
+  // Oslo Børs: 09:00 - 17:20 CET (540 - 1040 minutes)
+  const osloOpen = timeInMinutes >= 540 && timeInMinutes < 1040;
+  
+  // Nasdaq/US: 15:30 - 22:00 CET (930 - 1320 minutes)
+  const usOpen = timeInMinutes >= 930 && timeInMinutes < 1320;
+  
+  const activeMarkets: ('OSL' | 'US')[] = [];
+  if (osloOpen) activeMarkets.push('OSL');
+  if (usOpen) activeMarkets.push('US');
+  
+  let message = '';
+  if (osloOpen && usOpen) {
+    message = `BEGGE MARKEDER APNE (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - Full aktiv trading`;
+  } else if (osloOpen) {
+    message = `KUN OSLO BORS APEN (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - Prioriterer norske aksjer`;
+  } else if (usOpen) {
+    message = `KUN US MARKET APEN (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - Kun USA-aksjer`;
+  } else {
+    message = `MARKEDER STENGT (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - Venter...`;
+  }
+  
+  return { osloOpen, usOpen, activeMarkets, message };
+}
+
+// APEX QUANTUM v6.1 - Full Blueprint with both US and Oslo Børs stocks
 const APEX_BLUEPRINT: Record<string, {
   navn: string;
   targetVekt: number;
   volatilitet: number;
   saxoSymbol: string;
   assetType: string;
-  market: string;
+  market: 'US' | 'OSL';
 }> = {
-  MU:   { navn: 'Micron Technology',    targetVekt: 45, volatilitet: 3, saxoSymbol: 'MU:xnas',   assetType: 'Stock', market: 'US' },
-  CEG:  { navn: 'Constellation Energy', targetVekt: 12, volatilitet: 2, saxoSymbol: 'CEG:xnas',  assetType: 'Stock', market: 'US' },
+  // ====== US STOCKS (Nasdaq/NYSE) - 60% total ======
+  MU:   { navn: 'Micron Technology',    targetVekt: 25, volatilitet: 3, saxoSymbol: 'MU:xnas',   assetType: 'Stock', market: 'US' },
+  CEG:  { navn: 'Constellation Energy', targetVekt: 10, volatilitet: 2, saxoSymbol: 'CEG:xnas',  assetType: 'Stock', market: 'US' },
   VRT:  { navn: 'Vertiv Holdings',      targetVekt: 8,  volatilitet: 2, saxoSymbol: 'VRT:xnys',  assetType: 'Stock', market: 'US' },
-  RKLB: { navn: 'Rocket Lab',           targetVekt: 3,  volatilitet: 4, saxoSymbol: 'RKLB:xnas', assetType: 'Stock', market: 'US' },
-  LMND: { navn: 'Lemonade Inc',         targetVekt: 2,  volatilitet: 4, saxoSymbol: 'LMND:xnys', assetType: 'Stock', market: 'US' },
-  ABSI: { navn: 'Absci Corporation',    targetVekt: 30, volatilitet: 5, saxoSymbol: 'ABSI:xnas', assetType: 'Stock', market: 'US' },
+  RKLB: { navn: 'Rocket Lab',           targetVekt: 5,  volatilitet: 4, saxoSymbol: 'RKLB:xnas', assetType: 'Stock', market: 'US' },
+  LMND: { navn: 'Lemonade Inc',         targetVekt: 5,  volatilitet: 4, saxoSymbol: 'LMND:xnys', assetType: 'Stock', market: 'US' },
+  ABSI: { navn: 'Absci Corporation',    targetVekt: 7,  volatilitet: 5, saxoSymbol: 'ABSI:xnas', assetType: 'Stock', market: 'US' },
+  
+  // ====== OSLO BØRS STOCKS - 40% total ======
+  EQNR: { navn: 'Equinor',              targetVekt: 12, volatilitet: 2, saxoSymbol: 'EQNR:xosl', assetType: 'Stock', market: 'OSL' },
+  DNO:  { navn: 'DNO ASA',              targetVekt: 8,  volatilitet: 3, saxoSymbol: 'DNO:xosl',  assetType: 'Stock', market: 'OSL' },
+  NAS:  { navn: 'Norwegian Air',        targetVekt: 6,  volatilitet: 5, saxoSymbol: 'NAS:xosl',  assetType: 'Stock', market: 'OSL' },
+  MOWI: { navn: 'Mowi ASA',             targetVekt: 5,  volatilitet: 3, saxoSymbol: 'MOWI:xosl', assetType: 'Stock', market: 'OSL' },
+  NEL:  { navn: 'Nel Hydrogen',         targetVekt: 5,  volatilitet: 5, saxoSymbol: 'NEL:xosl',  assetType: 'Stock', market: 'OSL' },
+  NODC: { navn: 'Nordic Semiconductor', targetVekt: 4,  volatilitet: 4, saxoSymbol: 'NOD:xosl',  assetType: 'Stock', market: 'OSL' },
 };
 
 // Momentum tracking for intra-day swings
@@ -43,15 +93,9 @@ const priceHistory: Map<string, PricePoint[]> = new Map();
 const uicCache: Map<string, { uic: number; assetType: string }> = new Map();
 
 // ============ PROFIT LOCK SYSTEM ============
-// Trading uses ONLY 1,000,000 NOK base capital
-// All profits are locked away and not reinvested
 const BASE_TRADING_CAPITAL = 1000000; // 1 million NOK
-
-// Track realized profits per account (in-memory, persists during runtime)
 const lockedProfits: Map<string, number> = new Map();
-
-// Track purchase prices for profit calculation
-const purchasePrices: Map<string, Map<string, number>> = new Map(); // accountKey -> ticker -> avgPrice
+const purchasePrices: Map<string, Map<string, number>> = new Map();
 
 // Search for instrument UIC dynamically
 async function findInstrument(accessToken: string, ticker: string, saxoSymbol: string): Promise<{ uic: number; assetType: string } | null> {
@@ -60,7 +104,14 @@ async function findInstrument(accessToken: string, ticker: string, saxoSymbol: s
   }
   
   try {
-    const searches = [saxoSymbol, `${ticker}:xnas`, `${ticker}:xnys`, ticker];
+    // Try multiple search patterns including Oslo Børs
+    const searches = [
+      saxoSymbol, 
+      `${ticker}:xnas`, 
+      `${ticker}:xnys`, 
+      `${ticker}:xosl`,
+      ticker
+    ];
     
     for (const keyword of searches) {
       const res = await fetch(
@@ -109,7 +160,7 @@ async function getPrice(accessToken: string, uic: number, assetType: string): Pr
   return { bid: 100, ask: 100, mid: 100, last: 100 };
 }
 
-// Calculate RSI from price history (14-period simplified)
+// Calculate RSI from price history
 function calculateRSI(prices: PricePoint[]): number {
   if (prices.length < 5) return 50;
   
@@ -136,11 +187,9 @@ function calculateRSI(prices: PricePoint[]): number {
 function analyzeMomentum(ticker: string, currentPrice: number): MomentumData {
   const history = priceHistory.get(ticker) || [];
   
-  // Add current price to history
   const now = Date.now();
   history.push({ price: currentPrice, timestamp: now });
   
-  // Keep only last 15 minutes of data (assuming ~2 sec scans = ~450 points max)
   const fifteenMinAgo = now - 15 * 60 * 1000;
   const recentHistory = history.filter(p => p.timestamp > fifteenMinAgo);
   priceHistory.set(ticker, recentHistory);
@@ -149,17 +198,14 @@ function analyzeMomentum(ticker: string, currentPrice: number): MomentumData {
     return { prices: recentHistory, localHigh: currentPrice, localLow: currentPrice, rsi: 50, trend: 'NEUTRAL' };
   }
   
-  // Find local high and low in last 5 minutes
   const fiveMinAgo = now - 5 * 60 * 1000;
   const fiveMinPrices = recentHistory.filter(p => p.timestamp > fiveMinAgo);
   
   const localHigh = Math.max(...fiveMinPrices.map(p => p.price));
   const localLow = Math.min(...fiveMinPrices.map(p => p.price));
   
-  // Calculate RSI
   const rsi = calculateRSI(recentHistory);
   
-  // Determine trend
   const avgRecent = fiveMinPrices.slice(-3).reduce((s, p) => s + p.price, 0) / 3;
   const avgOlder = fiveMinPrices.slice(0, 3).reduce((s, p) => s + p.price, 0) / Math.min(3, fiveMinPrices.length);
   const trend = avgRecent > avgOlder * 1.002 ? 'UP' : avgRecent < avgOlder * 0.998 ? 'DOWN' : 'NEUTRAL';
@@ -167,7 +213,7 @@ function analyzeMomentum(ticker: string, currentPrice: number): MomentumData {
   return { prices: recentHistory, localHigh, localLow, rsi, trend };
 }
 
-// Place market order with full logging
+// Place market order with market-aware logging
 async function placeMarketOrder(
   accessToken: string,
   accountKey: string,
@@ -176,7 +222,8 @@ async function placeMarketOrder(
   assetType: string,
   amount: number,
   buySell: 'Buy' | 'Sell',
-  reason: string
+  reason: string,
+  market: 'US' | 'OSL'
 ): Promise<{ success: boolean; orderId?: string; error?: string; uic?: number }> {
   try {
     const instrument = await findInstrument(accessToken, ticker, saxoSymbol);
@@ -195,8 +242,9 @@ async function placeMarketOrder(
       ManualOrder: false,
     };
 
-    const actionText = buySell === 'Buy' ? 'KJOPER PA DIP' : 'TAR PROFITT PA PEAK';
-    console.log(`[APEX] >>> ${actionText}: ${buySell === 'Buy' ? '+' : '-'}${amount} ${saxoSymbol} - ${reason}`);
+    const marketName = market === 'OSL' ? 'Oslo Bors' : 'US Market';
+    const actionText = buySell === 'Buy' ? 'kjoper pa dip' : 'tar profitt pa peak';
+    console.log(`[APEX] ${marketName} apen - ${actionText}: ${buySell === 'Buy' ? '+' : '-'}${amount} ${saxoSymbol}`);
 
     const res = await fetch(`${SAXO_API_BASE}/trade/v2/orders`, {
       method: 'POST',
@@ -241,58 +289,42 @@ async function getBalance(accessToken: string, accountKey: string): Promise<{ ca
   return { cash: BASE_TRADING_CAPITAL, total: BASE_TRADING_CAPITAL };
 }
 
-// Calculate and lock profits from a SELL trade
+// Profit lock functions
 function lockProfit(accountKey: string, ticker: string, sellPrice: number, sellAmount: number): number {
-  // Get purchase prices for this account
   if (!purchasePrices.has(accountKey)) {
     purchasePrices.set(accountKey, new Map());
   }
   const prices = purchasePrices.get(accountKey)!;
-  const avgPurchasePrice = prices.get(ticker) || sellPrice; // Default to sellPrice if no record
+  const avgPurchasePrice = prices.get(ticker) || sellPrice;
   
-  // Calculate profit per share
   const profitPerShare = sellPrice - avgPurchasePrice;
   const totalProfit = profitPerShare * sellAmount;
   
-  // Only lock positive profits
   if (totalProfit > 0) {
     const currentLocked = lockedProfits.get(accountKey) || 0;
     lockedProfits.set(accountKey, currentLocked + totalProfit);
-    console.log(`[APEX] PROFIT LOCK: +${totalProfit.toFixed(2)} kr fra ${ticker} (${sellAmount} x ${profitPerShare.toFixed(2)} kr/aksje)`);
+    console.log(`[APEX] PROFIT LOCK: +${totalProfit.toFixed(2)} kr fra ${ticker}`);
     return totalProfit;
   }
   
   return 0;
 }
 
-// Record purchase price for profit tracking
 function recordPurchase(accountKey: string, ticker: string, price: number, amount: number): void {
   if (!purchasePrices.has(accountKey)) {
     purchasePrices.set(accountKey, new Map());
   }
   const prices = purchasePrices.get(accountKey)!;
-  
-  // Weighted average if adding to existing position
   const existingPrice = prices.get(ticker) || price;
-  const existingAmount = 0; // Simplified - just use new price for now
-  const newAvgPrice = ((existingPrice * existingAmount) + (price * amount)) / (existingAmount + amount);
-  
-  prices.set(ticker, newAvgPrice);
+  prices.set(ticker, (existingPrice + price) / 2);
 }
 
-// Get available trading capital (base capital minus what we should keep in reserve)
 function getAvailableTradingCapital(actualCash: number, totalAccountValue: number, accountKey: string): number {
   const locked = lockedProfits.get(accountKey) || 0;
-  
-  // The actual profit in the account
   const currentProfit = totalAccountValue - BASE_TRADING_CAPITAL;
-  
-  // We only trade with the base capital, keeping profits locked
-  // If totalAccountValue is 1,003,000 and base is 1,000,000, we have 3,000 profit
-  // We should only use 1,000,000 for trading, not the 1,003,000
   const tradingCapital = Math.min(actualCash, BASE_TRADING_CAPITAL);
   
-  console.log(`[APEX] Kapital: Kontoverdi=${totalAccountValue.toLocaleString()} kr, Profitt=${currentProfit.toLocaleString()} kr, Last inn=${locked.toLocaleString()} kr, Tilgjengelig=${tradingCapital.toLocaleString()} kr`);
+  console.log(`[APEX] Kapital: Total=${totalAccountValue.toLocaleString()} kr, Profitt=${currentProfit.toLocaleString()} kr, Tilgjengelig=${tradingCapital.toLocaleString()} kr`);
   
   return tradingCapital;
 }
@@ -338,47 +370,50 @@ async function getPositions(accessToken: string, clientKey: string) {
   return positions;
 }
 
-// DIP DETECTION THRESHOLDS
-const DIP_THRESHOLD = 0.006;   // 0.6% drop from local high = BUY signal
-const PEAK_THRESHOLD = 0.008;  // 0.8% rise from local low = SELL signal
-const RSI_OVERSOLD = 35;       // RSI below this = oversold, aggressive buy
-const RSI_OVERBOUGHT = 65;     // RSI above this = overbought, take profit
+// DIP/PEAK thresholds
+const DIP_THRESHOLD = 0.006;
+const PEAK_THRESHOLD = 0.008;
+const RSI_OVERSOLD = 35;
+const RSI_OVERBOUGHT = 65;
 
-// Generate AGGRESSIVE intra-day swing signals
+// Generate swing signals with market hours filtering
 async function generateSwingSignals(
   accessToken: string,
   positions: Map<string, { amount: number; avgPrice: number; marketValue: number }>,
   balance: number,
-  totalValue: number
-): Promise<Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData }>> {
-  const signals: Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData }> = [];
+  totalValue: number,
+  marketStatus: MarketStatus
+): Promise<Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData; market: 'US' | 'OSL' }>> {
+  const signals: Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData; market: 'US' | 'OSL' }> = [];
   
   for (const [ticker, info] of Object.entries(APEX_BLUEPRINT)) {
-    // Find instrument and get current price
+    // CRITICAL: Only trade stocks from OPEN markets
+    if (!marketStatus.activeMarkets.includes(info.market)) {
+      continue; // Skip - market is closed
+    }
+    
     const instrument = await findInstrument(accessToken, ticker, info.saxoSymbol);
     if (!instrument) continue;
     
     const priceData = await getPrice(accessToken, instrument.uic, info.assetType);
     const currentPrice = priceData.last;
     
-    // Analyze momentum
     const momentum = analyzeMomentum(ticker, currentPrice);
     const pos = positions.get(ticker);
     const currentValue = pos?.marketValue || 0;
     const targetValue = (totalValue * info.targetVekt) / 100;
     const deviation = targetValue > 0 ? ((currentValue - targetValue) / targetValue) * 100 : -100;
     
-    // Calculate drop from local high and rise from local low
     const dropFromHigh = momentum.localHigh > 0 ? (momentum.localHigh - currentPrice) / momentum.localHigh : 0;
     const riseFromLow = momentum.localLow > 0 ? (currentPrice - momentum.localLow) / momentum.localLow : 0;
     
-    // Calculate aggressive order size based on volatility and opportunity
-    const baseSize = Math.max(5, Math.floor((balance * 0.03) / currentPrice)); // 3% of balance per trade
+    const baseSize = Math.max(5, Math.floor((balance * 0.03) / currentPrice));
     const volatilityMultiplier = 1 + (info.volatilitet - 2) * 0.2;
     
-    // ============ DIP BUYING LOGIC ============
+    const marketLabel = info.market === 'OSL' ? 'Oslo Bors' : 'US';
+    
+    // DIP BUYING
     if (dropFromHigh >= DIP_THRESHOLD) {
-      // Price dropped from local high - BUY THE DIP
       const dipStrength = Math.min(3, dropFromHigh / DIP_THRESHOLD);
       const orderSize = Math.floor(baseSize * dipStrength * volatilityMultiplier);
       
@@ -387,31 +422,31 @@ async function generateSwingSignals(
           ticker,
           action: 'BUY',
           amount: orderSize,
-          reason: `DIP -${(dropFromHigh * 100).toFixed(2)}% fra topp, RSI=${momentum.rsi.toFixed(0)}`,
+          reason: `[${marketLabel}] DIP -${(dropFromHigh * 100).toFixed(2)}%`,
           price: currentPrice,
           momentum,
+          market: info.market,
         });
-        console.log(`[APEX] DIP DETECTED: ${ticker} -${(dropFromHigh * 100).toFixed(2)}% -> KJOP ${orderSize}`);
+        console.log(`[APEX] ${marketLabel} - DIP: ${ticker} -${(dropFromHigh * 100).toFixed(2)}% -> KJOP ${orderSize}`);
       }
     }
     
-    // RSI oversold - aggressive buy
+    // RSI oversold
     if (momentum.rsi < RSI_OVERSOLD && balance > baseSize * currentPrice) {
       const orderSize = Math.floor(baseSize * 1.5 * volatilityMultiplier);
       signals.push({
         ticker,
         action: 'BUY',
         amount: orderSize,
-        reason: `RSI OVERSOLD (${momentum.rsi.toFixed(0)}), aggressiv kjop`,
+        reason: `[${marketLabel}] RSI OVERSOLD (${momentum.rsi.toFixed(0)})`,
         price: currentPrice,
         momentum,
+        market: info.market,
       });
-      console.log(`[APEX] RSI OVERSOLD: ${ticker} RSI=${momentum.rsi.toFixed(0)} -> KJOP ${orderSize}`);
     }
     
-    // ============ PEAK SELLING LOGIC ============
+    // PEAK SELLING
     if (riseFromLow >= PEAK_THRESHOLD && pos && pos.amount > 3) {
-      // Price rose from local low - TAKE PROFIT ON PEAK
       const peakStrength = Math.min(3, riseFromLow / PEAK_THRESHOLD);
       const sellSize = Math.floor(Math.min(pos.amount * 0.25, baseSize * peakStrength));
       
@@ -420,15 +455,16 @@ async function generateSwingSignals(
           ticker,
           action: 'SELL',
           amount: sellSize,
-          reason: `PEAK +${(riseFromLow * 100).toFixed(2)}% fra bunn, RSI=${momentum.rsi.toFixed(0)}`,
+          reason: `[${marketLabel}] PEAK +${(riseFromLow * 100).toFixed(2)}%`,
           price: currentPrice,
           momentum,
+          market: info.market,
         });
-        console.log(`[APEX] PEAK DETECTED: ${ticker} +${(riseFromLow * 100).toFixed(2)}% -> SELG ${sellSize}`);
+        console.log(`[APEX] ${marketLabel} - PEAK: ${ticker} +${(riseFromLow * 100).toFixed(2)}% -> SELG ${sellSize}`);
       }
     }
     
-    // RSI overbought - take profit
+    // RSI overbought
     if (momentum.rsi > RSI_OVERBOUGHT && pos && pos.amount > 5) {
       const sellSize = Math.floor(pos.amount * 0.15);
       if (sellSize > 0) {
@@ -436,58 +472,58 @@ async function generateSwingSignals(
           ticker,
           action: 'SELL',
           amount: sellSize,
-          reason: `RSI OVERBOUGHT (${momentum.rsi.toFixed(0)}), ta profitt`,
+          reason: `[${marketLabel}] RSI OVERBOUGHT (${momentum.rsi.toFixed(0)})`,
           price: currentPrice,
           momentum,
+          market: info.market,
         });
-        console.log(`[APEX] RSI OVERBOUGHT: ${ticker} RSI=${momentum.rsi.toFixed(0)} -> SELG ${sellSize}`);
       }
     }
     
-    // ============ PORTFOLIO BUILDING LOGIC ============
+    // PORTFOLIO BUILDING
     if (!pos || pos.amount === 0) {
-      // No position - build towards target
       const buildSize = Math.floor(baseSize * 2);
       if (balance > buildSize * currentPrice) {
         signals.push({
           ticker,
           action: 'BUY',
           amount: buildSize,
-          reason: `Bygger posisjon mot ${info.targetVekt}%`,
+          reason: `[${marketLabel}] Bygger mot ${info.targetVekt}%`,
           price: currentPrice,
           momentum,
+          market: info.market,
         });
       }
     } else if (deviation < -30) {
-      // Significantly underweight - add to position
       const addSize = Math.floor(baseSize * 1.2);
       if (balance > addSize * currentPrice) {
         signals.push({
           ticker,
           action: 'BUY',
           amount: addSize,
-          reason: `Undervektet (${deviation.toFixed(0)}%), oker posisjon`,
+          reason: `[${marketLabel}] Undervektet (${deviation.toFixed(0)}%)`,
           price: currentPrice,
           momentum,
+          market: info.market,
         });
       }
     } else if (deviation > 30 && pos.amount > 10) {
-      // Significantly overweight - reduce position
       const reduceSize = Math.floor(pos.amount * 0.1);
       if (reduceSize > 0) {
         signals.push({
           ticker,
           action: 'SELL',
           amount: reduceSize,
-          reason: `Overvektet (${deviation.toFixed(0)}%), reduserer`,
+          reason: `[${marketLabel}] Overvektet (${deviation.toFixed(0)}%)`,
           price: currentPrice,
           momentum,
+          market: info.market,
         });
       }
     }
   }
   
-  // Sort by priority: DIP/PEAK signals first, then portfolio building
+  // Sort: DIP/PEAK first, then portfolio building
   signals.sort((a, b) => {
     const aIsDipPeak = a.reason.includes('DIP') || a.reason.includes('PEAK') || a.reason.includes('RSI');
     const bIsDipPeak = b.reason.includes('DIP') || b.reason.includes('PEAK') || b.reason.includes('RSI');
@@ -496,7 +532,6 @@ async function generateSwingSignals(
     return 0;
   });
   
-  // Execute up to 8 signals per scan for aggressive trading
   return signals.slice(0, 8);
 }
 
@@ -519,54 +554,91 @@ export async function POST(request: NextRequest) {
       }, { status: 401 });
     }
 
+    // Get market status
+    const marketStatus = getMarketStatus();
+    
     console.log(`[APEX] ========== INTRA-DAY SWING SCAN ==========`);
+    console.log(`[APEX] ${marketStatus.message}`);
+
+    // If no markets are open, return early with status report
+    if (marketStatus.activeMarkets.length === 0) {
+      return NextResponse.json({
+        success: true,
+        mode: 'paper',
+        marketStatus,
+        message: 'Markeder stengt - venter pa apningstid',
+        signals: [],
+        executedTrades: [],
+        report: `APEX QUANTUM v6.1 - MARKEDSOVERSIKT
+${'='.repeat(50)}
+Tid: ${new Date().toLocaleString('no-NO')}
+${marketStatus.message}
+
+Ingen ordre sendes utenfor apningstid.
+
+Apningstider (CET):
+- Oslo Bors: 09:00 - 17:20
+- Nasdaq/US: 15:30 - 22:00
+
+Neste handelsvindu:
+- 09:00 CET: Oslo Bors apner
+- 15:30 CET: US markeder apner
+`,
+        stats: {
+          baseCapital: BASE_TRADING_CAPITAL,
+          marketsOpen: [],
+          totalBought: 0,
+          totalSold: 0,
+          successful: 0,
+          failed: 0,
+        },
+      });
+    }
 
     const [balanceData, positions] = await Promise.all([
       getBalance(accessToken, accountKey),
       getPositions(accessToken, clientKey || accountKey),
     ]);
 
-    // Get total account value from Saxo
     const actualTotalValue = balanceData.total;
     const actualCash = balanceData.cash;
-    
-    // Calculate current profit
     const currentProfit = actualTotalValue - BASE_TRADING_CAPITAL;
     const locked = lockedProfits.get(accountKey) || 0;
-    
-    // Only trade with base capital, not profits
     const tradingCapital = getAvailableTradingCapital(actualCash, actualTotalValue, accountKey);
 
-    console.log(`[APEX] Kontoverdi: ${actualTotalValue.toLocaleString()} kr | Profitt: ${currentProfit.toLocaleString()} kr | Last: ${locked.toLocaleString()} kr`);
+    console.log(`[APEX] Kontoverdi: ${actualTotalValue.toLocaleString()} kr | Profitt: ${currentProfit.toLocaleString()} kr`);
 
+    // Generate signals only for OPEN markets
+    const signals = await generateSwingSignals(accessToken, positions, tradingCapital, BASE_TRADING_CAPITAL, marketStatus);
+    
+    console.log(`[APEX] Genererte ${signals.length} signaler for: ${marketStatus.activeMarkets.join(', ')}`);
+
+    // Execute trades
     const executedTrades: Array<{
       ticker: string;
       saxoSymbol: string;
-      action: 'BUY' | 'SELL';
+      action: string;
       amount: number;
       price: number;
       value: number;
       orderId?: string;
-      status: 'OK' | 'FEIL';
+      status: string;
       reason: string;
+      market: string;
     }> = [];
-
+    
+    let totalBought = 0;
+    let totalSold = 0;
     const failedTickers: string[] = [];
 
-    // Generate swing signals with real price data - use BASE_TRADING_CAPITAL for allocation
-    const signals = await generateSwingSignals(accessToken, positions, tradingCapital, BASE_TRADING_CAPITAL);
-    console.log(`[APEX] Genererte ${signals.length} swing-signaler`);
-
-    // Execute each signal
     for (const signal of signals) {
       const info = APEX_BLUEPRINT[signal.ticker];
       if (!info) continue;
 
       const tradeValue = signal.amount * signal.price;
 
-      // Validate trade - use tradingCapital not actual balance
       if (signal.action === 'BUY' && tradeValue > tradingCapital * 0.95) {
-        console.log(`[APEX] Skip ${signal.ticker} - ikke nok trading-kapital (${tradingCapital.toLocaleString()} kr)`);
+        console.log(`[APEX] Skip ${signal.ticker} - ikke nok trading-kapital`);
         continue;
       }
       
@@ -577,7 +649,6 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Execute order
       const result = await placeMarketOrder(
         accessToken,
         accountKey,
@@ -586,18 +657,17 @@ export async function POST(request: NextRequest) {
         info.assetType,
         signal.amount,
         signal.action === 'BUY' ? 'Buy' : 'Sell',
-        signal.reason
+        signal.reason,
+        info.market
       );
 
-      let lockedThisTrade = 0;
-      
       if (result.success) {
-        if (signal.action === 'SELL') {
-          // Lock profits from this sale
-          lockedThisTrade = lockProfit(accountKey, signal.ticker, signal.price, signal.amount);
-        } else if (signal.action === 'BUY') {
-          // Record purchase price for future profit calculation
+        if (signal.action === 'BUY') {
+          totalBought += tradeValue;
           recordPurchase(accountKey, signal.ticker, signal.price, signal.amount);
+        } else {
+          totalSold += tradeValue;
+          lockProfit(accountKey, signal.ticker, signal.price, signal.amount);
         }
       }
 
@@ -611,6 +681,7 @@ export async function POST(request: NextRequest) {
         orderId: result.orderId,
         status: result.success ? 'OK' : 'FEIL',
         reason: result.success ? signal.reason : 'Ordre feilet',
+        market: info.market,
       });
 
       if (!result.success) {
@@ -620,70 +691,73 @@ export async function POST(request: NextRequest) {
 
     const successful = executedTrades.filter(t => t.status === 'OK');
     const failed = executedTrades.filter(t => t.status === 'FEIL');
-    const totalBought = successful.filter(t => t.action === 'BUY').reduce((s, t) => s + t.value, 0);
-    const totalSold = successful.filter(t => t.action === 'SELL').reduce((s, t) => s + t.value, 0);
     
-    const elapsed = Date.now() - startTime;
-
-    // Build detailed report
     const totalLockedProfits = lockedProfits.get(accountKey) || 0;
     
     let report = `APEX QUANTUM v6.1 - INTRA-DAY SWING TRADER
 ${'='.repeat(50)}
 Tid: ${new Date().toLocaleString('no-NO')}
-Mode: PAPER TRADING | Strategi: AGGRESSIV DIP/PEAK
+${marketStatus.message}
 
 === PROFIT LOCK STATUS ===
 Startkapital: ${BASE_TRADING_CAPITAL.toLocaleString()} kr
 Kontoverdi: ${actualTotalValue.toLocaleString()} kr
 Aktuell profitt: ${currentProfit >= 0 ? '+' : ''}${currentProfit.toLocaleString()} kr
-Last inn profitt: ${totalLockedProfits.toLocaleString()} kr
+Last profitt: ${totalLockedProfits.toLocaleString()} kr
 Trading-kapital: ${tradingCapital.toLocaleString()} kr
 
-=== SWING SIGNALER (${signals.length}) ===
-${signals.map(s => {
-  const icon = s.action === 'BUY' ? '🟢' : '🔴';
-  return `${icon} ${s.ticker}: ${s.action} ${s.amount} @ ${s.price.toFixed(2)} - ${s.reason}`;
-}).join('\n')}
+=== AKTIVE MARKEDER ===
+${marketStatus.osloOpen ? '- Oslo Bors: APEN (09:00-17:20 CET)' : '- Oslo Bors: STENGT'}
+${marketStatus.usOpen ? '- Nasdaq/US: APEN (15:30-22:00 CET)' : '- Nasdaq/US: STENGT'}
 
-=== UTFORTE HANDLER (${successful.length}/${executedTrades.length}) ===
-${successful.length > 0 
-  ? successful.map(t => {
-      const icon = t.action === 'BUY' ? 'Kjoper pa dip:' : 'Tar profitt pa peak:';
-      return `>>> ${icon} ${t.action === 'BUY' ? '+' : '-'}${t.amount} ${t.saxoSymbol} @ ${t.price.toFixed(2)} [${t.orderId}]`;
-    }).join('\n')
-  : 'Ingen handler utfort'}
+=== SIGNALER (${signals.length}) ===
+`;
 
-${failed.length > 0 ? `FEILET: ${failed.map(t => t.saxoSymbol).join(', ')}` : ''}
+    for (const s of signals) {
+      report += `+ ${s.ticker} (${s.market}): ${s.action} ${s.amount} @ ${s.price.toFixed(2)} - ${s.reason}\n`;
+    }
 
-Kjopt: ${totalBought.toLocaleString()} kr | Solgt: ${totalSold.toLocaleString()} kr
-Responstid: ${elapsed}ms`;
+    report += `\n=== UTFORTE HANDLER (${successful.length}/${executedTrades.length}) ===\n`;
+    for (const t of successful) {
+      const marketLabel = t.market === 'OSL' ? 'Oslo Bors' : 'US';
+      report += `>>> ${marketLabel} - ${t.action === 'BUY' ? 'Kjop' : 'Salg'}: ${t.amount}x ${t.saxoSymbol} @ ${t.price.toFixed(2)} [${t.orderId}]\n`;
+    }
+
+    if (failed.length > 0) {
+      report += `\n=== FEILEDE (${failed.length}) ===\n`;
+      for (const t of failed) {
+        report += `!!! ${t.ticker}: ${t.reason}\n`;
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    report += `\nScan fullfort pa ${duration}ms`;
 
     return NextResponse.json({
-      message: report,
+      success: true,
+      mode: mode || 'paper',
+      marketStatus,
       signals: signals.map(s => ({
         ticker: s.ticker,
-        saxoSymbol: APEX_BLUEPRINT[s.ticker]?.saxoSymbol || s.ticker,
+        saxoSymbol: APEX_BLUEPRINT[s.ticker]?.saxoSymbol,
         action: s.action,
         amount: s.amount,
-        price: s.price,
         reason: s.reason,
-        rsi: s.momentum.rsi,
-        trend: s.momentum.trend,
-        targetVekt: APEX_BLUEPRINT[s.ticker]?.targetVekt || 0,
+        market: s.market,
       })),
       executedTrades,
-      failedTickers,
-      portfolio: Object.entries(APEX_BLUEPRINT).map(([ticker, info]) => {
+      report,
+      blueprint: Object.entries(APEX_BLUEPRINT).map(([ticker, info]) => {
         const pos = positions.get(ticker);
-        const signal = signals.find(s => s.ticker === ticker);
         return {
           ticker,
           saxoSymbol: info.saxoSymbol,
           navn: info.navn,
-          vekt: info.targetVekt,
-          aksjon: signal?.action || 'HOLD',
+          targetVekt: info.targetVekt,
+          market: info.market,
+          marketOpen: marketStatus.activeMarkets.includes(info.market),
           antall: pos?.amount || 0,
+          verdi: pos?.marketValue || 0,
         };
       }),
       stats: {
@@ -692,17 +766,18 @@ Responstid: ${elapsed}ms`;
         currentProfit,
         lockedProfits: totalLockedProfits,
         tradingCapital,
+        marketsOpen: marketStatus.activeMarkets,
         totalBought,
         totalSold,
         successful: successful.length,
         failed: failed.length,
       },
-      mode: 'paper',
-      timestamp: new Date().toISOString(),
-      responseTime: elapsed,
     });
-  } catch (e) {
-    console.log(`[APEX] ERROR: ${e}`);
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+  } catch (error) {
+    console.error('[APEX] Error:', error);
+    return NextResponse.json({
+      error: 'Autonomous scan failed',
+      details: String(error),
+    }, { status: 500 });
   }
 }
