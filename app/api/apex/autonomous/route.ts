@@ -397,9 +397,15 @@ async function generateSwingSignals(
 ): Promise<Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData; market: 'US' }>> {
   const signals: Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData; market: 'US' }> = [];
   
+  console.log(`[APEX] Genererer signaler for ${Object.keys(APEX_BLUEPRINT).length} aksjer...`);
+  console.log(`[APEX] Aktive markeder: ${marketStatus.activeMarkets.join(', ') || 'INGEN'}`);
+  console.log(`[APEX] US Market open: ${marketStatus.usOpen}`);
+  
   for (const [ticker, info] of Object.entries(APEX_BLUEPRINT)) {
     // CRITICAL: Only trade stocks from OPEN markets
-    if (!marketStatus.activeMarkets.includes(info.market)) {
+    // Fix: Check usOpen directly since all stocks are US
+    if (!marketStatus.usOpen) {
+      console.log(`[APEX] Skip ${ticker} - US market stengt`);
       continue; // Skip - market is closed
     }
     
@@ -565,6 +571,26 @@ async function generateSwingSignals(
         }
       }
     }
+    
+    // ============ FORCE ACTIVE TRADING ============
+    // If no signals generated for this ticker yet, force a buy to stay active
+    const hasSignalForTicker = signals.some(s => s.ticker === ticker);
+    if (!hasSignalForTicker && balance > baseSize * currentPrice) {
+      // Force accumulation - always be buying during market hours
+      const forceSize = Math.floor(baseSize * 0.5); // Smaller position for forced trades
+      if (forceSize > 0) {
+        signals.push({
+          ticker,
+          action: 'BUY',
+          amount: forceSize,
+          reason: `[${marketLabel}] AKTIV AKKUMULERING`,
+          price: currentPrice,
+          momentum,
+          market: info.market,
+        });
+        console.log(`[APEX] FORCED: ${ticker} AKTIV AKKUMULERING ${forceSize} aksjer @ ${currentPrice.toFixed(2)}`);
+      }
+    }
   }
   
   // Sort: Prioritize by signal type and potential
@@ -684,24 +710,34 @@ Apningstid (CET): 15:30 - 22:00
     let totalSold = 0;
     const failedTickers: string[] = [];
 
+    console.log(`[APEX] Utforer ${signals.length} signaler...`);
+    
     for (const signal of signals) {
       const info = APEX_BLUEPRINT[signal.ticker];
-      if (!info) continue;
+      if (!info) {
+        console.log(`[APEX] Skip ${signal.ticker} - ikke i blueprint`);
+        continue;
+      }
 
       const tradeValue = signal.amount * signal.price;
+      console.log(`[APEX] Prosesserer: ${signal.action} ${signal.amount} ${signal.ticker} @ ${signal.price.toFixed(2)} = ${tradeValue.toFixed(0)} kr`);
 
-      if (signal.action === 'BUY' && tradeValue > tradingCapital * 0.95) {
-        console.log(`[APEX] Skip ${signal.ticker} - ikke nok trading-kapital`);
+      // Use actualCash instead of tradingCapital for more aggressive trading
+      if (signal.action === 'BUY' && tradeValue > actualCash * 0.95) {
+        console.log(`[APEX] Skip ${signal.ticker} - tradeValue ${tradeValue.toFixed(0)} > cash ${actualCash.toFixed(0)} * 0.95`);
         continue;
       }
       
       if (signal.action === 'SELL') {
         const pos = positions.get(signal.ticker);
         if (!pos || pos.amount < signal.amount) {
+          console.log(`[APEX] Skip ${signal.ticker} SELL - ikke nok aksjer (har: ${pos?.amount || 0}, trenger: ${signal.amount})`);
           continue;
         }
       }
 
+      console.log(`[APEX] Sender ordre: ${signal.action} ${signal.amount} ${signal.ticker}`);
+      
       const result = await placeMarketOrder(
         accessToken,
         accountKey,
@@ -714,14 +750,20 @@ Apningstid (CET): 15:30 - 22:00
         info.market
       );
 
+      console.log(`[APEX] Ordre resultat: ${result.success ? 'OK' : 'FEIL'} - ${result.orderId || result.error}`);
+      
       if (result.success) {
         if (signal.action === 'BUY') {
           totalBought += tradeValue;
           recordPurchase(accountKey, signal.ticker, signal.price, signal.amount);
+          console.log(`[APEX] KJOPT: ${signal.amount} ${signal.ticker} @ ${signal.price.toFixed(2)} = ${tradeValue.toFixed(0)} kr`);
         } else {
           totalSold += tradeValue;
           lockProfit(accountKey, signal.ticker, signal.price, signal.amount);
+          console.log(`[APEX] SOLGT: ${signal.amount} ${signal.ticker} @ ${signal.price.toFixed(2)} = ${tradeValue.toFixed(0)} kr`);
         }
+      } else {
+        console.log(`[APEX] FEIL: ${signal.ticker} - ${result.error}`);
       }
 
       executedTrades.push({
