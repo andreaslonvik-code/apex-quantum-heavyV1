@@ -64,12 +64,13 @@ const APEX_BLUEPRINT: Record<string, {
   ABSI: { navn: 'Absci Corporation',    targetVekt: 7,  volatilitet: 5, saxoSymbol: 'ABSI:xnas', assetType: 'Stock', market: 'US' },
   
   // ====== OSLO BØRS STOCKS - 40% total ======
-  EQNR: { navn: 'Equinor',              targetVekt: 12, volatilitet: 2, saxoSymbol: 'EQNR:xosl', assetType: 'Stock', market: 'OSL' },
-  DNO:  { navn: 'DNO ASA',              targetVekt: 8,  volatilitet: 3, saxoSymbol: 'DNO:xosl',  assetType: 'Stock', market: 'OSL' },
-  NAS:  { navn: 'Norwegian Air',        targetVekt: 6,  volatilitet: 5, saxoSymbol: 'NAS:xosl',  assetType: 'Stock', market: 'OSL' },
-  MOWI: { navn: 'Mowi ASA',             targetVekt: 5,  volatilitet: 3, saxoSymbol: 'MOWI:xosl', assetType: 'Stock', market: 'OSL' },
-  NEL:  { navn: 'Nel Hydrogen',         targetVekt: 5,  volatilitet: 5, saxoSymbol: 'NEL:xosl',  assetType: 'Stock', market: 'OSL' },
-  NODC: { navn: 'Nordic Semiconductor', targetVekt: 4,  volatilitet: 4, saxoSymbol: 'NOD:xosl',  assetType: 'Stock', market: 'OSL' },
+  // Note: Oslo Bors stocks may need CfdOnStock for Saxo SIM trading
+  EQNR: { navn: 'Equinor',              targetVekt: 12, volatilitet: 2, saxoSymbol: 'EQNR:xcse', assetType: 'CfdOnStock', market: 'OSL' },
+  DNO:  { navn: 'DNO ASA',              targetVekt: 8,  volatilitet: 3, saxoSymbol: 'DNO:xosl',  assetType: 'CfdOnStock', market: 'OSL' },
+  NAS:  { navn: 'Norwegian Air',        targetVekt: 6,  volatilitet: 5, saxoSymbol: 'NAS:xosl',  assetType: 'CfdOnStock', market: 'OSL' },
+  MOWI: { navn: 'Mowi ASA',             targetVekt: 5,  volatilitet: 3, saxoSymbol: 'MOWI:xcse', assetType: 'CfdOnStock', market: 'OSL' },
+  NEL:  { navn: 'Nel Hydrogen',         targetVekt: 5,  volatilitet: 5, saxoSymbol: 'NEL:xosl',  assetType: 'CfdOnStock', market: 'OSL' },
+  NODC: { navn: 'Nordic Semiconductor', targetVekt: 4,  volatilitet: 4, saxoSymbol: 'NOD:xosl',  assetType: 'CfdOnStock', market: 'OSL' },
 };
 
 // Momentum tracking for intra-day swings
@@ -98,42 +99,54 @@ const lockedProfits: Map<string, number> = new Map();
 const purchasePrices: Map<string, Map<string, number>> = new Map();
 
 // Search for instrument UIC dynamically
-async function findInstrument(accessToken: string, ticker: string, saxoSymbol: string): Promise<{ uic: number; assetType: string } | null> {
-  if (uicCache.has(ticker)) {
-    return uicCache.get(ticker)!;
+async function findInstrument(accessToken: string, ticker: string, saxoSymbol: string, preferredAssetType: string = 'Stock'): Promise<{ uic: number; assetType: string } | null> {
+  const cacheKey = `${ticker}_${preferredAssetType}`;
+  if (uicCache.has(cacheKey)) {
+    return uicCache.get(cacheKey)!;
   }
   
   try {
-    // Try multiple search patterns including Oslo Børs
+    // Try multiple search patterns including Oslo Børs and Copenhagen
     const searches = [
       saxoSymbol, 
       `${ticker}:xnas`, 
       `${ticker}:xnys`, 
       `${ticker}:xosl`,
+      `${ticker}:xcse`,
       ticker
     ];
     
-    for (const keyword of searches) {
-      const res = await fetch(
-        `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${encodeURIComponent(keyword)}&AssetTypes=Stock&$top=5`,
-        { headers: { 'Authorization': `Bearer ${accessToken}` } }
-      );
-      
-      if (res.ok) {
-        const data = await res.json();
-        if (data.Data && data.Data.length > 0) {
-          const match = data.Data.find((i: any) => 
-            i.Symbol?.toUpperCase() === ticker ||
-            i.Symbol?.toUpperCase().startsWith(ticker + ':')
-          ) || data.Data[0];
-          
-          const result = { uic: match.Identifier, assetType: match.AssetType || 'Stock' };
-          uicCache.set(ticker, result);
-          console.log(`[APEX] Found ${ticker}: UIC=${result.uic}`);
-          return result;
+    // Search for both Stock and CfdOnStock
+    const assetTypesToTry = preferredAssetType === 'CfdOnStock' 
+      ? ['CfdOnStock', 'Stock'] 
+      : ['Stock', 'CfdOnStock'];
+    
+    for (const assetType of assetTypesToTry) {
+      for (const keyword of searches) {
+        const res = await fetch(
+          `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${encodeURIComponent(keyword)}&AssetTypes=${assetType}&$top=10`,
+          { headers: { 'Authorization': `Bearer ${accessToken}` } }
+        );
+        
+        if (res.ok) {
+          const data = await res.json();
+          if (data.Data && data.Data.length > 0) {
+            // Try to find exact match
+            const match = data.Data.find((i: any) => 
+              i.Symbol?.toUpperCase() === ticker ||
+              i.Symbol?.toUpperCase().startsWith(ticker + ':')
+            ) || data.Data[0];
+            
+            const result = { uic: match.Identifier, assetType: match.AssetType || assetType };
+            uicCache.set(cacheKey, result);
+            console.log(`[APEX] Found ${ticker}: UIC=${result.uic}, AssetType=${result.assetType}, Symbol=${match.Symbol}`);
+            return result;
+          }
         }
       }
     }
+    
+    console.log(`[APEX] Could not find instrument: ${ticker} (tried Stock and CfdOnStock)`);
     return null;
   } catch (e) {
     console.log(`[APEX] Search error for ${ticker}: ${e}`);
@@ -226,9 +239,9 @@ async function placeMarketOrder(
   market: 'US' | 'OSL'
 ): Promise<{ success: boolean; orderId?: string; error?: string; uic?: number }> {
   try {
-    const instrument = await findInstrument(accessToken, ticker, saxoSymbol);
+    const instrument = await findInstrument(accessToken, ticker, saxoSymbol, assetType);
     if (!instrument) {
-      return { success: false, error: `Fant ikke instrument: ${ticker}` };
+      return { success: false, error: `Fant ikke instrument: ${ticker} (${assetType})` };
     }
     
     const body = {
@@ -392,8 +405,11 @@ async function generateSwingSignals(
       continue; // Skip - market is closed
     }
     
-    const instrument = await findInstrument(accessToken, ticker, info.saxoSymbol);
-    if (!instrument) continue;
+    const instrument = await findInstrument(accessToken, ticker, info.saxoSymbol, info.assetType);
+    if (!instrument) {
+      console.log(`[APEX] Skipping ${ticker} - could not find instrument`);
+      continue;
+    }
     
     const priceData = await getPrice(accessToken, instrument.uic, info.assetType);
     const currentPrice = priceData.last;
