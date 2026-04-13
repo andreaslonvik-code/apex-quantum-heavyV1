@@ -5,12 +5,12 @@ import { cookies } from 'next/headers';
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
 // ============ MARKET HOURS LOGIC (CET) ============
-// Oslo Børs: 09:00 - 17:20 CET
+// NOTE: Saxo SIM only supports US stocks - Oslo Børs is NOT available
 // Nasdaq/US: 15:30 - 22:00 CET
 interface MarketStatus {
-  osloOpen: boolean;
+  osloOpen: boolean;  // Always false - not available in SIM
   usOpen: boolean;
-  activeMarkets: ('OSL' | 'US')[];
+  activeMarkets: 'US'[];
   message: string;
 }
 
@@ -22,38 +22,30 @@ function getMarketStatus(): MarketStatus {
   const minutes = cetTime.getMinutes();
   const timeInMinutes = hours * 60 + minutes;
   
-  // Oslo Børs: 09:00 - 17:20 CET (540 - 1040 minutes)
-  const osloOpen = timeInMinutes >= 540 && timeInMinutes < 1040;
-  
   // Nasdaq/US: 15:30 - 22:00 CET (930 - 1320 minutes)
   const usOpen = timeInMinutes >= 930 && timeInMinutes < 1320;
   
-  const activeMarkets: ('OSL' | 'US')[] = [];
-  if (osloOpen) activeMarkets.push('OSL');
-  if (usOpen) activeMarkets.push('US');
+  // Always return US only - Oslo Børs is not available in Saxo SIM
+  const activeMarkets: 'US'[] = usOpen ? ['US'] : [];
   
   let message = '';
-  if (osloOpen && usOpen) {
-    message = `BEGGE MARKEDER APNE (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - Full aktiv trading`;
-  } else if (osloOpen) {
-    message = `KUN OSLO BORS APEN (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - Prioriterer norske aksjer`;
-  } else if (usOpen) {
-    message = `KUN US MARKET APEN (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - Kun USA-aksjer`;
+  if (usOpen) {
+    message = `US MARKET APEN (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - Aktiv trading`;
   } else {
-    message = `MARKEDER STENGT (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - Venter...`;
+    message = `US MARKET STENGT (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - Apner 15:30 CET`;
   }
   
-  return { osloOpen, usOpen, activeMarkets, message };
+  return { osloOpen: false, usOpen, activeMarkets, message };
 }
 
-// APEX QUANTUM v6.1 - Full Blueprint with both US and Oslo Børs stocks
+// APEX QUANTUM v6.1 - Full Blueprint (US stocks only - Saxo SIM limitation)
 const APEX_BLUEPRINT: Record<string, {
   navn: string;
   targetVekt: number;
   volatilitet: number;
   saxoSymbol: string;
   assetType: string;
-  market: 'US' | 'OSL';
+  market: 'US';
 }> = {
   // ====== US STOCKS (Nasdaq/NYSE) - 60% total ======
   MU:   { navn: 'Micron Technology',    targetVekt: 25, volatilitet: 3, saxoSymbol: 'MU:xnas',   assetType: 'Stock', market: 'US' },
@@ -63,14 +55,14 @@ const APEX_BLUEPRINT: Record<string, {
   LMND: { navn: 'Lemonade Inc',         targetVekt: 5,  volatilitet: 4, saxoSymbol: 'LMND:xnys', assetType: 'Stock', market: 'US' },
   ABSI: { navn: 'Absci Corporation',    targetVekt: 7,  volatilitet: 5, saxoSymbol: 'ABSI:xnas', assetType: 'Stock', market: 'US' },
   
-  // ====== OSLO BØRS STOCKS - 40% total ======
-  // Note: Oslo Bors stocks may need CfdOnStock for Saxo SIM trading
-  EQNR: { navn: 'Equinor',              targetVekt: 12, volatilitet: 2, saxoSymbol: 'EQNR:xcse', assetType: 'CfdOnStock', market: 'OSL' },
-  DNO:  { navn: 'DNO ASA',              targetVekt: 8,  volatilitet: 3, saxoSymbol: 'DNO:xosl',  assetType: 'CfdOnStock', market: 'OSL' },
-  NAS:  { navn: 'Norwegian Air',        targetVekt: 6,  volatilitet: 5, saxoSymbol: 'NAS:xosl',  assetType: 'CfdOnStock', market: 'OSL' },
-  MOWI: { navn: 'Mowi ASA',             targetVekt: 5,  volatilitet: 3, saxoSymbol: 'MOWI:xcse', assetType: 'CfdOnStock', market: 'OSL' },
-  NEL:  { navn: 'Nel Hydrogen',         targetVekt: 5,  volatilitet: 5, saxoSymbol: 'NEL:xosl',  assetType: 'CfdOnStock', market: 'OSL' },
-  NODC: { navn: 'Nordic Semiconductor', targetVekt: 4,  volatilitet: 4, saxoSymbol: 'NOD:xosl',  assetType: 'CfdOnStock', market: 'OSL' },
+  // ====== ADDITIONAL US STOCKS (replacing Oslo Børs which is not available in Saxo SIM) ======
+  // Saxo SIM does not support Oslo Børs trading - using more US stocks instead
+  AAPL: { navn: 'Apple Inc',            targetVekt: 10, volatilitet: 2, saxoSymbol: 'AAPL:xnas', assetType: 'Stock', market: 'US' },
+  NVDA: { navn: 'NVIDIA Corp',          targetVekt: 10, volatilitet: 3, saxoSymbol: 'NVDA:xnas', assetType: 'Stock', market: 'US' },
+  TSLA: { navn: 'Tesla Inc',            targetVekt: 8,  volatilitet: 4, saxoSymbol: 'TSLA:xnas', assetType: 'Stock', market: 'US' },
+  AMD:  { navn: 'AMD Inc',              targetVekt: 6,  volatilitet: 3, saxoSymbol: 'AMD:xnas',  assetType: 'Stock', market: 'US' },
+  MSFT: { navn: 'Microsoft Corp',       targetVekt: 4,  volatilitet: 2, saxoSymbol: 'MSFT:xnas', assetType: 'Stock', market: 'US' },
+  GOOG: { navn: 'Alphabet Inc',         targetVekt: 2,  volatilitet: 2, saxoSymbol: 'GOOG:xnas', assetType: 'Stock', market: 'US' },
 };
 
 // Momentum tracking for intra-day swings
@@ -236,18 +228,22 @@ async function placeMarketOrder(
   amount: number,
   buySell: 'Buy' | 'Sell',
   reason: string,
-  market: 'US' | 'OSL'
+  market: 'US'
 ): Promise<{ success: boolean; orderId?: string; error?: string; uic?: number }> {
   try {
     const instrument = await findInstrument(accessToken, ticker, saxoSymbol, assetType);
     if (!instrument) {
+      console.log(`[APEX] FEIL: Fant ikke instrument ${ticker} (sokte: ${assetType})`);
       return { success: false, error: `Fant ikke instrument: ${ticker} (${assetType})` };
     }
+    
+    // Use the assetType found by the search, not the blueprint one
+    const actualAssetType = instrument.assetType;
     
     const body = {
       AccountKey: accountKey,
       Amount: Math.floor(Math.abs(amount)),
-      AssetType: assetType,
+      AssetType: actualAssetType,
       BuySell: buySell,
       OrderType: 'Market',
       OrderDuration: { DurationType: 'DayOrder' },
@@ -255,9 +251,9 @@ async function placeMarketOrder(
       ManualOrder: false,
     };
 
-    const marketName = market === 'OSL' ? 'Oslo Bors' : 'US Market';
+    const marketName = 'US Market';
     const actionText = buySell === 'Buy' ? 'kjoper pa dip' : 'tar profitt pa peak';
-    console.log(`[APEX] ${marketName} apen - ${actionText}: ${buySell === 'Buy' ? '+' : '-'}${amount} ${saxoSymbol}`);
+    console.log(`[APEX] ${marketName} - ${actionText}: ${buySell === 'Buy' ? '+' : '-'}${amount} ${saxoSymbol} (UIC=${instrument.uic}, Type=${actualAssetType})`);
 
     const res = await fetch(`${SAXO_API_BASE}/trade/v2/orders`, {
       method: 'POST',
@@ -396,8 +392,8 @@ async function generateSwingSignals(
   balance: number,
   totalValue: number,
   marketStatus: MarketStatus
-): Promise<Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData; market: 'US' | 'OSL' }>> {
-  const signals: Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData; market: 'US' | 'OSL' }> = [];
+): Promise<Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData; market: 'US' }>> {
+  const signals: Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData; market: 'US' }> = [];
   
   for (const [ticker, info] of Object.entries(APEX_BLUEPRINT)) {
     // CRITICAL: Only trade stocks from OPEN markets
@@ -426,7 +422,7 @@ async function generateSwingSignals(
     const baseSize = Math.max(5, Math.floor((balance * 0.03) / currentPrice));
     const volatilityMultiplier = 1 + (info.volatilitet - 2) * 0.2;
     
-    const marketLabel = info.market === 'OSL' ? 'Oslo Bors' : 'US';
+    const marketLabel = 'US';
     
     // DIP BUYING
     if (dropFromHigh >= DIP_THRESHOLD) {
@@ -723,7 +719,7 @@ Last profitt: ${totalLockedProfits.toLocaleString()} kr
 Trading-kapital: ${tradingCapital.toLocaleString()} kr
 
 === AKTIVE MARKEDER ===
-${marketStatus.osloOpen ? '- Oslo Bors: APEN (09:00-17:20 CET)' : '- Oslo Bors: STENGT'}
+- Oslo Bors: IKKE TILGJENGELIG (Saxo SIM)
 ${marketStatus.usOpen ? '- Nasdaq/US: APEN (15:30-22:00 CET)' : '- Nasdaq/US: STENGT'}
 
 === SIGNALER (${signals.length}) ===
@@ -735,7 +731,7 @@ ${marketStatus.usOpen ? '- Nasdaq/US: APEN (15:30-22:00 CET)' : '- Nasdaq/US: ST
 
     report += `\n=== UTFORTE HANDLER (${successful.length}/${executedTrades.length}) ===\n`;
     for (const t of successful) {
-      const marketLabel = t.market === 'OSL' ? 'Oslo Bors' : 'US';
+      const marketLabel = 'US';
       report += `>>> ${marketLabel} - ${t.action === 'BUY' ? 'Kjop' : 'Salg'}: ${t.amount}x ${t.saxoSymbol} @ ${t.price.toFixed(2)} [${t.orderId}]\n`;
     }
 
