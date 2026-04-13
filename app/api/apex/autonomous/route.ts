@@ -482,16 +482,19 @@ async function getPositions(accessToken: string, clientKey: string) {
   return positions;
 }
 
-// ============ APEX QUANTUM AGGRESSIVE TRADING CONFIG ============
-// Target: 350-410% annual return = ~1% daily compound growth
-// Strategy: Ultra-active intra-day momentum trading with continuous position building
-const DIP_THRESHOLD = 0.001;       // Buy on ANY 0.1% dip (was 0.6%)
-const PEAK_THRESHOLD = 0.002;      // Sell on 0.2% rise (was 0.8%)
-const RSI_OVERSOLD = 45;           // More sensitive RSI (was 35)
-const RSI_OVERBOUGHT = 55;         // More sensitive RSI (was 65)
-const POSITION_SIZE_PERCENT = 0.08; // 8% of capital per trade (was 3%)
-const MAX_TRADES_PER_SCAN = 6;     // Execute up to 6 trades per scan
-const ALWAYS_BUILD_POSITION = true; // Always build positions when market is open
+// ============ APEX QUANTUM EXTREME VOLATILITY CONFIG ============
+// Target: 10% DAILY return through ultra-aggressive intra-day trading
+// Strategy: Maximum position churn, rapid profit-taking, continuous accumulation
+const DIP_THRESHOLD = 0.0005;      // Buy on ANY 0.05% dip - EXTREME sensitivity
+const PEAK_THRESHOLD = 0.001;      // Sell on 0.1% rise - RAPID profit-taking
+const RSI_OVERSOLD = 48;           // Almost always buying (was 45)
+const RSI_OVERBOUGHT = 52;         // Almost always selling profits (was 55)
+const POSITION_SIZE_PERCENT = 0.15; // 15% of capital per trade - LARGE positions
+const MAX_TRADES_PER_SCAN = 12;    // Execute up to 12 trades per scan - HIGH VOLUME
+const ALWAYS_BUILD_POSITION = true; // ALWAYS build positions
+const FORCE_TRADE_EVERY_SCAN = true; // GUARANTEE trades every scan
+const PROFIT_TAKE_THRESHOLD = 0.005; // Take profit at 0.5% gain
+const SCALP_MODE = true;           // Enable scalping for micro-profits
 
 // Generate swing signals with market hours filtering
 async function generateSwingSignals(
@@ -717,19 +720,52 @@ async function generateSwingSignals(
       }
     }
     
-    // ============ GUARANTEED TRADE - ALWAYS TRADE WHEN MARKET IS OPEN ============
-    // Force at least one trade per ticker when market is open
-    const hasSignalForTicker = signals.some(s => s.ticker === ticker);
+    // ============ EXTREME GUARANTEED TRADE - 10% DAILY TARGET ============
+    // ALWAYS trade EVERY ticker EVERY scan when market is open
+    // This is the core of the 10% daily return strategy
     
-    if (!hasSignalForTicker) {
-      // NO SIGNALS YET - FORCE A BUY
-      // This ensures we ALWAYS trade when market is open
-      const forceSize = Math.max(5, Math.floor(baseSize * 0.8));
+    if (FORCE_TRADE_EVERY_SCAN) {
+      const forceSize = Math.max(20, Math.floor(baseSize * 1.5)); // LARGE forced trades
       const forceCost = forceSize * currentPrice;
       
-      console.log(`[APEX] INGEN SIGNAL for ${ticker} - tvinger kjop: ${forceSize} @ ${currentPrice.toFixed(2)} = ${forceCost.toFixed(0)} kr (saldo: ${balance.toFixed(0)} kr)`);
+      // SCALP MODE: If we have position and price moved, take action
+      if (SCALP_MODE && pos && pos.amount > 0) {
+        const profitPercent = (currentPrice - pos.avgPrice) / pos.avgPrice;
+        
+        // Quick profit taking at 0.5%+
+        if (profitPercent >= PROFIT_TAKE_THRESHOLD) {
+          const scalpSellSize = Math.floor(pos.amount * 0.4); // Sell 40% to lock profit
+          if (scalpSellSize > 0) {
+            signals.push({
+              ticker,
+              action: 'SELL',
+              amount: scalpSellSize,
+              reason: `[SCALP] Profitt +${(profitPercent * 100).toFixed(2)}% - LAS INN`,
+              price: currentPrice,
+              momentum,
+              market: info.market,
+            });
+            console.log(`[APEX] SCALP PROFIT: SELG ${scalpSellSize} ${ticker} @ +${(profitPercent * 100).toFixed(2)}%`);
+          }
+        }
+        
+        // Add to losing position (dollar cost average)
+        if (profitPercent < -0.003 && balance > forceCost) {
+          signals.push({
+            ticker,
+            action: 'BUY',
+            amount: forceSize,
+            reason: `[DCA] Ned ${(profitPercent * 100).toFixed(2)}% - akkumulerer`,
+            price: currentPrice,
+            momentum,
+            market: info.market,
+          });
+          console.log(`[APEX] DCA: KJOP ${forceSize} ${ticker} @ ${(profitPercent * 100).toFixed(2)}%`);
+        }
+      }
       
-      if (forceCost < balance * 0.5) { // Use up to 50% of remaining balance
+      // Always buy more if we have cash
+      if (balance > forceCost * 0.7) {
         signals.push({
           ticker,
           action: 'BUY',
@@ -746,23 +782,25 @@ async function generateSwingSignals(
     }
   }
   
-  // Sort: Prioritize by signal type and potential
+  // Sort: Prioritize SCALP profits first, then TimesFM, then DIP/PEAK
   signals.sort((a, b) => {
-    // Priority: DIP > PEAK > RSI > TREND > BUILD
     const getPriority = (reason: string) => {
-      if (reason.includes('DIP')) return 5;
-      if (reason.includes('PEAK')) return 4;
+      if (reason.includes('SCALP')) return 10;  // Highest - lock profits
+      if (reason.includes('TIMESFM')) return 8; // AI predictions
+      if (reason.includes('DIP')) return 6;
+      if (reason.includes('PEAK')) return 5;
+      if (reason.includes('DCA')) return 4;     // Dollar cost average
       if (reason.includes('RSI')) return 3;
-      if (reason.includes('TREND')) return 2;
+      if (reason.includes('GARANTERT')) return 2;
       return 1;
     };
     return getPriority(b.reason) - getPriority(a.reason);
   });
   
-  // Limit to MAX_TRADES_PER_SCAN to avoid over-trading
+  // Execute ALL signals for maximum activity - target 10% daily!
   const limitedSignals = signals.slice(0, MAX_TRADES_PER_SCAN);
   
-  console.log(`[APEX] Genererte ${signals.length} signaler, utforer ${limitedSignals.length}`);
+  console.log(`[APEX] ===== EKSTREM MODUS: ${signals.length} signaler generert, utforer ${limitedSignals.length} =====`);
   
   return limitedSignals;
 }
@@ -808,12 +846,12 @@ ${marketStatus.message}
 
 US MARKET STENGT - Venter pa apning 15:30 CET
 
-Strategi: 350-410% arlig avkastning
-AI-Hybrid: TimesFM + Apex Quantum + Momentum
-- TimesFM: 40% vekt (prisforutsigelse)
-- Momentum: 30% vekt (RSI/trend)
-- Apex: 30% vekt (portefolje)
-- Max 6 trades per scan
+EKSTREM MODUS: 10% DAGLIG AVKASTNING
+AI-Hybrid: TimesFM + Apex Quantum + Scalping
+- SCALP: Ta profitt ved 0.5% gevinst
+- DCA: Akkumuler pa dips
+- TimesFM: AI-drevet prisforutsigelse
+- Max 12 trades per scan - HOYT VOLUM
 
 Apningstid (CET): 15:30 - 22:00
 `,
