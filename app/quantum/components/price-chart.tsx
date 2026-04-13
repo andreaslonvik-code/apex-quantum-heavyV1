@@ -145,7 +145,7 @@ export function PriceChart({ selectedTicker = "MU" }: PriceChartProps) {
               tickLine={false}
               tick={{ fill: "#71717a", fontSize: 10 }}
               width={50}
-              tickFormatter={(v) => `$${v.toFixed(0)}`}
+              tickFormatter={(v) => `$${Number(v).toFixed(0)}`}
             />
             <Tooltip
               contentStyle={{
@@ -155,9 +155,9 @@ export function PriceChart({ selectedTicker = "MU" }: PriceChartProps) {
                 padding: "12px",
               }}
               labelStyle={{ color: "#fff", fontWeight: "bold" }}
-              formatter={(value: number, name: string) => [
-                `$${value.toFixed(2)}`,
-                name.charAt(0).toUpperCase() + name.slice(1),
+              formatter={(value, name) => [
+                `$${Number(value).toFixed(2)}`,
+                String(name).charAt(0).toUpperCase() + String(name).slice(1),
               ]}
             />
             <ReferenceLine y={ticker.price} stroke="#71717a" strokeDasharray="3 3" />
