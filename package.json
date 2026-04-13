@@ -12,10 +12,13 @@
     "@ai-sdk/react": "^3.0.143",
     "@ai-sdk/xai": "^3.0.74",
     "ai": "^6.0.141",
+    "framer-motion": "^12.38.0",
+    "lucide-react": "^1.8.0",
     "next": "16.2.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "recharts": "^3.8.1"
+    "recharts": "^3.8.1",
+    "sonner": "^2.0.7"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
