@@ -38,7 +38,13 @@ function getMarketStatus(): MarketStatus {
   return { osloOpen: false, usOpen, activeMarkets, message };
 }
 
-// APEX QUANTUM v6.1 - Full Blueprint (US stocks only - Saxo SIM limitation)
+// ============ APEX QUANTUM v6.1 - AI-SELECTED PORTFOLIO ============
+// These stocks were selected by Apex Quantum AI based on:
+// - High growth potential in AI/semiconductor sector
+// - Energy infrastructure for data centers
+// - Emerging space technology
+// - Disruptive insurance/biotech
+// Total allocation: 100% across 6 AI-selected positions
 const APEX_BLUEPRINT: Record<string, {
   navn: string;
   targetVekt: number;
@@ -47,22 +53,13 @@ const APEX_BLUEPRINT: Record<string, {
   assetType: string;
   market: 'US';
 }> = {
-  // ====== US STOCKS (Nasdaq/NYSE) - 60% total ======
-  MU:   { navn: 'Micron Technology',    targetVekt: 25, volatilitet: 3, saxoSymbol: 'MU:xnas',   assetType: 'Stock', market: 'US' },
-  CEG:  { navn: 'Constellation Energy', targetVekt: 10, volatilitet: 2, saxoSymbol: 'CEG:xnas',  assetType: 'Stock', market: 'US' },
-  VRT:  { navn: 'Vertiv Holdings',      targetVekt: 8,  volatilitet: 2, saxoSymbol: 'VRT:xnys',  assetType: 'Stock', market: 'US' },
-  RKLB: { navn: 'Rocket Lab',           targetVekt: 5,  volatilitet: 4, saxoSymbol: 'RKLB:xnas', assetType: 'Stock', market: 'US' },
-  LMND: { navn: 'Lemonade Inc',         targetVekt: 5,  volatilitet: 4, saxoSymbol: 'LMND:xnys', assetType: 'Stock', market: 'US' },
-  ABSI: { navn: 'Absci Corporation',    targetVekt: 7,  volatilitet: 5, saxoSymbol: 'ABSI:xnas', assetType: 'Stock', market: 'US' },
-  
-  // ====== ADDITIONAL US STOCKS (replacing Oslo Børs which is not available in Saxo SIM) ======
-  // Saxo SIM does not support Oslo Børs trading - using more US stocks instead
-  AAPL: { navn: 'Apple Inc',            targetVekt: 10, volatilitet: 2, saxoSymbol: 'AAPL:xnas', assetType: 'Stock', market: 'US' },
-  NVDA: { navn: 'NVIDIA Corp',          targetVekt: 10, volatilitet: 3, saxoSymbol: 'NVDA:xnas', assetType: 'Stock', market: 'US' },
-  TSLA: { navn: 'Tesla Inc',            targetVekt: 8,  volatilitet: 4, saxoSymbol: 'TSLA:xnas', assetType: 'Stock', market: 'US' },
-  AMD:  { navn: 'AMD Inc',              targetVekt: 6,  volatilitet: 3, saxoSymbol: 'AMD:xnas',  assetType: 'Stock', market: 'US' },
-  MSFT: { navn: 'Microsoft Corp',       targetVekt: 4,  volatilitet: 2, saxoSymbol: 'MSFT:xnas', assetType: 'Stock', market: 'US' },
-  GOOG: { navn: 'Alphabet Inc',         targetVekt: 2,  volatilitet: 2, saxoSymbol: 'GOOG:xnas', assetType: 'Stock', market: 'US' },
+  // APEX QUANTUM AI-SELECTED POSITIONS ONLY
+  MU:   { navn: 'Micron Technology',    targetVekt: 40, volatilitet: 3, saxoSymbol: 'MU:xnas',   assetType: 'Stock', market: 'US' },  // AI/Memory chips
+  CEG:  { navn: 'Constellation Energy', targetVekt: 20, volatilitet: 2, saxoSymbol: 'CEG:xnas',  assetType: 'Stock', market: 'US' },  // Nuclear/Data center power
+  VRT:  { navn: 'Vertiv Holdings',      targetVekt: 15, volatilitet: 2, saxoSymbol: 'VRT:xnys',  assetType: 'Stock', market: 'US' },  // Data center infrastructure
+  RKLB: { navn: 'Rocket Lab',           targetVekt: 10, volatilitet: 4, saxoSymbol: 'RKLB:xnas', assetType: 'Stock', market: 'US' },  // Space tech
+  LMND: { navn: 'Lemonade Inc',         targetVekt: 10, volatilitet: 4, saxoSymbol: 'LMND:xnys', assetType: 'Stock', market: 'US' },  // AI insurance
+  ABSI: { navn: 'Absci Corporation',    targetVekt: 5,  volatilitet: 5, saxoSymbol: 'ABSI:xnas', assetType: 'Stock', market: 'US' },  // AI drug discovery
 };
 
 // Momentum tracking for intra-day swings
