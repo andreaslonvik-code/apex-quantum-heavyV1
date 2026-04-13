@@ -376,11 +376,16 @@ async function getPositions(accessToken: string, clientKey: string) {
   return positions;
 }
 
-// DIP/PEAK thresholds
-const DIP_THRESHOLD = 0.006;
-const PEAK_THRESHOLD = 0.008;
-const RSI_OVERSOLD = 35;
-const RSI_OVERBOUGHT = 65;
+// ============ APEX QUANTUM AGGRESSIVE TRADING CONFIG ============
+// Target: 350-410% annual return = ~1% daily compound growth
+// Strategy: Ultra-active intra-day momentum trading with continuous position building
+const DIP_THRESHOLD = 0.001;       // Buy on ANY 0.1% dip (was 0.6%)
+const PEAK_THRESHOLD = 0.002;      // Sell on 0.2% rise (was 0.8%)
+const RSI_OVERSOLD = 45;           // More sensitive RSI (was 35)
+const RSI_OVERBOUGHT = 55;         // More sensitive RSI (was 65)
+const POSITION_SIZE_PERCENT = 0.08; // 8% of capital per trade (was 3%)
+const MAX_TRADES_PER_SCAN = 6;     // Execute up to 6 trades per scan
+const ALWAYS_BUILD_POSITION = true; // Always build positions when market is open
 
 // Generate swing signals with market hours filtering
 async function generateSwingSignals(
@@ -416,14 +421,19 @@ async function generateSwingSignals(
     const dropFromHigh = momentum.localHigh > 0 ? (momentum.localHigh - currentPrice) / momentum.localHigh : 0;
     const riseFromLow = momentum.localLow > 0 ? (currentPrice - momentum.localLow) / momentum.localLow : 0;
     
-    const baseSize = Math.max(5, Math.floor((balance * 0.03) / currentPrice));
-    const volatilityMultiplier = 1 + (info.volatilitet - 2) * 0.2;
+    // AGGRESSIVE position sizing - 8% of capital per trade
+    const baseSize = Math.max(10, Math.floor((balance * POSITION_SIZE_PERCENT) / currentPrice));
+    const volatilityMultiplier = 1 + (info.volatilitet - 2) * 0.3; // Increased multiplier
     
     const marketLabel = 'US';
     
-    // DIP BUYING
+    console.log(`[APEX] ${ticker}: pris=${currentPrice.toFixed(2)}, RSI=${momentum.rsi.toFixed(0)}, drop=${(dropFromHigh*100).toFixed(3)}%, rise=${(riseFromLow*100).toFixed(3)}%`);
+    
+    // ============ AGGRESSIVE BUY SIGNALS ============
+    
+    // 1. DIP BUYING - very sensitive
     if (dropFromHigh >= DIP_THRESHOLD) {
-      const dipStrength = Math.min(3, dropFromHigh / DIP_THRESHOLD);
+      const dipStrength = Math.min(5, dropFromHigh / DIP_THRESHOLD);
       const orderSize = Math.floor(baseSize * dipStrength * volatilityMultiplier);
       
       if (orderSize > 0 && balance > orderSize * currentPrice) {
@@ -436,28 +446,45 @@ async function generateSwingSignals(
           momentum,
           market: info.market,
         });
-        console.log(`[APEX] ${marketLabel} - DIP: ${ticker} -${(dropFromHigh * 100).toFixed(2)}% -> KJOP ${orderSize}`);
+        console.log(`[APEX] SIGNAL: ${ticker} DIP -${(dropFromHigh * 100).toFixed(2)}% -> KJOP ${orderSize}`);
       }
     }
     
-    // RSI oversold
+    // 2. RSI oversold - more sensitive
     if (momentum.rsi < RSI_OVERSOLD && balance > baseSize * currentPrice) {
-      const orderSize = Math.floor(baseSize * 1.5 * volatilityMultiplier);
+      const orderSize = Math.floor(baseSize * 2 * volatilityMultiplier);
       signals.push({
         ticker,
         action: 'BUY',
         amount: orderSize,
-        reason: `[${marketLabel}] RSI OVERSOLD (${momentum.rsi.toFixed(0)})`,
+        reason: `[${marketLabel}] RSI LOW (${momentum.rsi.toFixed(0)})`,
+        price: currentPrice,
+        momentum,
+        market: info.market,
+      });
+      console.log(`[APEX] SIGNAL: ${ticker} RSI ${momentum.rsi.toFixed(0)} -> KJOP ${orderSize}`);
+    }
+    
+    // 3. TREND DOWN = buy opportunity
+    if (momentum.trend === 'DOWN' && balance > baseSize * currentPrice) {
+      const orderSize = Math.floor(baseSize * volatilityMultiplier);
+      signals.push({
+        ticker,
+        action: 'BUY',
+        amount: orderSize,
+        reason: `[${marketLabel}] TREND DOWN - akkumulerer`,
         price: currentPrice,
         momentum,
         market: info.market,
       });
     }
     
-    // PEAK SELLING
-    if (riseFromLow >= PEAK_THRESHOLD && pos && pos.amount > 3) {
-      const peakStrength = Math.min(3, riseFromLow / PEAK_THRESHOLD);
-      const sellSize = Math.floor(Math.min(pos.amount * 0.25, baseSize * peakStrength));
+    // ============ AGGRESSIVE SELL SIGNALS ============
+    
+    // 4. PEAK SELLING - quick profit taking
+    if (riseFromLow >= PEAK_THRESHOLD && pos && pos.amount > 2) {
+      const peakStrength = Math.min(5, riseFromLow / PEAK_THRESHOLD);
+      const sellSize = Math.floor(Math.min(pos.amount * 0.4, baseSize * peakStrength));
       
       if (sellSize > 0) {
         signals.push({
@@ -469,19 +496,19 @@ async function generateSwingSignals(
           momentum,
           market: info.market,
         });
-        console.log(`[APEX] ${marketLabel} - PEAK: ${ticker} +${(riseFromLow * 100).toFixed(2)}% -> SELG ${sellSize}`);
+        console.log(`[APEX] SIGNAL: ${ticker} PEAK +${(riseFromLow * 100).toFixed(2)}% -> SELG ${sellSize}`);
       }
     }
     
-    // RSI overbought
-    if (momentum.rsi > RSI_OVERBOUGHT && pos && pos.amount > 5) {
-      const sellSize = Math.floor(pos.amount * 0.15);
+    // 5. RSI overbought - take profits
+    if (momentum.rsi > RSI_OVERBOUGHT && pos && pos.amount > 3) {
+      const sellSize = Math.floor(pos.amount * 0.25);
       if (sellSize > 0) {
         signals.push({
           ticker,
           action: 'SELL',
           amount: sellSize,
-          reason: `[${marketLabel}] RSI OVERBOUGHT (${momentum.rsi.toFixed(0)})`,
+          reason: `[${marketLabel}] RSI HIGH (${momentum.rsi.toFixed(0)})`,
           price: currentPrice,
           momentum,
           market: info.market,
@@ -489,59 +516,76 @@ async function generateSwingSignals(
       }
     }
     
-    // PORTFOLIO BUILDING
-    if (!pos || pos.amount === 0) {
-      const buildSize = Math.floor(baseSize * 2);
-      if (balance > buildSize * currentPrice) {
-        signals.push({
-          ticker,
-          action: 'BUY',
-          amount: buildSize,
-          reason: `[${marketLabel}] Bygger mot ${info.targetVekt}%`,
-          price: currentPrice,
-          momentum,
-          market: info.market,
-        });
-      }
-    } else if (deviation < -30) {
-      const addSize = Math.floor(baseSize * 1.2);
-      if (balance > addSize * currentPrice) {
-        signals.push({
-          ticker,
-          action: 'BUY',
-          amount: addSize,
-          reason: `[${marketLabel}] Undervektet (${deviation.toFixed(0)}%)`,
-          price: currentPrice,
-          momentum,
-          market: info.market,
-        });
-      }
-    } else if (deviation > 30 && pos.amount > 10) {
-      const reduceSize = Math.floor(pos.amount * 0.1);
-      if (reduceSize > 0) {
-        signals.push({
-          ticker,
-          action: 'SELL',
-          amount: reduceSize,
-          reason: `[${marketLabel}] Overvektet (${deviation.toFixed(0)}%)`,
-          price: currentPrice,
-          momentum,
-          market: info.market,
-        });
+    // ============ ALWAYS BUILD POSITIONS ============
+    // This ensures we're always active in the market
+    
+    if (ALWAYS_BUILD_POSITION) {
+      if (!pos || pos.amount === 0) {
+        // No position - MUST buy to build
+        const buildSize = Math.floor(baseSize * 3);
+        if (balance > buildSize * currentPrice) {
+          signals.push({
+            ticker,
+            action: 'BUY',
+            amount: buildSize,
+            reason: `[${marketLabel}] BYGG ${info.targetVekt}%`,
+            price: currentPrice,
+            momentum,
+            market: info.market,
+          });
+          console.log(`[APEX] SIGNAL: ${ticker} BYGG POSISJON ${buildSize} aksjer`);
+        }
+      } else if (deviation < -10) {
+        // Underweight - add more
+        const addSize = Math.floor(baseSize * 1.5);
+        if (balance > addSize * currentPrice) {
+          signals.push({
+            ticker,
+            action: 'BUY',
+            amount: addSize,
+            reason: `[${marketLabel}] UNDERVEKT (${deviation.toFixed(0)}%)`,
+            price: currentPrice,
+            momentum,
+            market: info.market,
+          });
+        }
+      } else if (deviation > 20 && pos.amount > 5) {
+        // Overweight - reduce
+        const reduceSize = Math.floor(pos.amount * 0.15);
+        if (reduceSize > 0) {
+          signals.push({
+            ticker,
+            action: 'SELL',
+            amount: reduceSize,
+            reason: `[${marketLabel}] OVERVEKT (${deviation.toFixed(0)}%)`,
+            price: currentPrice,
+            momentum,
+            market: info.market,
+          });
+        }
       }
     }
   }
   
-  // Sort: DIP/PEAK first, then portfolio building
+  // Sort: Prioritize by signal type and potential
   signals.sort((a, b) => {
-    const aIsDipPeak = a.reason.includes('DIP') || a.reason.includes('PEAK') || a.reason.includes('RSI');
-    const bIsDipPeak = b.reason.includes('DIP') || b.reason.includes('PEAK') || b.reason.includes('RSI');
-    if (aIsDipPeak && !bIsDipPeak) return -1;
-    if (!aIsDipPeak && bIsDipPeak) return 1;
-    return 0;
+    // Priority: DIP > PEAK > RSI > TREND > BUILD
+    const getPriority = (reason: string) => {
+      if (reason.includes('DIP')) return 5;
+      if (reason.includes('PEAK')) return 4;
+      if (reason.includes('RSI')) return 3;
+      if (reason.includes('TREND')) return 2;
+      return 1;
+    };
+    return getPriority(b.reason) - getPriority(a.reason);
   });
   
-  return signals.slice(0, 8);
+  // Limit to MAX_TRADES_PER_SCAN to avoid over-trading
+  const limitedSignals = signals.slice(0, MAX_TRADES_PER_SCAN);
+  
+  console.log(`[APEX] Genererte ${signals.length} signaler, utforer ${limitedSignals.length}`);
+  
+  return limitedSignals;
 }
 
 export async function POST(request: NextRequest) {
@@ -578,20 +622,20 @@ export async function POST(request: NextRequest) {
         message: 'Markeder stengt - venter pa apningstid',
         signals: [],
         executedTrades: [],
-        report: `APEX QUANTUM v6.1 - MARKEDSOVERSIKT
+        report: `APEX QUANTUM v6.1 - ULTRA AGGRESSIV TRADER
 ${'='.repeat(50)}
 Tid: ${new Date().toLocaleString('no-NO')}
 ${marketStatus.message}
 
-Ingen ordre sendes utenfor apningstid.
+US MARKET STENGT - Venter pa apning 15:30 CET
 
-Apningstider (CET):
-- Oslo Bors: 09:00 - 17:20
-- Nasdaq/US: 15:30 - 22:00
+Strategi: 350-410% arlig avkastning
+- DIP threshold: 0.1% (kjop pa minste dip)
+- PEAK threshold: 0.2% (ta profitt raskt)  
+- Posisjon: 8% av kapital per trade
+- Max 6 trades per scan
 
-Neste handelsvindu:
-- 09:00 CET: Oslo Bors apner
-- 15:30 CET: US markeder apner
+Apningstid (CET): 15:30 - 22:00
 `,
         stats: {
           baseCapital: BASE_TRADING_CAPITAL,
