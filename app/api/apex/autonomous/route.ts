@@ -1,3 +1,5 @@
+// APEX QUANTUM v6.2 - TimesFM Hybrid AI + Extreme 10% Daily Mode
+// Last updated: 2026-04-13 20:37 CET
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
@@ -968,7 +970,7 @@ export async function POST(request: NextRequest) {
 ${'='.repeat(50)}
 Tid: ${new Date().toLocaleString('no-NO')}
 ${marketStatus.message}
-FORCE TRADING: ${FORCE_TRADING_ALWAYS ? 'AKTIV (24/7 SIM)' : 'AV'}
+FORCE TRADING: AKTIV (24/7 SIM)
 
 === PROFIT STATUS ===
 Startkapital: ${BASE_TRADING_CAPITAL.toLocaleString()} kr
@@ -978,9 +980,9 @@ Last profitt: ${totalLockedProfits.toLocaleString()} kr
 Trading-kapital: ${tradingCapital.toLocaleString()} kr
 
 === TRADING CONFIG ===
-- SCALP MODE: AKTIV (profitt ved +0.5%)
-- DCA MODE: AKTIV (kjop ved -0.3%)
-- Max trades per scan: ${MAX_TRADES_PER_SCAN}
+- SCALP MODE: AKTIV (profitt ved +0.3%)
+- DCA MODE: AKTIV (kjop ved -0.2%)
+- Max trades per scan: 15
 
 === SIGNALER (${signals.length}) ===
 `;
