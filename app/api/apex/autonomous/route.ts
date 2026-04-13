@@ -14,6 +14,9 @@ interface MarketStatus {
   message: string;
 }
 
+// FORCE TRADING MODE - Always allow trading for SIM account
+const FORCE_TRADING_ALWAYS = true;
+
 function getMarketStatus(): MarketStatus {
   // Get current time in CET/CEST (Europe/Oslo timezone)
   const now = new Date();
@@ -23,17 +26,24 @@ function getMarketStatus(): MarketStatus {
   const timeInMinutes = hours * 60 + minutes;
   
   // Nasdaq/US: 15:30 - 22:00 CET (930 - 1320 minutes)
-  const usOpen = timeInMinutes >= 930 && timeInMinutes < 1320;
+  const normalUsOpen = timeInMinutes >= 930 && timeInMinutes < 1320;
   
-  // Always return US only - Oslo Børs is not available in Saxo SIM
-  const activeMarkets: 'US'[] = usOpen ? ['US'] : [];
+  // FORCE MODE: Always open for SIM testing
+  const usOpen = FORCE_TRADING_ALWAYS || normalUsOpen;
+  
+  // Always return US as active for maximum trading
+  const activeMarkets: 'US'[] = ['US'];
   
   let message = '';
-  if (usOpen) {
-    message = `US MARKET APEN (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - Aktiv trading`;
+  if (normalUsOpen) {
+    message = `US MARKET APEN (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - EKSTREM TRADING AKTIV`;
+  } else if (FORCE_TRADING_ALWAYS) {
+    message = `FORCE MODE (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - SIM trading aktiv utenfor apningstid`;
   } else {
     message = `US MARKET STENGT (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - Apner 15:30 CET`;
   }
+  
+  console.log(`[APEX] MarketStatus: usOpen=${usOpen}, normalUsOpen=${normalUsOpen}, FORCE=${FORCE_TRADING_ALWAYS}`);
   
   return { osloOpen: false, usOpen, activeMarkets, message };
 }
@@ -792,41 +802,9 @@ export async function POST(request: NextRequest) {
     console.log(`[APEX] ========== INTRA-DAY SWING SCAN ==========`);
     console.log(`[APEX] ${marketStatus.message}`);
 
-    // If no markets are open, return early with status report
-    if (marketStatus.activeMarkets.length === 0) {
-      return NextResponse.json({
-        success: true,
-        mode: 'paper',
-        marketStatus,
-        message: 'Markeder stengt - venter pa apningstid',
-        signals: [],
-        executedTrades: [],
-        report: `APEX QUANTUM v6.2 - TIMESFM HYBRID AI TRADER
-${'='.repeat(50)}
-Tid: ${new Date().toLocaleString('no-NO')}
-${marketStatus.message}
-
-US MARKET STENGT - Venter pa apning 15:30 CET
-
-Strategi: 350-410% arlig avkastning
-AI-Hybrid: TimesFM + Apex Quantum + Momentum
-- TimesFM: 40% vekt (prisforutsigelse)
-- Momentum: 30% vekt (RSI/trend)
-- Apex: 30% vekt (portefolje)
-- Max 6 trades per scan
-
-Apningstid (CET): 15:30 - 22:00
-`,
-        stats: {
-          baseCapital: BASE_TRADING_CAPITAL,
-          marketsOpen: [],
-          totalBought: 0,
-          totalSold: 0,
-          successful: 0,
-          failed: 0,
-        },
-      });
-    }
+    // With FORCE_TRADING_ALWAYS, we never return early
+    // Markets are always "open" for SIM trading
+    console.log(`[APEX] Active markets: ${marketStatus.activeMarkets.join(', ')} | Force mode: ${FORCE_TRADING_ALWAYS}`);
 
     const [balanceData, positions] = await Promise.all([
       getBalance(accessToken, accountKey),
@@ -949,21 +927,23 @@ Apningstid (CET): 15:30 - 22:00
     
     const totalLockedProfits = lockedProfits.get(accountKey) || 0;
     
-    let report = `APEX QUANTUM v6.1 - INTRA-DAY SWING TRADER
+    let report = `APEX QUANTUM v6.2 - EKSTREM 10% DAGLIG MODUS
 ${'='.repeat(50)}
 Tid: ${new Date().toLocaleString('no-NO')}
 ${marketStatus.message}
+FORCE TRADING: ${FORCE_TRADING_ALWAYS ? 'AKTIV (24/7 SIM)' : 'AV'}
 
-=== PROFIT LOCK STATUS ===
+=== PROFIT STATUS ===
 Startkapital: ${BASE_TRADING_CAPITAL.toLocaleString()} kr
 Kontoverdi: ${actualTotalValue.toLocaleString()} kr
 Aktuell profitt: ${currentProfit >= 0 ? '+' : ''}${currentProfit.toLocaleString()} kr
 Last profitt: ${totalLockedProfits.toLocaleString()} kr
 Trading-kapital: ${tradingCapital.toLocaleString()} kr
 
-=== AKTIVE MARKEDER ===
-- Oslo Bors: IKKE TILGJENGELIG (Saxo SIM)
-${marketStatus.usOpen ? '- Nasdaq/US: APEN (15:30-22:00 CET)' : '- Nasdaq/US: STENGT'}
+=== TRADING CONFIG ===
+- SCALP MODE: AKTIV (profitt ved +0.5%)
+- DCA MODE: AKTIV (kjop ved -0.3%)
+- Max trades per scan: ${MAX_TRADES_PER_SCAN}
 
 === SIGNALER (${signals.length}) ===
 `;
