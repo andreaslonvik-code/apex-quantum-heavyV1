@@ -572,23 +572,31 @@ async function generateSwingSignals(
       }
     }
     
-    // ============ FORCE ACTIVE TRADING ============
-    // If no signals generated for this ticker yet, force a buy to stay active
+    // ============ GUARANTEED TRADE - ALWAYS TRADE WHEN MARKET IS OPEN ============
+    // Force at least one trade per ticker when market is open
     const hasSignalForTicker = signals.some(s => s.ticker === ticker);
-    if (!hasSignalForTicker && balance > baseSize * currentPrice) {
-      // Force accumulation - always be buying during market hours
-      const forceSize = Math.floor(baseSize * 0.5); // Smaller position for forced trades
-      if (forceSize > 0) {
+    
+    if (!hasSignalForTicker) {
+      // NO SIGNALS YET - FORCE A BUY
+      // This ensures we ALWAYS trade when market is open
+      const forceSize = Math.max(5, Math.floor(baseSize * 0.8));
+      const forceCost = forceSize * currentPrice;
+      
+      console.log(`[APEX] INGEN SIGNAL for ${ticker} - tvinger kjop: ${forceSize} @ ${currentPrice.toFixed(2)} = ${forceCost.toFixed(0)} kr (saldo: ${balance.toFixed(0)} kr)`);
+      
+      if (forceCost < balance * 0.5) { // Use up to 50% of remaining balance
         signals.push({
           ticker,
           action: 'BUY',
           amount: forceSize,
-          reason: `[${marketLabel}] AKTIV AKKUMULERING`,
+          reason: `[${marketLabel}] GARANTERT KJOP - aktiv trading`,
           price: currentPrice,
           momentum,
           market: info.market,
         });
-        console.log(`[APEX] FORCED: ${ticker} AKTIV AKKUMULERING ${forceSize} aksjer @ ${currentPrice.toFixed(2)}`);
+        console.log(`[APEX] GARANTERT SIGNAL: KJOP ${forceSize} ${ticker} @ ${currentPrice.toFixed(2)}`);
+      } else {
+        console.log(`[APEX] Skip garantert kjop ${ticker} - for dyrt (${forceCost.toFixed(0)} > ${(balance * 0.5).toFixed(0)})`);
       }
     }
   }
@@ -688,9 +696,15 @@ Apningstid (CET): 15:30 - 22:00
     console.log(`[APEX] Kontoverdi: ${actualTotalValue.toLocaleString()} kr | Profitt: ${currentProfit.toLocaleString()} kr`);
 
     // Generate signals only for OPEN markets
+    console.log(`[APEX] Kaller generateSwingSignals med balance=${tradingCapital}, total=${BASE_TRADING_CAPITAL}`);
     const signals = await generateSwingSignals(accessToken, positions, tradingCapital, BASE_TRADING_CAPITAL, marketStatus);
     
+    console.log(`[APEX] ===== SIGNAL RESULTAT =====`);
     console.log(`[APEX] Genererte ${signals.length} signaler for: ${marketStatus.activeMarkets.join(', ')}`);
+    signals.forEach((s, i) => {
+      console.log(`[APEX] Signal ${i+1}: ${s.action} ${s.amount} ${s.ticker} @ ${s.price.toFixed(2)} - ${s.reason}`);
+    });
+    console.log(`[APEX] ===== STARTER UTFORELSE =====`);
 
     // Execute trades
     const executedTrades: Array<{
