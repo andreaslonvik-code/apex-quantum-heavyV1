@@ -835,6 +835,7 @@ export async function POST(request: NextRequest) {
   
   console.log(`[APEX] Credentials OK - proceeding with trading`);
 
+  try {
     // Get market status
     const marketStatus = getMarketStatus();
     
