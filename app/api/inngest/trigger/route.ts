@@ -32,6 +32,28 @@ export async function GET() {
     grokRateLimited = false;
   }
   
+  // Check token status from env
+  const envToken = process.env.SAXO_ACCESS_TOKEN;
+  const envAccountKey = process.env.SAXO_ACCOUNT_KEY;
+  const tokenPreview = envToken ? `${envToken.substring(0, 20)}...` : null;
+  
+  let tokenStatus: 'VALID' | 'MISSING' | 'CHECKING' = 'CHECKING';
+  let tokenValidUntil: string | null = null;
+  
+  if (!envToken) {
+    tokenStatus = 'MISSING';
+  } else {
+    // Quick token validation
+    try {
+      const res = await fetch(`${SAXO_SIM_BASE}/port/v1/accounts/me`, {
+        headers: { 'Authorization': `Bearer ${envToken}` }
+      });
+      tokenStatus = res.ok ? 'VALID' : 'MISSING';
+    } catch {
+      tokenStatus = 'MISSING';
+    }
+  }
+  
   return NextResponse.json({
     lastTickTime: lastTickTime ? new Date(lastTickTime).toISOString() : null,
     tickCount,
@@ -40,20 +62,58 @@ export async function GET() {
     grokRateLimited,
     secondsSinceLastTick,
     grokRateLimitExpiresIn: grokRateLimited ? Math.floor((grokRateLimitUntil - now) / 1000) : 0,
+    // Token info
+    tokenStatus,
+    tokenPreview,
+    hasEnvToken: !!envToken,
+    hasEnvAccountKey: !!envAccountKey,
   });
 }
 
 export async function POST() {
+  // Force reload token from env vars
+  const envToken = process.env.SAXO_ACCESS_TOKEN;
+  const envAccountKey = process.env.SAXO_ACCOUNT_KEY;
+  
+  // Fallback to cookies
   const cookieStore = await cookies();
-  const accessToken = cookieStore.get('saxo_access_token')?.value;
-  const accountKey = cookieStore.get('saxo_account_key')?.value;
+  const accessToken = envToken || cookieStore.get('apex_saxo_token')?.value;
+  const accountKey = envAccountKey || cookieStore.get('apex_saxo_account_key')?.value;
+  
+  const tokenSource = envToken ? 'ENV' : 'COOKIE';
+  const tokenPreview = accessToken ? `${accessToken.substring(0, 20)}...` : 'NONE';
+  
+  console.log(`[APEX TICK] Token source: ${tokenSource} | Preview: ${tokenPreview}`);
+  console.log(`[APEX TICK] AccountKey: ${accountKey ? 'SET' : 'MISSING'}`);
   
   if (!accessToken || !accountKey) {
     return NextResponse.json({
       success: false,
-      error: 'Not authenticated with Saxo',
+      error: 'Token not loaded from Vercel env - check Environment Variables',
+      tokenSource,
+      hasToken: !!accessToken,
+      hasAccountKey: !!accountKey,
     }, { status: 401 });
   }
+  
+  // Validate token before proceeding
+  console.log(`[APEX TICK] Validating token...`);
+  const validateRes = await fetch(`${SAXO_SIM_BASE}/port/v1/accounts/me`, {
+    headers: { 'Authorization': `Bearer ${accessToken}` }
+  });
+  
+  if (!validateRes.ok) {
+    const error = await validateRes.text();
+    console.log(`[APEX TICK] Token invalid (${validateRes.status}): ${error.substring(0, 100)}`);
+    return NextResponse.json({
+      success: false,
+      error: 'Token expired - update SAXO_ACCESS_TOKEN in Vercel Environment Variables',
+      tokenStatus: 'EXPIRED',
+      httpStatus: validateRes.status,
+    }, { status: 401 });
+  }
+  
+  console.log(`[APEX TICK] Token validated successfully`);
   
   // Check Grok rate limit
   if (grokRateLimited && Date.now() < grokRateLimitUntil) {

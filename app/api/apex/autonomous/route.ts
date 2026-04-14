@@ -836,23 +836,65 @@ export async function POST(request: NextRequest) {
   console.log(`[APEX] FORCE_TRADING_ALWAYS: ${FORCE_TRADING_ALWAYS}`);
   console.log(`[APEX] ====================================================`);
   
-  // Get credentials from cookies
+  // ============ TOKEN LOADING: ENV VARS FIRST, THEN COOKIES ============
+  // Priority: 1) Vercel env vars (for 24h tokens) 2) Cookies (for OAuth flow)
   const cookieStore = await cookies();
-  const accessToken = cookieStore.get('apex_saxo_token')?.value;
-  const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
-  const clientKey = cookieStore.get('apex_saxo_client_key')?.value;
-
-  console.log(`[APEX] Credentials check: token=${!!accessToken}, accountKey=${!!accountKey}, clientKey=${!!clientKey}`);
-
-  if (!accessToken || !accountKey) {
-    console.log(`[APEX] ERROR: Missing credentials - cannot trade`);
-    return NextResponse.json(
-      { error: 'Ikke tilkoblet Saxo Bank. Vennligst koble til forst.' },
-      { status: 401 }
-    );
+  
+  // Try env vars first (Vercel dashboard tokens)
+  let accessToken = process.env.SAXO_ACCESS_TOKEN;
+  let accountKey = process.env.SAXO_ACCOUNT_KEY || cookieStore.get('apex_saxo_account_key')?.value;
+  let clientKey = process.env.SAXO_CLIENT_KEY || cookieStore.get('apex_saxo_client_key')?.value;
+  let tokenSource = 'ENV';
+  
+  // Fallback to cookies if env vars not set
+  if (!accessToken) {
+    accessToken = cookieStore.get('apex_saxo_token')?.value;
+    tokenSource = 'COOKIE';
   }
   
-  console.log(`[APEX] Credentials OK - proceeding with trading`);
+  // Log token status with first 20 chars for debugging
+  const tokenPreview = accessToken ? `${accessToken.substring(0, 20)}...` : 'MISSING';
+  console.log(`[APEX TOKEN] Source: ${tokenSource} | Token: ${tokenPreview}`);
+  console.log(`[APEX TOKEN] AccountKey: ${accountKey ? 'SET' : 'MISSING'} | ClientKey: ${clientKey ? 'SET' : 'MISSING'}`);
+  
+  // Validate token before proceeding
+  if (!accessToken) {
+    console.log(`[APEX] ERROR: No token found in ENV or COOKIE`);
+    return NextResponse.json({
+      error: 'Token not loaded - check Vercel Environment Variables',
+      tokenStatus: 'MISSING',
+      source: tokenSource,
+    }, { status: 401 });
+  }
+  
+  if (!accountKey) {
+    console.log(`[APEX] ERROR: Missing accountKey`);
+    return NextResponse.json({
+      error: 'AccountKey not found - check Vercel Environment Variables',
+      tokenStatus: 'MISSING_ACCOUNT',
+    }, { status: 401 });
+  }
+  
+  // Validate token by making a lightweight API call
+  console.log(`[APEX] Validating token with Saxo API...`);
+  const validateRes = await fetch(`${SAXO_API_BASE}/port/v1/accounts/me`, {
+    headers: { 'Authorization': `Bearer ${accessToken}` }
+  });
+  
+  if (!validateRes.ok) {
+    const errorText = await validateRes.text();
+    console.log(`[APEX] TOKEN INVALID (${validateRes.status}): ${errorText.substring(0, 200)}`);
+    return NextResponse.json({
+      error: validateRes.status === 401 
+        ? 'Token expired - refresh token in Vercel Environment Variables' 
+        : `Token validation failed: ${validateRes.status}`,
+      tokenStatus: 'INVALID',
+      httpStatus: validateRes.status,
+    }, { status: 401 });
+  }
+  
+  console.log(`[APEX] Token validated successfully - proceeding with trading`);
+  console.log(`[APEX] Credentials OK: token=${tokenSource}, accountKey=${!!accountKey}, clientKey=${!!clientKey}`);
 
   try {
     const startTime = Date.now();

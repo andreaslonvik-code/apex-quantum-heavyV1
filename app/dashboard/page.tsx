@@ -130,6 +130,9 @@ export default function Dashboard() {
     lastError: string | null;
     grokRateLimited: boolean;
     secondsSinceLastTick: number;
+    tokenStatus?: 'VALID' | 'MISSING' | 'EXPIRED' | 'CHECKING';
+    tokenPreview?: string | null;
+    hasEnvToken?: boolean;
   }>({
     lastTickTime: null,
     tickCount: 0,
@@ -137,6 +140,9 @@ export default function Dashboard() {
     lastError: null,
     grokRateLimited: false,
     secondsSinceLastTick: -1,
+    tokenStatus: 'CHECKING',
+    tokenPreview: null,
+    hasEnvToken: false,
   });
   const [isTriggering, setIsTriggering] = useState(false);
   
@@ -807,13 +813,44 @@ const startTrading = useCallback(() => {
               <div className="text-sm text-muted-foreground">
                 Totalt: {tickStatus.tickCount} ticks
               </div>
+              
+              {/* Token Status */}
+              <div className="flex items-center gap-2">
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                  tickStatus.tokenStatus === 'VALID' 
+                    ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : tickStatus.tokenStatus === 'MISSING' || tickStatus.tokenStatus === 'EXPIRED'
+                    ? 'bg-red-500/20 text-red-400 border border-red-500/30'
+                    : 'bg-gray-500/20 text-gray-400 border border-gray-500/30'
+                }`}>
+                  Token: {tickStatus.tokenStatus || 'CHECKING'}
+                </span>
+                {tickStatus.tokenPreview && (
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {tickStatus.tokenPreview}
+                  </span>
+                )}
+              </div>
             </div>
             
-            {tickStatus.lastError && (
-              <div className="text-xs text-red-400 max-w-md truncate">
-                {tickStatus.lastError}
-              </div>
-            )}
+            {/* Error/Warning Messages */}
+            <div className="flex flex-col items-end gap-1">
+              {tickStatus.tokenStatus === 'MISSING' && (
+                <div className="text-xs text-red-400 px-2 py-1 bg-red-500/10 rounded border border-red-500/30">
+                  Token not loaded - check Vercel Environment Variables
+                </div>
+              )}
+              {tickStatus.tokenStatus === 'EXPIRED' && (
+                <div className="text-xs text-orange-400 px-2 py-1 bg-orange-500/10 rounded border border-orange-500/30">
+                  Token expired - click Manual Tick to retry
+                </div>
+              )}
+              {tickStatus.lastError && (
+                <div className="text-xs text-red-400 max-w-md truncate">
+                  {tickStatus.lastError}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Withdraw Result Message */}
