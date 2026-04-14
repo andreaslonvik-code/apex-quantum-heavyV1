@@ -146,6 +146,18 @@ export default function Dashboard() {
   });
   const [isTriggering, setIsTriggering] = useState(false);
   
+  // Debug/diagnostic state
+  const [debugInfo, setDebugInfo] = useState<{
+    tokenStatus: string;
+    tokenSource: string;
+    tokenPreview: string;
+    lastApiError?: string;
+    lastApiUrl?: string;
+    lastApiStatus?: number;
+    accountKeyPresent: boolean;
+  } | null>(null);
+  const [showDebug, setShowDebug] = useState(false);
+  
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const performanceIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isRunningRef = useRef(false);
@@ -287,11 +299,57 @@ export default function Dashboard() {
     }
   };
 
+  // Fetch debug/diagnostic info
+  const fetchDebugInfo = async () => {
+    try {
+      const res = await fetch('/api/apex/debug', { credentials: 'include' });
+      const text = await res.text();
+      try {
+        const data = JSON.parse(text);
+        setDebugInfo({
+          tokenStatus: data.token?.status || 'UNKNOWN',
+          tokenSource: data.token?.source || 'NONE',
+          tokenPreview: data.token?.preview || 'N/A',
+          lastApiError: data.token?.testError,
+          accountKeyPresent: data.accountKey?.present || false,
+        });
+      } catch {
+        setDebugInfo({
+          tokenStatus: 'PARSE_ERROR',
+          tokenSource: 'UNKNOWN',
+          tokenPreview: 'N/A',
+          lastApiError: `Debug API returned non-JSON: ${text.substring(0, 200)}`,
+          accountKeyPresent: false,
+        });
+      }
+    } catch (e) {
+      setDebugInfo({
+        tokenStatus: 'NETWORK_ERROR',
+        tokenSource: 'UNKNOWN',
+        tokenPreview: 'N/A',
+        lastApiError: `Network error: ${e}`,
+        accountKeyPresent: false,
+      });
+    }
+  };
+
   const checkConnection = async () => {
     setIsLoading(true);
+    // Also fetch debug info
+    fetchDebugInfo();
     try {
       const res = await fetch('/api/apex/connect-saxo', { method: 'GET', credentials: 'include' });
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        console.error('[v0] connect-saxo returned non-JSON:', text.substring(0, 200));
+        setError(`API returned HTML instead of JSON: ${text.substring(0, 100)}`);
+        setIsConnected(false);
+        setIsLoading(false);
+        return;
+      }
       
       if (data.connected) {
         setIsConnected(true);
@@ -874,6 +932,54 @@ const startTrading = useCallback(() => {
               {error}
             </div>
           )}
+
+          {/* Debug Panel - Collapsible */}
+          <div className="mb-4">
+            <button
+              onClick={() => { setShowDebug(!showDebug); if (!showDebug) fetchDebugInfo(); }}
+              className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1"
+            >
+              <svg className={`w-3 h-3 transition-transform ${showDebug ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+              Debug Info
+            </button>
+            
+            {showDebug && debugInfo && (
+              <div className="mt-2 p-4 bg-muted/20 border border-border rounded-lg text-xs font-mono">
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <span className="text-muted-foreground">Token Status:</span>{' '}
+                    <span className={
+                      debugInfo.tokenStatus === 'VALID' ? 'text-emerald-400' :
+                      debugInfo.tokenStatus === 'EXPIRED' ? 'text-orange-400' :
+                      'text-red-400'
+                    }>{debugInfo.tokenStatus}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Source:</span>{' '}
+                    <span className="text-foreground">{debugInfo.tokenSource}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">Token Preview:</span>{' '}
+                    <span className="text-foreground">{debugInfo.tokenPreview}</span>
+                  </div>
+                  <div>
+                    <span className="text-muted-foreground">AccountKey:</span>{' '}
+                    <span className={debugInfo.accountKeyPresent ? 'text-emerald-400' : 'text-red-400'}>
+                      {debugInfo.accountKeyPresent ? 'SET' : 'MISSING'}
+                    </span>
+                  </div>
+                </div>
+                {debugInfo.lastApiError && (
+                  <div className="mt-2 p-2 bg-red-500/10 rounded border border-red-500/30 text-red-400">
+                    <div className="font-semibold mb-1">Last API Error:</div>
+                    <div className="whitespace-pre-wrap break-all">{debugInfo.lastApiError}</div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
 
           {/* Stats Grid */}
           <div className="grid grid-cols-2 md:grid-cols-6 gap-4">

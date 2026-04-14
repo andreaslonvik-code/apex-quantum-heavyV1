@@ -182,6 +182,183 @@ async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+// ============ LAST API CALL TRACKING (FOR DEBUG) ============
+interface LastApiCall {
+  url: string;
+  method: string;
+  status: number;
+  statusText: string;
+  responseType: 'json' | 'html' | 'text' | 'error';
+  rawBody: string;
+  parsedData?: unknown;
+  error?: string;
+  timestamp: string;
+}
+
+let lastApiCall: LastApiCall | null = null;
+let lastFailedApiCall: LastApiCall | null = null;
+
+export function getLastApiCall(): LastApiCall | null {
+  return lastApiCall;
+}
+
+export function getLastFailedApiCall(): LastApiCall | null {
+  return lastFailedApiCall;
+}
+
+// ============ BULLETPROOF FETCH ============
+// ALWAYS get text first, then try to parse as JSON
+// This prevents "Unexpected token '<'" errors when API returns HTML
+export interface SafeFetchResult<T = unknown> {
+  ok: boolean;
+  status: number;
+  statusText: string;
+  data?: T;
+  rawBody: string;
+  error?: string;
+  isHtml: boolean;
+}
+
+export async function safeFetch<T = unknown>(
+  url: string,
+  options: RequestInit = {}
+): Promise<SafeFetchResult<T>> {
+  const method = options.method || 'GET';
+  const timestamp = new Date().toISOString();
+  
+  try {
+    const res = await fetch(url, options);
+    
+    // ALWAYS get response as text first
+    const rawBody = await res.text();
+    
+    // Check if response is HTML (starts with < or contains <!DOCTYPE)
+    const isHtml = rawBody.trim().startsWith('<') || rawBody.includes('<!DOCTYPE');
+    
+    // Track this API call
+    const apiCall: LastApiCall = {
+      url,
+      method,
+      status: res.status,
+      statusText: res.statusText,
+      responseType: isHtml ? 'html' : 'text',
+      rawBody: rawBody.substring(0, 2000), // Limit stored size
+      timestamp,
+    };
+    
+    lastApiCall = apiCall;
+    
+    if (!res.ok) {
+      const errorMsg = isHtml 
+        ? `Saxo returned HTML (${res.status}): ${rawBody.substring(0, 200)}`
+        : `Saxo error (${res.status}): ${rawBody.substring(0, 500)}`;
+      
+      apiCall.error = errorMsg;
+      lastFailedApiCall = apiCall;
+      
+      console.error(`[SAXO FETCH] FAILED ${method} ${url}`);
+      console.error(`[SAXO FETCH] Status: ${res.status} ${res.statusText}`);
+      console.error(`[SAXO FETCH] Body (first 500 chars): ${rawBody.substring(0, 500)}`);
+      
+      return {
+        ok: false,
+        status: res.status,
+        statusText: res.statusText,
+        rawBody,
+        error: errorMsg,
+        isHtml,
+      };
+    }
+    
+    // Try to parse as JSON
+    if (!isHtml && rawBody.trim()) {
+      try {
+        const data = JSON.parse(rawBody) as T;
+        apiCall.responseType = 'json';
+        apiCall.parsedData = data;
+        return {
+          ok: true,
+          status: res.status,
+          statusText: res.statusText,
+          data,
+          rawBody,
+          isHtml: false,
+        };
+      } catch (parseError) {
+        const errorMsg = `JSON parse failed: ${parseError}. Raw: ${rawBody.substring(0, 200)}`;
+        apiCall.error = errorMsg;
+        apiCall.responseType = 'text';
+        lastFailedApiCall = apiCall;
+        
+        console.error(`[SAXO FETCH] JSON PARSE ERROR for ${url}`);
+        console.error(`[SAXO FETCH] Raw body: ${rawBody.substring(0, 500)}`);
+        
+        return {
+          ok: false,
+          status: res.status,
+          statusText: res.statusText,
+          rawBody,
+          error: errorMsg,
+          isHtml: false,
+        };
+      }
+    }
+    
+    // Empty or HTML response
+    if (isHtml) {
+      const errorMsg = `Received HTML instead of JSON. Status: ${res.status}. Body: ${rawBody.substring(0, 200)}`;
+      apiCall.error = errorMsg;
+      lastFailedApiCall = apiCall;
+      
+      console.error(`[SAXO FETCH] RECEIVED HTML for ${url}`);
+      console.error(`[SAXO FETCH] Body: ${rawBody.substring(0, 500)}`);
+      
+      return {
+        ok: false,
+        status: res.status,
+        statusText: res.statusText,
+        rawBody,
+        error: errorMsg,
+        isHtml: true,
+      };
+    }
+    
+    return {
+      ok: true,
+      status: res.status,
+      statusText: res.statusText,
+      rawBody,
+      isHtml: false,
+    };
+    
+  } catch (networkError) {
+    const errorMsg = `Network error: ${networkError}`;
+    const apiCall: LastApiCall = {
+      url,
+      method,
+      status: 0,
+      statusText: 'Network Error',
+      responseType: 'error',
+      rawBody: '',
+      error: errorMsg,
+      timestamp,
+    };
+    lastApiCall = apiCall;
+    lastFailedApiCall = apiCall;
+    
+    console.error(`[SAXO FETCH] NETWORK ERROR for ${url}: ${networkError}`);
+    
+    return {
+      ok: false,
+      status: 0,
+      statusText: 'Network Error',
+      rawBody: '',
+      error: errorMsg,
+      isHtml: false,
+    };
+  }
+}
+
 // ============ MAIN SAXO CLIENT ============
 export class SaxoClient {
   private accessToken: string;

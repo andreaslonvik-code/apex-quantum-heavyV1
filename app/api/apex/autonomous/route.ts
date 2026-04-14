@@ -205,6 +205,47 @@ const BASE_TRADING_CAPITAL = 1000000; // 1 million NOK
 const lockedProfits: Map<string, number> = new Map();
 const purchasePrices: Map<string, Map<string, number>> = new Map();
 
+// ============ BULLETPROOF FETCH HELPER ============
+// ALWAYS get text first, then try to parse JSON
+// Prevents "Unexpected token '<'" when API returns HTML
+async function safeFetchJson<T = unknown>(
+  url: string,
+  options: RequestInit = {}
+): Promise<{ ok: boolean; data?: T; error?: string; rawBody: string; status: number }> {
+  try {
+    const res = await fetch(url, options);
+    const rawBody = await res.text();
+    
+    // Check if HTML response
+    const isHtml = rawBody.trim().startsWith('<') || rawBody.includes('<!DOCTYPE');
+    
+    if (!res.ok) {
+      const errorMsg = isHtml 
+        ? `Saxo returned HTML (${res.status}): ${rawBody.substring(0, 200)}`
+        : `Saxo error (${res.status}): ${rawBody.substring(0, 300)}`;
+      console.error(`[APEX FETCH] FAILED ${url}: ${errorMsg}`);
+      return { ok: false, error: errorMsg, rawBody, status: res.status };
+    }
+    
+    if (isHtml) {
+      console.error(`[APEX FETCH] Received HTML instead of JSON for ${url}`);
+      return { ok: false, error: `Received HTML: ${rawBody.substring(0, 200)}`, rawBody, status: res.status };
+    }
+    
+    // Try to parse JSON
+    try {
+      const data = JSON.parse(rawBody) as T;
+      return { ok: true, data, rawBody, status: res.status };
+    } catch {
+      console.error(`[APEX FETCH] JSON parse failed for ${url}: ${rawBody.substring(0, 200)}`);
+      return { ok: false, error: `JSON parse failed: ${rawBody.substring(0, 200)}`, rawBody, status: res.status };
+    }
+  } catch (e) {
+    console.error(`[APEX FETCH] Network error for ${url}: ${e}`);
+    return { ok: false, error: `Network error: ${e}`, rawBody: '', status: 0 };
+  }
+}
+
 // Search for instrument UIC dynamically
 async function findInstrument(accessToken: string, ticker: string, saxoSymbol: string, preferredAssetType: string = 'Stock'): Promise<{ uic: number; assetType: string } | null> {
   const cacheKey = `${ticker}_${preferredAssetType}`;
@@ -230,25 +271,22 @@ async function findInstrument(accessToken: string, ticker: string, saxoSymbol: s
     
     for (const assetType of assetTypesToTry) {
       for (const keyword of searches) {
-        const res = await fetch(
+        const result = await safeFetchJson<{ Data?: Array<{ Identifier: number; AssetType?: string; Symbol?: string }> }>(
           `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${encodeURIComponent(keyword)}&AssetTypes=${assetType}&$top=10`,
           { headers: { 'Authorization': `Bearer ${accessToken}` } }
         );
         
-        if (res.ok) {
-          const data = await res.json();
-          if (data.Data && data.Data.length > 0) {
-            // Try to find exact match
-            const match = data.Data.find((i: any) => 
-              i.Symbol?.toUpperCase() === ticker ||
-              i.Symbol?.toUpperCase().startsWith(ticker + ':')
-            ) || data.Data[0];
-            
-            const result = { uic: match.Identifier, assetType: match.AssetType || assetType };
-            uicCache.set(cacheKey, result);
-            console.log(`[APEX] Found ${ticker}: UIC=${result.uic}, AssetType=${result.assetType}, Symbol=${match.Symbol}`);
-            return result;
-          }
+        if (result.ok && result.data?.Data && result.data.Data.length > 0) {
+          // Try to find exact match
+          const match = result.data.Data.find((i) => 
+            i.Symbol?.toUpperCase() === ticker ||
+            i.Symbol?.toUpperCase().startsWith(ticker + ':')
+          ) || result.data.Data[0];
+          
+          const found = { uic: match.Identifier, assetType: match.AssetType || assetType };
+          uicCache.set(cacheKey, found);
+          console.log(`[APEX] Found ${ticker}: UIC=${found.uic}, AssetType=${found.assetType}, Symbol=${match.Symbol}`);
+          return found;
         }
       }
     }
@@ -263,20 +301,21 @@ async function findInstrument(accessToken: string, ticker: string, saxoSymbol: s
 
 // Get current price with bid/ask spread
 async function getPrice(accessToken: string, uic: number, assetType: string): Promise<{ bid: number; ask: number; mid: number; last: number }> {
-  try {
-    const res = await fetch(
-      `${SAXO_API_BASE}/trade/v1/infoprices?Uic=${uic}&AssetType=${assetType}&FieldGroups=Quote,PriceInfo`,
-      { headers: { 'Authorization': `Bearer ${accessToken}` } }
-    );
-    if (res.ok) {
-      const data = await res.json();
-      const bid = data.Quote?.Bid || data.Quote?.Last || 100;
-      const ask = data.Quote?.Ask || data.Quote?.Last || 100;
-      const mid = (bid + ask) / 2;
-      const last = data.Quote?.Last || data.PriceInfo?.LastTraded || mid;
-      return { bid, ask, mid, last };
-    }
-  } catch {}
+  const result = await safeFetchJson<{ Quote?: { Bid?: number; Ask?: number; Last?: number }; PriceInfo?: { LastTraded?: number } }>(
+    `${SAXO_API_BASE}/trade/v1/infoprices?Uic=${uic}&AssetType=${assetType}&FieldGroups=Quote,PriceInfo`,
+    { headers: { 'Authorization': `Bearer ${accessToken}` } }
+  );
+  
+  if (result.ok && result.data) {
+    const data = result.data;
+    const bid = data.Quote?.Bid || data.Quote?.Last || 100;
+    const ask = data.Quote?.Ask || data.Quote?.Last || 100;
+    const mid = (bid + ask) / 2;
+    const last = data.Quote?.Last || data.PriceInfo?.LastTraded || mid;
+    return { bid, ask, mid, last };
+  }
+  
+  console.log(`[APEX] getPrice failed for UIC ${uic}: ${result.error}`);
   return { bid: 100, ask: 100, mid: 100, last: 100 };
 }
 
@@ -880,21 +919,23 @@ export async function POST(request: NextRequest) {
     }, { status: 401 });
   }
   
-  // Validate token by making a lightweight API call
+  // Validate token by making a lightweight API call using safeFetch
   console.log(`[APEX] Validating token with Saxo API...`);
-  const validateRes = await fetch(`${SAXO_API_BASE}/port/v1/accounts/me`, {
-    headers: { 'Authorization': `Bearer ${accessToken}` }
-  });
+  const validateResult = await safeFetchJson<{ AccountKey?: string }>(
+    `${SAXO_API_BASE}/port/v1/accounts/me`,
+    { headers: { 'Authorization': `Bearer ${accessToken}` } }
+  );
   
-  if (!validateRes.ok) {
-    const errorText = await validateRes.text();
-    console.log(`[APEX] TOKEN INVALID (${validateRes.status}): ${errorText.substring(0, 200)}`);
+  if (!validateResult.ok) {
+    console.log(`[APEX] TOKEN INVALID: ${validateResult.error}`);
+    console.log(`[APEX] Raw response: ${validateResult.rawBody.substring(0, 300)}`);
     return NextResponse.json({
-      error: validateRes.status === 401 
-        ? 'Token expired - refresh token in Vercel Environment Variables' 
-        : `Token validation failed: ${validateRes.status}`,
+      error: validateResult.status === 401 
+        ? 'Token expired - refresh SAXO_ACCESS_TOKEN in Vercel Environment Variables' 
+        : `Token validation failed: ${validateResult.error}`,
       tokenStatus: 'INVALID',
-      httpStatus: validateRes.status,
+      httpStatus: validateResult.status,
+      rawResponse: validateResult.rawBody.substring(0, 500),
     }, { status: 401 });
   }
   
