@@ -2,7 +2,6 @@
 // Allows manual triggering of trading tick for testing and emergency use
 
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
 
 const SAXO_SIM_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
@@ -71,12 +70,11 @@ export async function GET() {
 }
 
 export async function POST() {
-  // Token from Vercel env, AccountKey from cookies (personal per customer)
+  // Token from Vercel env (24-hour developer token)
   const envToken = process.env.SAXO_ACCESS_TOKEN;
-  const cookieStore = await cookies();
   
-  // Token: ENV first, then cookie fallback
-  const accessToken = envToken || cookieStore.get('apex_saxo_token')?.value;
+  // Use env token directly - accountKey will be fetched from API
+  const accessToken = envToken;
   const tokenSource = envToken ? 'ENV' : 'COOKIE';
   const tokenPreview = accessToken ? `${accessToken.substring(0, 20)}...` : 'NONE';
   
