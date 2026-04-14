@@ -370,6 +370,8 @@ async function placeMarketOrder(
     const actionText = buySell === 'Buy' ? 'kjoper pa dip' : 'tar profitt pa peak';
     console.log(`[APEX] ${marketName} - ${actionText}: ${buySell === 'Buy' ? '+' : '-'}${amount} ${saxoSymbol} (UIC=${instrument.uic}, Type=${actualAssetType})`);
 
+    console.log(`[APEX] Sender til Saxo: ${JSON.stringify(body)}`);
+    
     const res = await fetch(`${SAXO_API_BASE}/trade/v2/orders`, {
       method: 'POST',
       headers: {
@@ -382,12 +384,29 @@ async function placeMarketOrder(
     const responseText = await res.text();
 
     if (!res.ok) {
-      console.log(`[APEX] <<< FEILET (${res.status}): ${responseText.substring(0, 200)}`);
-      return { success: false, error: responseText, uic: instrument.uic };
+      console.log(`[APEX] <<< ORDRE FEILET (${res.status}): ${responseText}`);
+      
+      // Parse error for better messaging
+      let errorMsg = responseText;
+      try {
+        const errorData = JSON.parse(responseText);
+        if (errorData.ErrorInfo) {
+          errorMsg = `${errorData.ErrorInfo.ErrorCode}: ${errorData.ErrorInfo.Message}`;
+        } else if (errorData.Message) {
+          errorMsg = errorData.Message;
+        }
+      } catch {}
+      
+      // If market is closed, log clearly
+      if (responseText.includes('MarketClosed') || responseText.includes('market is closed')) {
+        console.log(`[APEX] MARKET STENGT - ordre kan ikke utfores na`);
+      }
+      
+      return { success: false, error: errorMsg, uic: instrument.uic };
     }
 
     const data = JSON.parse(responseText);
-    console.log(`[APEX] <<< SUKSESS OrderId: ${data.OrderId}`);
+    console.log(`[APEX] <<< ORDRE SUKSESS! OrderId: ${data.OrderId}`);
     return { success: true, orderId: data.OrderId, uic: instrument.uic };
   } catch (e) {
     console.log(`[APEX] <<< ERROR: ${e}`);
@@ -894,7 +913,14 @@ export async function POST(request: NextRequest) {
     console.log(`[APEX] Tilgjengelig kontant: ${actualCash.toFixed(0)} kr`);
     
     // ALWAYS check for profitable positions to sell when cash is low
-    console.log(`[APEX] Sjekker posisjoner for auto-salg. Cash: ${actualCash.toFixed(0)} kr, Posisjoner: ${positions.size}`);
+    console.log(`[APEX] ========== AUTO-SALG SJEKK ==========`);
+    console.log(`[APEX] Cash: ${actualCash.toFixed(0)} kr, Terskel: 50000 kr`);
+    console.log(`[APEX] Antall posisjoner: ${positions.size}`);
+    
+    // Log all positions
+    for (const [ticker, pos] of positions) {
+      console.log(`[APEX] Posisjon: ${ticker} = ${pos.amount} aksjer @ ${pos.avgPrice.toFixed(2)} avg`);
+    }
     
     if (actualCash < 50000) { // Increased threshold from 10000 to 50000
       console.log(`[APEX] LAV KONTANT (${actualCash.toFixed(0)} kr) - Starter auto-salg`);
