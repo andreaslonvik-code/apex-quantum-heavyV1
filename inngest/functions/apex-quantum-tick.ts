@@ -405,12 +405,14 @@ export const apexQuantumTick = inngest.createFunction(
     // Get credentials from environment
     const accessToken = process.env.APEX_SAXO_TOKEN;
     const accountKey = process.env.APEX_SAXO_ACCOUNT_KEY;
-    const clientKey = process.env.APEX_SAXO_CLIENT_KEY || accountKey;
     
     if (!accessToken || !accountKey) {
       console.log('[APEX-INNGEST] Missing credentials');
       return { error: 'Missing APEX_SAXO_TOKEN or APEX_SAXO_ACCOUNT_KEY' };
     }
+    
+    // clientKey is now guaranteed string since accountKey is validated above
+    const clientKey = process.env.APEX_SAXO_CLIENT_KEY || accountKey;
     
     // Start auto-purge
     startAutoPurge(CONFIG.PURGE_INTERVAL_SECONDS * 1000);
