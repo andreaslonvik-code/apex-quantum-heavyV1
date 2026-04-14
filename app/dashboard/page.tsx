@@ -122,6 +122,24 @@ export default function Dashboard() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisError, setAnalysisError] = useState<string | null>(null);
   
+  // Inngest tick status
+  const [tickStatus, setTickStatus] = useState<{
+    lastTickTime: string | null;
+    tickCount: number;
+    status: 'RUNNING' | 'PAUSED' | 'RATE_LIMITED' | 'ERROR';
+    lastError: string | null;
+    grokRateLimited: boolean;
+    secondsSinceLastTick: number;
+  }>({
+    lastTickTime: null,
+    tickCount: 0,
+    status: 'PAUSED',
+    lastError: null,
+    grokRateLimited: false,
+    secondsSinceLastTick: -1,
+  });
+  const [isTriggering, setIsTriggering] = useState(false);
+  
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const performanceIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isRunningRef = useRef(false);
@@ -164,6 +182,8 @@ export default function Dashboard() {
           } : prev);
         }
       }
+      // Also fetch tick status
+      fetchTickStatus();
     } catch {}
   };
 
@@ -220,6 +240,44 @@ export default function Dashboard() {
       setAnalysisError('Kunne ikke generere porteføljeanalyse');
     } finally {
       setIsAnalyzing(false);
+    }
+  };
+
+  // Fetch Inngest tick status
+  const fetchTickStatus = async () => {
+    try {
+      const res = await fetch('/api/inngest/trigger', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        setTickStatus(data);
+      }
+    } catch {}
+  };
+
+  // Manual trigger tick
+  const triggerManualTick = async () => {
+    if (isTriggering) return;
+    
+    setIsTriggering(true);
+    try {
+      const res = await fetch('/api/inngest/trigger', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      
+      const data = await res.json();
+      
+      if (data.success) {
+        // Refresh status and run a scan
+        await fetchTickStatus();
+        await runScan();
+      } else {
+        setError(data.error || 'Tick trigger failed');
+      }
+    } catch (err) {
+      setError('Failed to trigger tick');
+    } finally {
+      setIsTriggering(false);
     }
   };
 
@@ -688,6 +746,74 @@ const startTrading = useCallback(() => {
                 `Hent ut avkastning${(performanceData?.current?.pnl || 0) > 0 ? ` (${(performanceData?.current?.pnl || 0).toLocaleString('no-NO', { maximumFractionDigits: 0 })} kr)` : ''}`
               )}
             </button>
+
+            {/* Manual Trigger Tick Button */}
+            <button
+              onClick={triggerManualTick}
+              disabled={isTriggering || tickStatus.grokRateLimited}
+              className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-colors flex items-center gap-2 ${
+                tickStatus.grokRateLimited
+                  ? 'bg-orange-600/50 text-orange-200 cursor-not-allowed'
+                  : 'bg-cyan-600 hover:bg-cyan-700 text-white'
+              }`}
+            >
+              {isTriggering ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Trigger...
+                </>
+              ) : tickStatus.grokRateLimited ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  Rate Limited
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Manual Tick
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Inngest Tick Status Bar */}
+          <div className="mt-4 p-3 bg-muted/30 border border-border rounded-lg flex items-center justify-between">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2">
+                <div className={`w-2 h-2 rounded-full ${
+                  tickStatus.status === 'RUNNING' ? 'bg-emerald-500 animate-pulse' :
+                  tickStatus.status === 'RATE_LIMITED' ? 'bg-orange-500' :
+                  tickStatus.status === 'ERROR' ? 'bg-red-500' :
+                  'bg-gray-500'
+                }`} />
+                <span className="text-sm font-medium">
+                  Status: <span className={
+                    tickStatus.status === 'RUNNING' ? 'text-emerald-400' :
+                    tickStatus.status === 'RATE_LIMITED' ? 'text-orange-400' :
+                    tickStatus.status === 'ERROR' ? 'text-red-400' :
+                    'text-muted-foreground'
+                  }>{tickStatus.status}</span>
+                </span>
+              </div>
+              
+              <div className="text-sm text-muted-foreground">
+                Siste tick: {tickStatus.secondsSinceLastTick >= 0 ? `${tickStatus.secondsSinceLastTick}s siden` : 'Aldri'}
+              </div>
+              
+              <div className="text-sm text-muted-foreground">
+                Totalt: {tickStatus.tickCount} ticks
+              </div>
+            </div>
+            
+            {tickStatus.lastError && (
+              <div className="text-xs text-red-400 max-w-md truncate">
+                {tickStatus.lastError}
+              </div>
+            )}
           </div>
 
           {/* Withdraw Result Message */}
