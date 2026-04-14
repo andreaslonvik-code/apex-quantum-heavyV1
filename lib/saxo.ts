@@ -135,25 +135,44 @@ export async function getPositions(): Promise<Position[]> {
 }
 
 // ============ FIND INSTRUMENT ============
-export async function findInstrument(ticker: string, assetType: string = 'Stock'): Promise<{ uic: number; assetType: string; symbol: string } | null> {
+export async function findInstrument(
+  ticker: string, 
+  assetType: string = 'Stock',
+  market: 'US' | 'OSLO' | 'ALL' = 'ALL'
+): Promise<{ uic: number; assetType: string; symbol: string; exchange: string } | null> {
   const token = getToken();
   if (!token) return null;
   
-  const searches = [ticker, `${ticker}:xnas`, `${ticker}:xnys`, `${ticker}:xosl`];
+  // Build search patterns based on market
+  let searches: string[];
+  if (market === 'OSLO') {
+    searches = [`${ticker}:xosl`, ticker];
+  } else if (market === 'US') {
+    searches = [`${ticker}:xnas`, `${ticker}:xnys`, ticker];
+  } else {
+    searches = [ticker, `${ticker}:xosl`, `${ticker}:xnas`, `${ticker}:xnys`];
+  }
   
   for (const kw of searches) {
-    const result = await safeFetch<{ Data?: Array<{ Identifier: number; AssetType: string; Symbol: string }> }>(
-      `${getBaseUrl()}/ref/v1/instruments?Keywords=${encodeURIComponent(kw)}&AssetTypes=${assetType}&$top=5`,
+    const result = await safeFetch<{ Data?: Array<{ Identifier: number; AssetType: string; Symbol: string; ExchangeId: string }> }>(
+      `${getBaseUrl()}/ref/v1/instruments?Keywords=${encodeURIComponent(kw)}&AssetTypes=${assetType}&$top=10`,
       { headers: { 'Authorization': `Bearer ${token}` } }
     );
     
     if (result.ok && result.data?.Data?.length) {
-      const match = result.data.Data.find(i => i.Symbol?.toUpperCase().startsWith(ticker.toUpperCase())) || result.data.Data[0];
-      console.log(`[SAXO] Found ${ticker}: UIC=${match.Identifier}`);
-      return { uic: match.Identifier, assetType: match.AssetType, symbol: match.Symbol };
+      // Try to find exact match first
+      const exactMatch = result.data.Data.find(i => 
+        i.Symbol?.toUpperCase() === ticker.toUpperCase() ||
+        i.Symbol?.toUpperCase() === `${ticker}:XOSL` ||
+        i.Symbol?.toUpperCase().startsWith(ticker.toUpperCase() + ':')
+      );
+      const match = exactMatch || result.data.Data[0];
+      console.log(`[SAXO] Found ${ticker}: UIC=${match.Identifier}, Symbol=${match.Symbol}, Exchange=${match.ExchangeId}`);
+      return { uic: match.Identifier, assetType: match.AssetType, symbol: match.Symbol, exchange: match.ExchangeId || 'UNKNOWN' };
     }
   }
   
+  console.log(`[SAXO] Could not find instrument: ${ticker} (market: ${market})`);
   return null;
 }
 

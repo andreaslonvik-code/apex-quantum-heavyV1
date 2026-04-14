@@ -7,16 +7,16 @@ import { cookies } from 'next/headers';
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
 // ============ MARKET HOURS LOGIC (CET) ============
-// NOTE: Saxo SIM only supports US stocks - Oslo Børs is NOT available
+// Oslo Børs: 09:00 - 16:25 CET
 // Nasdaq/US: 15:30 - 22:00 CET
 interface MarketStatus {
-  osloOpen: boolean;  // Always false - not available in SIM
+  osloOpen: boolean;
   usOpen: boolean;
-  activeMarkets: 'US'[];
+  activeMarkets: ('US' | 'OSLO')[];
   message: string;
 }
 
-// FORCE TRADING MODE - Always allow trading for SIM account
+// FORCE TRADING MODE - Always allow trading for testing
 const FORCE_TRADING_ALWAYS = true;
 
 function getMarketStatus(): MarketStatus {
@@ -26,28 +26,41 @@ function getMarketStatus(): MarketStatus {
   const hours = cetTime.getHours();
   const minutes = cetTime.getMinutes();
   const timeInMinutes = hours * 60 + minutes;
+  const dayOfWeek = cetTime.getDay(); // 0=Sunday, 6=Saturday
+  
+  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
+  
+  // Oslo Børs: 09:00 - 16:25 CET (540 - 985 minutes)
+  const normalOsloOpen = !isWeekend && timeInMinutes >= 540 && timeInMinutes < 985;
   
   // Nasdaq/US: 15:30 - 22:00 CET (930 - 1320 minutes)
-  const normalUsOpen = timeInMinutes >= 930 && timeInMinutes < 1320;
+  const normalUsOpen = !isWeekend && timeInMinutes >= 930 && timeInMinutes < 1320;
   
-  // FORCE MODE: Always open for SIM testing
+  // FORCE MODE: Always open for testing
+  const osloOpen = FORCE_TRADING_ALWAYS || normalOsloOpen;
   const usOpen = FORCE_TRADING_ALWAYS || normalUsOpen;
   
-  // Always return US as active for maximum trading
-  const activeMarkets: 'US'[] = ['US'];
+  // Build active markets list
+  const activeMarkets: ('US' | 'OSLO')[] = [];
+  if (osloOpen) activeMarkets.push('OSLO');
+  if (usOpen) activeMarkets.push('US');
   
   let message = '';
-  if (normalUsOpen) {
-    message = `US MARKET APEN (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - EKSTREM TRADING AKTIV`;
+  if (normalOsloOpen && normalUsOpen) {
+    message = `OSLO + US MARKEDER APNE (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET)`;
+  } else if (normalOsloOpen) {
+    message = `OSLO BORS APEN (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - US apner 15:30`;
+  } else if (normalUsOpen) {
+    message = `US MARKET APEN (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET)`;
   } else if (FORCE_TRADING_ALWAYS) {
-    message = `FORCE MODE (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - SIM trading aktiv utenfor apningstid`;
+    message = `FORCE MODE (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - Trading aktiv utenfor apningstid`;
   } else {
-    message = `US MARKET STENGT (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET) - Apner 15:30 CET`;
+    message = `MARKEDER STENGT (${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET)`;
   }
   
-  console.log(`[APEX] MarketStatus: usOpen=${usOpen}, normalUsOpen=${normalUsOpen}, FORCE=${FORCE_TRADING_ALWAYS}`);
+  console.log(`[APEX] MarketStatus: osloOpen=${osloOpen}, usOpen=${usOpen}, FORCE=${FORCE_TRADING_ALWAYS}`);
   
-  return { osloOpen: false, usOpen, activeMarkets, message };
+  return { osloOpen, usOpen, activeMarkets, message };
 }
 
 // ============ APEX QUANTUM v6.2 - TIMESFM HYBRID AI ============
@@ -63,15 +76,20 @@ const APEX_BLUEPRINT: Record<string, {
   volatilitet: number;
   saxoSymbol: string;
   assetType: string;
-  market: 'US';
+  market: 'US' | 'OSLO';
 }> = {
-  // APEX QUANTUM AI-SELECTED POSITIONS ONLY
-  MU:   { navn: 'Micron Technology',    targetVekt: 40, volatilitet: 3, saxoSymbol: 'MU:xnas',   assetType: 'Stock', market: 'US' },  // AI/Memory chips
-  CEG:  { navn: 'Constellation Energy', targetVekt: 20, volatilitet: 2, saxoSymbol: 'CEG:xnas',  assetType: 'Stock', market: 'US' },  // Nuclear/Data center power
-  VRT:  { navn: 'Vertiv Holdings',      targetVekt: 15, volatilitet: 2, saxoSymbol: 'VRT:xnys',  assetType: 'Stock', market: 'US' },  // Data center infrastructure
-  RKLB: { navn: 'Rocket Lab',           targetVekt: 10, volatilitet: 4, saxoSymbol: 'RKLB:xnas', assetType: 'Stock', market: 'US' },  // Space tech
-  LMND: { navn: 'Lemonade Inc',         targetVekt: 10, volatilitet: 4, saxoSymbol: 'LMND:xnys', assetType: 'Stock', market: 'US' },  // AI insurance
-  ABSI: { navn: 'Absci Corporation',    targetVekt: 5,  volatilitet: 5, saxoSymbol: 'ABSI:xnas', assetType: 'Stock', market: 'US' },  // AI drug discovery
+  // ============ US STOCKS (50% allocation) ============
+  MU:   { navn: 'Micron Technology',    targetVekt: 20, volatilitet: 3, saxoSymbol: 'MU:xnas',   assetType: 'Stock', market: 'US' },  // AI/Memory chips
+  CEG:  { navn: 'Constellation Energy', targetVekt: 15, volatilitet: 2, saxoSymbol: 'CEG:xnas',  assetType: 'Stock', market: 'US' },  // Nuclear power
+  VRT:  { navn: 'Vertiv Holdings',      targetVekt: 10, volatilitet: 2, saxoSymbol: 'VRT:xnys',  assetType: 'Stock', market: 'US' },  // Data center infra
+  RKLB: { navn: 'Rocket Lab',           targetVekt: 5,  volatilitet: 4, saxoSymbol: 'RKLB:xnas', assetType: 'Stock', market: 'US' },  // Space tech
+  
+  // ============ OSLO BØRS STOCKS (50% allocation) ============
+  EQNR: { navn: 'Equinor',              targetVekt: 15, volatilitet: 2, saxoSymbol: 'EQNR:xosl', assetType: 'Stock', market: 'OSLO' }, // Energy giant
+  DNB:  { navn: 'DNB Bank',             targetVekt: 10, volatilitet: 2, saxoSymbol: 'DNB:xosl',  assetType: 'Stock', market: 'OSLO' }, // Banking
+  MOWI: { navn: 'Mowi ASA',             targetVekt: 10, volatilitet: 3, saxoSymbol: 'MOWI:xosl', assetType: 'Stock', market: 'OSLO' }, // Salmon/Seafood
+  NHY:  { navn: 'Norsk Hydro',          targetVekt: 8,  volatilitet: 3, saxoSymbol: 'NHY:xosl',  assetType: 'Stock', market: 'OSLO' }, // Aluminium/Green energy
+  AKRBP: { navn: 'Aker BP',             targetVekt: 7,  volatilitet: 3, saxoSymbol: 'AKRBP:xosl', assetType: 'Stock', market: 'OSLO' }, // Oil & Gas
 };
 
 // Momentum tracking for intra-day swings
