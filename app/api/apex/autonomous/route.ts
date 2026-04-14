@@ -466,7 +466,6 @@ export async function POST(request: NextRequest) {
   const cookieStore = await cookies();
   const accessToken = cookieStore.get('apex_saxo_token')?.value;
   const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
-  const clientKey = cookieStore.get('apex_saxo_client_key')?.value || accountKey;
   
   if (!accessToken || !accountKey) {
     console.log(`[APEX] ERROR: Missing credentials`);
@@ -475,6 +474,9 @@ export async function POST(request: NextRequest) {
       { status: 401 }
     );
   }
+  
+  // clientKey is now guaranteed to be string since accountKey is verified above
+  const clientKey = cookieStore.get('apex_saxo_client_key')?.value || accountKey;
   
   try {
     const startTime = Date.now();
