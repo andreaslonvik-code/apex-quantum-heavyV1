@@ -397,8 +397,8 @@ export const apexQuantumTick = inngest.createFunction(
     id: 'apex-quantum-tick',
     name: 'APEX QUANTUM v7 Trading Tick',
     retries: 3,
+    triggers: [{ cron: '*/1 * * * *' }], // Every minute, but internal logic handles 30s
   },
-  { cron: '*/1 * * * *' }, // Every minute, but internal logic handles 30s
   async ({ step }) => {
     console.log('[APEX-INNGEST] ========== TICK START ==========');
     
@@ -557,8 +557,8 @@ export const apexMetaCognition = inngest.createFunction(
     id: 'apex-meta-cognition',
     name: 'APEX QUANTUM Meta-Cognition',
     retries: 2,
+    triggers: [{ event: 'apex/meta-cognition' }],
   },
-  { event: 'apex/meta-cognition' },
   async ({ event, step }) => {
     const { portfolioValue, pnl, openPositions } = event.data;
     
