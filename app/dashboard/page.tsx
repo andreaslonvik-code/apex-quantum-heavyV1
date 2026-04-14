@@ -189,18 +189,21 @@ export default function Dashboard() {
   const fetchPerformance = async () => {
     try {
       const res = await fetch('/api/apex/performance', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setPerformanceData(data);
-        // Update account info with live balance
-        if (data.current) {
-          setAccountInfo(prev => prev ? {
-            ...prev,
-            balance: data.current.totalValue,
-          } : prev);
+      const text = await res.text();
+      if (res.ok && text) {
+        try {
+          const data = JSON.parse(text);
+          setPerformanceData(data);
+          if (data.current) {
+            setAccountInfo(prev => prev ? {
+              ...prev,
+              balance: data.current.totalValue,
+            } : prev);
+          }
+        } catch {
+          console.error('[v0] performance API returned non-JSON:', text.substring(0, 100));
         }
       }
-      // Also fetch tick status
       fetchTickStatus();
     } catch {}
   };
@@ -209,13 +212,18 @@ export default function Dashboard() {
   const fetchOrderStatus = async () => {
     try {
       const res = await fetch('/api/apex/order-status', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        if (data.lastOrder) {
-          setLastOrderStatus(data.lastOrder);
-        }
-        if (data.circuitBreaker) {
-          setCircuitBreakerOpen(data.circuitBreaker.isOpen);
+      const text = await res.text();
+      if (res.ok && text) {
+        try {
+          const data = JSON.parse(text);
+          if (data.lastOrder) {
+            setLastOrderStatus(data.lastOrder);
+          }
+          if (data.circuitBreaker) {
+            setCircuitBreakerOpen(data.circuitBreaker.isOpen);
+          }
+        } catch {
+          console.error('[v0] order-status API returned non-JSON:', text.substring(0, 100));
         }
       }
     } catch {}
@@ -265,9 +273,14 @@ export default function Dashboard() {
   const fetchTickStatus = async () => {
     try {
       const res = await fetch('/api/inngest/trigger', { credentials: 'include' });
-      if (res.ok) {
-        const data = await res.json();
-        setTickStatus(data);
+      const text = await res.text();
+      if (res.ok && text) {
+        try {
+          const data = JSON.parse(text);
+          setTickStatus(data);
+        } catch {
+          console.error('[v0] tick status returned non-JSON:', text.substring(0, 100));
+        }
       }
     } catch {}
   };
@@ -277,13 +290,22 @@ export default function Dashboard() {
     if (isTriggering) return;
     
     setIsTriggering(true);
+    setError(null);
     try {
       const res = await fetch('/api/inngest/trigger', {
         method: 'POST',
         credentials: 'include',
       });
       
-      const data = await res.json();
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch {
+        setError(`Trigger API returned non-JSON: ${text.substring(0, 150)}`);
+        setIsTriggering(false);
+        return;
+      }
       
       if (data.success) {
         // Refresh status and run a scan
@@ -293,7 +315,7 @@ export default function Dashboard() {
         setError(data.error || 'Tick trigger failed');
       }
     } catch (err) {
-      setError('Failed to trigger tick');
+      setError(`Network error: ${err}`);
     } finally {
       setIsTriggering(false);
     }
@@ -399,11 +421,26 @@ export default function Dashboard() {
         body: JSON.stringify({ mode: 'paper' }),
       });
       
-      const data = await res.json();
+      // ALWAYS get text first, then try JSON.parse
+      const text = await res.text();
+      let data;
+      try {
+        data = JSON.parse(text);
+      } catch (parseError) {
+        // API returned HTML instead of JSON
+        const isHtml = text.trim().startsWith('<') || text.includes('<!doctype');
+        const errorMsg = isHtml 
+          ? `API returned HTML (${res.status}): ${text.substring(0, 150)}...`
+          : `JSON parse failed: ${text.substring(0, 150)}...`;
+        console.error('[v0] autonomous API error:', errorMsg);
+        setError(errorMsg);
+        isRunningRef.current = false;
+        return;
+      }
       
       if (!res.ok) {
         if (res.status === 401) {
-          setError('Saxo-tilkobling utlopt. Vennligst koble til pa nytt.');
+          setError(data.error || 'Saxo-tilkobling utlopt. Vennligst koble til pa nytt.');
           // Stop trading on auth error
           if (intervalRef.current) {
             clearInterval(intervalRef.current);

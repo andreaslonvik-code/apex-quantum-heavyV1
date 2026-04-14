@@ -140,25 +140,52 @@ export async function POST(request: NextRequest) {
 export async function GET() {
   try {
     const cookieStore = await cookies();
-    const token = cookieStore.get('apex_saxo_token');
+    const cookieToken = cookieStore.get('apex_saxo_token');
     const accountKey = cookieStore.get('apex_saxo_account_key');
     const clientKey = cookieStore.get('apex_saxo_client_key');
+    
+    // Use env token if available, otherwise cookie token
+    const envToken = process.env.SAXO_ACCESS_TOKEN;
+    const token = envToken || cookieToken?.value;
+    const tokenSource = envToken ? 'ENV' : 'COOKIE';
 
     if (!token || !accountKey) {
-      return NextResponse.json({ connected: false });
+      return NextResponse.json({ 
+        connected: false,
+        reason: !token ? 'No token (add SAXO_ACCESS_TOKEN to Vercel env)' : 'No accountKey (user must login)',
+        tokenSource,
+        hasEnvToken: !!envToken,
+      });
     }
 
     // Verify token is still valid by making a simple API call
     const response = await fetch(`${SAXO_SIM_API_URL}/port/v1/accounts/me`, {
-      headers: { 'Authorization': `Bearer ${token.value}` },
+      headers: { 'Authorization': `Bearer ${token}` },
     });
 
     if (!response.ok) {
-      // Token expired or invalid - clear cookies
-      return NextResponse.json({ connected: false });
+      const errorText = await response.text();
+      console.error('[APEX] Token validation failed:', response.status, errorText.substring(0, 200));
+      return NextResponse.json({ 
+        connected: false,
+        reason: `Token invalid (${response.status})`,
+        tokenSource,
+      });
     }
 
-    const accountsData = await response.json();
+    // ALWAYS get text first, then parse JSON
+    const responseText = await response.text();
+    let accountsData;
+    try {
+      accountsData = JSON.parse(responseText);
+    } catch {
+      console.error('[APEX] Saxo returned non-JSON:', responseText.substring(0, 200));
+      return NextResponse.json({ 
+        connected: false, 
+        reason: 'Saxo returned non-JSON response',
+        rawResponse: responseText.substring(0, 200),
+      });
+    }
     const account = accountsData.Data?.[0] || accountsData;
 
     // Get balance
@@ -168,12 +195,17 @@ export async function GET() {
     try {
       const balanceResponse = await fetch(
         `${SAXO_SIM_API_URL}/port/v1/balances?AccountKey=${accountKey.value}&ClientKey=${clientKey?.value || 'me'}`,
-        { headers: { 'Authorization': `Bearer ${token.value}` } }
+        { headers: { 'Authorization': `Bearer ${token}` } }
       );
       if (balanceResponse.ok) {
-        const balanceData = await balanceResponse.json();
-        balance = balanceData.TotalValue || balanceData.CashBalance || 100000;
-        currency = balanceData.Currency || 'USD';
+        const balanceText = await balanceResponse.text();
+        try {
+          const balanceData = JSON.parse(balanceText);
+          balance = balanceData.TotalValue || balanceData.CashBalance || 100000;
+          currency = balanceData.Currency || 'USD';
+        } catch {
+          console.error('[APEX] Balance response non-JSON:', balanceText.substring(0, 100));
+        }
       }
     } catch {
       // Use defaults
@@ -182,6 +214,7 @@ export async function GET() {
     return NextResponse.json({ 
       connected: true,
       accountKey: accountKey.value,
+      tokenSource,
       accountInfo: {
         accountId: account.AccountId || account.AccountKey || accountKey.value,
         accountKey: accountKey.value,
@@ -189,7 +222,8 @@ export async function GET() {
         currency,
       },
     });
-  } catch {
-    return NextResponse.json({ connected: false });
+  } catch (err) {
+    console.error('[APEX] connect-saxo GET error:', err);
+    return NextResponse.json({ connected: false, error: String(err) });
   }
 }
