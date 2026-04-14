@@ -95,6 +95,14 @@ export default function Dashboard() {
   const [performanceData, setPerformanceData] = useState<PerformanceData | null>(null);
   const [chartTimeRange, setChartTimeRange] = useState<'1h' | '24h' | '7d'>('1h');
   
+  // Withdraw profits state
+  const [isWithdrawing, setIsWithdrawing] = useState(false);
+  const [withdrawResult, setWithdrawResult] = useState<{
+    success: boolean;
+    message: string;
+    totalSold?: number;
+  } | null>(null);
+  
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const performanceIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isRunningRef = useRef(false);
@@ -276,6 +284,60 @@ const startTrading = useCallback(() => {
       localStorage.removeItem('apex_saxo_account');
       router.push('/');
     });
+  };
+
+  // Withdraw profits handler
+  const handleWithdrawProfits = async () => {
+    if (isWithdrawing) return;
+    
+    const currentProfit = performanceData?.current?.pnl || 0;
+    if (currentProfit <= 0) {
+      setWithdrawResult({
+        success: false,
+        message: 'Ingen avkastning å hente ut. Kontoverdien er under eller lik startkapitalen.',
+      });
+      return;
+    }
+    
+    const confirmed = window.confirm(
+      `Er du sikker på at du vil hente ut ${currentProfit.toLocaleString('no-NO', { maximumFractionDigits: 0 })} kr i avkastning?\n\nDette vil selge nok posisjoner til å ta ut profitten, og trading vil fortsette med startkapitalen på 1 000 000 kr.`
+    );
+    
+    if (!confirmed) return;
+    
+    setIsWithdrawing(true);
+    setWithdrawResult(null);
+    
+    try {
+      const res = await fetch('/api/apex/withdraw-profits', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      
+      const data = await res.json();
+      
+      if (data.success) {
+        setWithdrawResult({
+          success: true,
+          message: data.message,
+          totalSold: data.totalSold,
+        });
+        // Refresh performance data
+        fetchPerformance();
+      } else {
+        setWithdrawResult({
+          success: false,
+          message: data.message || data.error || 'Kunne ikke hente ut avkastning',
+        });
+      }
+    } catch (err) {
+      setWithdrawResult({
+        success: false,
+        message: 'Nettverksfeil ved uttak av avkastning',
+      });
+    } finally {
+      setIsWithdrawing(false);
+    }
   };
 
   // Loading state
@@ -528,7 +590,43 @@ const startTrading = useCallback(() => {
                 Stopp Trading
               </button>
             )}
+            
+            {/* Withdraw Profits Button */}
+            <button
+              onClick={handleWithdrawProfits}
+              disabled={isWithdrawing || (performanceData?.current?.pnl || 0) <= 0}
+              className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+                (performanceData?.current?.pnl || 0) > 0
+                  ? 'bg-amber-600 hover:bg-amber-700 text-white'
+                  : 'bg-muted text-muted-foreground cursor-not-allowed'
+              }`}
+            >
+              {isWithdrawing ? (
+                <span className="flex items-center gap-2">
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  Henter ut...
+                </span>
+              ) : (
+                `Hent ut avkastning${(performanceData?.current?.pnl || 0) > 0 ? ` (${(performanceData?.current?.pnl || 0).toLocaleString('no-NO', { maximumFractionDigits: 0 })} kr)` : ''}`
+              )}
+            </button>
           </div>
+
+          {/* Withdraw Result Message */}
+          {withdrawResult && (
+            <div className={`mb-4 p-3 rounded-md text-sm ${
+              withdrawResult.success 
+                ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' 
+                : 'bg-red-500/10 border border-red-500/30 text-red-400'
+            }`}>
+              {withdrawResult.message}
+              {withdrawResult.totalSold && (
+                <span className="ml-2 font-semibold">
+                  Solgt for {withdrawResult.totalSold.toLocaleString('no-NO', { maximumFractionDigits: 0 })} kr
+                </span>
+              )}
+            </div>
+          )}
 
           {error && (
             <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-md text-red-400 text-sm">
