@@ -899,12 +899,18 @@ export async function POST(request: NextRequest) {
       
       // Find positions with profit that we can sell
       for (const [ticker, pos] of positions) {
-        if (pos.amount > 10 && pos.currentPrice > pos.avgPrice) {
-          const profitPercent = (pos.currentPrice - pos.avgPrice) / pos.avgPrice;
+        const info = APEX_BLUEPRINT[ticker];
+        if (!info || pos.amount <= 10) continue;
+        
+        // Get current price for this ticker
+        const priceData = await getPrice(accessToken, info.saxoSymbol, info.assetType);
+        const currentPrice = priceData.last;
+        
+        if (currentPrice > pos.avgPrice) {
+          const profitPercent = (currentPrice - pos.avgPrice) / pos.avgPrice;
           if (profitPercent > 0.01) { // At least 1% profit
             const sellAmount = Math.floor(pos.amount * 0.2); // Sell 20% of position
-            const info = APEX_BLUEPRINT[ticker];
-            if (info && sellAmount > 0) {
+            if (sellAmount > 0) {
               console.log(`[APEX] AUTO-SALG: ${sellAmount} ${ticker} for a frigjore kontanter (profitt: ${(profitPercent * 100).toFixed(1)}%)`);
               
               const result = await placeMarketOrder(
@@ -920,7 +926,7 @@ export async function POST(request: NextRequest) {
               );
               
               if (result.success) {
-                const saleValue = sellAmount * pos.currentPrice;
+                const saleValue = sellAmount * currentPrice;
                 totalSold += saleValue;
                 actualCash += saleValue; // Update available cash
                 console.log(`[APEX] AUTO-SALG VELLYKKET: +${saleValue.toFixed(0)} kr frigjort`);
@@ -930,7 +936,7 @@ export async function POST(request: NextRequest) {
                   saxoSymbol: info.saxoSymbol,
                   action: 'SELL',
                   amount: sellAmount,
-                  price: pos.currentPrice,
+                  price: currentPrice,
                   value: saleValue,
                   orderId: result.orderId,
                   status: 'OK',
