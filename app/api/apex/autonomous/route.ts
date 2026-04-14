@@ -890,14 +890,9 @@ export async function POST(request: NextRequest) {
     tokenSource = 'COOKIE';
   }
   
-  // AccountKey/ClientKey ALWAYS from cookies (personal per customer)
-  const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
-  const clientKey = cookieStore.get('apex_saxo_client_key')?.value;
-  
   // Log token status
   const tokenPreview = accessToken ? `${accessToken.substring(0, 20)}...` : 'MISSING';
   console.log(`[APEX TOKEN] Source: ${tokenSource} | Token: ${tokenPreview}`);
-  console.log(`[APEX TOKEN] AccountKey: ${accountKey ? 'SET (from cookie)' : 'MISSING'} | ClientKey: ${clientKey ? 'SET' : 'MISSING'}`);
   
   // Validate token
   if (!accessToken) {
@@ -909,38 +904,46 @@ export async function POST(request: NextRequest) {
     }, { status: 401 });
   }
   
-  // AccountKey must come from user login/OAuth
-  if (!accountKey) {
-    console.log(`[APEX] ERROR: Missing accountKey - user must connect Saxo account`);
-    return NextResponse.json({
-      error: 'Ikke tilkoblet Saxo Bank. Klikk "Koble til Saxo" for a logge inn.',
-      tokenStatus: 'MISSING_ACCOUNT',
-      needsLogin: true,
-    }, { status: 401 });
-  }
+  // ============ AUTO-FETCH ACCOUNT KEY FROM SAXO API ============
+  // When using 24-hour developer token, we fetch accountKey from API instead of cookies
+  console.log(`[APEX] Fetching account info from Saxo API...`);
   
-  // Validate token by making a lightweight API call using safeFetch
-  console.log(`[APEX] Validating token with Saxo API...`);
-  const validateResult = await safeFetchJson<{ AccountKey?: string }>(
+  const accountsResult = await safeFetchJson<{ Data?: Array<{ AccountKey: string; ClientKey: string; AccountId: string }> }>(
     `${SAXO_API_BASE}/port/v1/accounts/me`,
     { headers: { 'Authorization': `Bearer ${accessToken}` } }
   );
   
-  if (!validateResult.ok) {
-    console.log(`[APEX] TOKEN INVALID: ${validateResult.error}`);
-    console.log(`[APEX] Raw response: ${validateResult.rawBody.substring(0, 300)}`);
+  if (!accountsResult.ok) {
+    console.log(`[APEX] TOKEN INVALID: ${accountsResult.error}`);
+    console.log(`[APEX] Raw response: ${accountsResult.rawBody.substring(0, 300)}`);
     return NextResponse.json({
-      error: validateResult.status === 401 
+      error: accountsResult.status === 401 
         ? 'Token expired - refresh SAXO_ACCESS_TOKEN in Vercel Environment Variables' 
-        : `Token validation failed: ${validateResult.error}`,
+        : `Token validation failed: ${accountsResult.error}`,
       tokenStatus: 'INVALID',
-      httpStatus: validateResult.status,
-      rawResponse: validateResult.rawBody.substring(0, 500),
+      httpStatus: accountsResult.status,
+      rawResponse: accountsResult.rawBody.substring(0, 500),
     }, { status: 401 });
   }
   
-  console.log(`[APEX] Token validated successfully - proceeding with trading`);
-  console.log(`[APEX] Credentials OK: token=${tokenSource}, accountKey=${!!accountKey}, clientKey=${!!clientKey}`);
+  // Extract accountKey and clientKey from API response
+  const accounts = accountsResult.data?.Data || [];
+  if (accounts.length === 0) {
+    console.log(`[APEX] No accounts found in response:`, accountsResult.rawBody.substring(0, 300));
+    return NextResponse.json({
+      error: 'No trading accounts found for this token',
+      tokenStatus: 'NO_ACCOUNTS',
+    }, { status: 401 });
+  }
+  
+  // Use first account (or find specific one)
+  const primaryAccount = accounts[0];
+  const accountKey = primaryAccount.AccountKey;
+  const clientKey = primaryAccount.ClientKey;
+  
+  console.log(`[APEX] Token validated successfully!`);
+  console.log(`[APEX] AccountKey: ${accountKey} | ClientKey: ${clientKey} | AccountId: ${primaryAccount.AccountId}`);
+  console.log(`[APEX] Found ${accounts.length} account(s) - using primary account`);
 
   try {
     const startTime = Date.now();

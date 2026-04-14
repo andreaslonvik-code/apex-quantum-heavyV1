@@ -77,14 +77,10 @@ export async function POST() {
   
   // Token: ENV first, then cookie fallback
   const accessToken = envToken || cookieStore.get('apex_saxo_token')?.value;
-  // AccountKey: ALWAYS from cookies (personal per customer after OAuth login)
-  const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
-  
   const tokenSource = envToken ? 'ENV' : 'COOKIE';
   const tokenPreview = accessToken ? `${accessToken.substring(0, 20)}...` : 'NONE';
   
   console.log(`[APEX TICK] Token source: ${tokenSource} | Preview: ${tokenPreview}`);
-  console.log(`[APEX TICK] AccountKey: ${accountKey ? 'SET (cookie)' : 'MISSING - user must login'}`);
   
   if (!accessToken) {
     return NextResponse.json({
@@ -95,33 +91,45 @@ export async function POST() {
     }, { status: 401 });
   }
   
-  if (!accountKey) {
-    return NextResponse.json({
-      success: false,
-      error: 'Ikke tilkoblet Saxo Bank. Klikk "Koble til Saxo" for a logge inn.',
-      needsLogin: true,
-      hasToken: !!accessToken,
-    }, { status: 401 });
-  }
-  
-  // Validate token before proceeding
-  console.log(`[APEX TICK] Validating token...`);
+  // Validate token AND fetch accountKey from Saxo API
+  console.log(`[APEX TICK] Validating token and fetching account info...`);
   const validateRes = await fetch(`${SAXO_SIM_BASE}/port/v1/accounts/me`, {
     headers: { 'Authorization': `Bearer ${accessToken}` }
   });
   
+  const validateText = await validateRes.text();
+  
   if (!validateRes.ok) {
-    const error = await validateRes.text();
-    console.log(`[APEX TICK] Token invalid (${validateRes.status}): ${error.substring(0, 100)}`);
+    console.log(`[APEX TICK] Token invalid (${validateRes.status}): ${validateText.substring(0, 100)}`);
     return NextResponse.json({
       success: false,
-      error: 'Token expired - update SAXO_ACCESS_TOKEN in Vercel Environment Variables',
+      error: 'Token expired - get new 24h token from developer.saxo',
       tokenStatus: 'EXPIRED',
       httpStatus: validateRes.status,
     }, { status: 401 });
   }
   
-  console.log(`[APEX TICK] Token validated successfully`);
+  // Parse account data
+  let accountsData;
+  try {
+    accountsData = JSON.parse(validateText);
+  } catch {
+    return NextResponse.json({
+      success: false,
+      error: 'Saxo returned non-JSON response',
+    }, { status: 500 });
+  }
+  
+  const accounts = accountsData.Data || [accountsData];
+  if (accounts.length === 0) {
+    return NextResponse.json({
+      success: false,
+      error: 'No trading accounts found',
+    }, { status: 401 });
+  }
+  
+  const accountKey = accounts[0].AccountKey;
+  console.log(`[APEX TICK] Token valid! AccountKey: ${accountKey}`);
   
   // Check Grok rate limit
   if (grokRateLimited && Date.now() < grokRateLimitUntil) {

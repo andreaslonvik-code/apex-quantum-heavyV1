@@ -139,42 +139,42 @@ export async function POST(request: NextRequest) {
 // GET endpoint to check connection status
 export async function GET() {
   try {
-    const cookieStore = await cookies();
-    const cookieToken = cookieStore.get('apex_saxo_token');
-    const accountKey = cookieStore.get('apex_saxo_account_key');
-    const clientKey = cookieStore.get('apex_saxo_client_key');
-    
-    // Use env token if available, otherwise cookie token
+    // Use env token (24-hour developer token) - no cookies needed!
     const envToken = process.env.SAXO_ACCESS_TOKEN;
-    const token = envToken || cookieToken?.value;
-    const tokenSource = envToken ? 'ENV' : 'COOKIE';
+    const tokenSource = 'ENV';
 
-    if (!token || !accountKey) {
+    if (!envToken) {
       return NextResponse.json({ 
         connected: false,
-        reason: !token ? 'No token (add SAXO_ACCESS_TOKEN to Vercel env)' : 'No accountKey (user must login)',
+        reason: 'No token - add SAXO_ACCESS_TOKEN to Vercel Environment Variables',
         tokenSource,
-        hasEnvToken: !!envToken,
+        hasEnvToken: false,
       });
     }
 
-    // Verify token is still valid by making a simple API call
+    console.log('[APEX] Validating token and fetching accounts from Saxo API...');
+
+    // Fetch accounts from Saxo API - this gives us accountKey automatically!
     const response = await fetch(`${SAXO_SIM_API_URL}/port/v1/accounts/me`, {
-      headers: { 'Authorization': `Bearer ${token}` },
+      headers: { 'Authorization': `Bearer ${envToken}` },
     });
 
+    // ALWAYS get text first
+    const responseText = await response.text();
+    
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error('[APEX] Token validation failed:', response.status, errorText.substring(0, 200));
+      console.error('[APEX] Token validation failed:', response.status, responseText.substring(0, 200));
       return NextResponse.json({ 
         connected: false,
-        reason: `Token invalid (${response.status})`,
+        reason: response.status === 401 
+          ? 'Token expired - get new 24h token from developer.saxo' 
+          : `Token invalid (${response.status})`,
         tokenSource,
+        rawResponse: responseText.substring(0, 200),
       });
     }
 
-    // ALWAYS get text first, then parse JSON
-    const responseText = await response.text();
+    // Parse JSON
     let accountsData;
     try {
       accountsData = JSON.parse(responseText);
@@ -186,16 +186,30 @@ export async function GET() {
         rawResponse: responseText.substring(0, 200),
       });
     }
-    const account = accountsData.Data?.[0] || accountsData;
+    
+    // Extract account info from API response
+    const accounts = accountsData.Data || [accountsData];
+    if (accounts.length === 0) {
+      return NextResponse.json({ 
+        connected: false, 
+        reason: 'No trading accounts found',
+      });
+    }
+    
+    const account = accounts[0];
+    const accountKey = account.AccountKey;
+    const clientKey = account.ClientKey;
+    
+    console.log(`[APEX] Found account: ${accountKey} (ClientKey: ${clientKey})`);
 
-    // Get balance
+    // Get balance using the accountKey from API
     let balance = 100000;
     let currency = 'USD';
 
     try {
       const balanceResponse = await fetch(
-        `${SAXO_SIM_API_URL}/port/v1/balances?AccountKey=${accountKey.value}&ClientKey=${clientKey?.value || 'me'}`,
-        { headers: { 'Authorization': `Bearer ${token}` } }
+        `${SAXO_SIM_API_URL}/port/v1/balances?AccountKey=${accountKey}&ClientKey=${clientKey || 'me'}`,
+        { headers: { 'Authorization': `Bearer ${envToken}` } }
       );
       if (balanceResponse.ok) {
         const balanceText = await balanceResponse.text();
@@ -213,11 +227,12 @@ export async function GET() {
 
     return NextResponse.json({ 
       connected: true,
-      accountKey: accountKey.value,
+      accountKey: accountKey,
+      clientKey: clientKey,
       tokenSource,
       accountInfo: {
-        accountId: account.AccountId || account.AccountKey || accountKey.value,
-        accountKey: accountKey.value,
+        accountId: account.AccountId || accountKey,
+        accountKey: accountKey,
         balance,
         currency,
       },
