@@ -103,6 +103,20 @@ export default function Dashboard() {
     totalSold?: number;
   } | null>(null);
   
+  // Order status state
+  const [lastOrderStatus, setLastOrderStatus] = useState<{
+    ticker: string;
+    action: 'Buy' | 'Sell';
+    amount: number;
+    status: 'Placed' | 'Filled' | 'Rejected' | 'Pending' | 'Cancelled';
+    errorMessage?: string;
+    timestamp: string;
+  } | null>(null);
+  const [circuitBreakerOpen, setCircuitBreakerOpen] = useState(false);
+  
+  // Trading mode
+  const [tradingMode, setTradingMode] = useState<'SIM' | 'LIVE'>('SIM');
+  
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const performanceIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isRunningRef = useRef(false);
@@ -143,6 +157,22 @@ export default function Dashboard() {
             ...prev,
             balance: data.current.totalValue,
           } : prev);
+        }
+      }
+    } catch {}
+  };
+
+  // Fetch order status
+  const fetchOrderStatus = async () => {
+    try {
+      const res = await fetch('/api/apex/order-status', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.lastOrder) {
+          setLastOrderStatus(data.lastOrder);
+        }
+        if (data.circuitBreaker) {
+          setCircuitBreakerOpen(data.circuitBreaker.isOpen);
         }
       }
     } catch {}
@@ -238,6 +268,9 @@ export default function Dashboard() {
       if (successful.length > 0) {
         setTradeHistory(prev => [...successful, ...prev].slice(0, 100));
       }
+      
+      // Fetch order status after scan
+      fetchOrderStatus();
       
     } catch {
       setError('Nettverksfeil');
@@ -661,6 +694,79 @@ const startTrading = useCallback(() => {
             <div className="bg-muted/30 rounded-lg p-4">
               <div className="text-xs text-muted-foreground mb-1">Siste Scan</div>
               <div className="text-lg font-medium">{lastUpdate || '-'}</div>
+            </div>
+          </div>
+
+          {/* Last Order Status Panel */}
+          <div className="mt-4 p-4 rounded-lg border border-border bg-muted/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div>
+                  <div className="text-xs text-muted-foreground mb-1">Siste Ordre Status</div>
+                  {lastOrderStatus ? (
+                    <div className="flex items-center gap-2">
+                      <span className={`px-2 py-1 rounded text-xs font-bold ${
+                        lastOrderStatus.status === 'Placed' || lastOrderStatus.status === 'Filled'
+                          ? 'bg-emerald-500/30 text-emerald-400'
+                          : lastOrderStatus.status === 'Rejected' || lastOrderStatus.status === 'Cancelled'
+                          ? 'bg-red-500/30 text-red-400'
+                          : 'bg-amber-500/30 text-amber-400'
+                      }`}>
+                        {lastOrderStatus.status === 'Placed' ? 'OK' : 
+                         lastOrderStatus.status === 'Filled' ? 'FYLT' :
+                         lastOrderStatus.status === 'Rejected' ? 'AVVIST' :
+                         lastOrderStatus.status === 'Cancelled' ? 'ANNULLERT' : 'VENTER'}
+                      </span>
+                      <span className="font-medium">
+                        {lastOrderStatus.action === 'Buy' ? '+' : '-'}{lastOrderStatus.amount} {lastOrderStatus.ticker}
+                      </span>
+                      {lastOrderStatus.errorMessage && (
+                        <span className="text-xs text-red-400 ml-2">
+                          {lastOrderStatus.errorMessage}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-muted-foreground">Ingen ordre sendt</span>
+                  )}
+                </div>
+                
+                {/* Circuit Breaker Status */}
+                {circuitBreakerOpen && (
+                  <div className="px-3 py-1 bg-red-500/20 border border-red-500/50 rounded text-red-400 text-xs">
+                    CIRCUIT BREAKER AKTIV - For mange feil
+                  </div>
+                )}
+              </div>
+              
+              {/* SIM/LIVE Toggle */}
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground">Mode:</span>
+                <div className="flex items-center bg-muted rounded-lg p-1">
+                  <button
+                    onClick={() => setTradingMode('SIM')}
+                    className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                      tradingMode === 'SIM'
+                        ? 'bg-amber-500 text-white'
+                        : 'text-muted-foreground hover:text-foreground'
+                    }`}
+                  >
+                    SIM
+                  </button>
+                  <button
+                    onClick={() => setTradingMode('LIVE')}
+                    disabled
+                    className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                      tradingMode === 'LIVE'
+                        ? 'bg-emerald-500 text-white'
+                        : 'text-muted-foreground/50 cursor-not-allowed'
+                    }`}
+                    title="LIVE trading krever godkjenning"
+                  >
+                    LIVE
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
