@@ -1,5 +1,5 @@
 // APEX QUANTUM v6.2 - TimesFM Hybrid AI + Extreme 10% Daily Mode
-// Build fix: 2026-04-13 21:00 CET - Removed type:module from package.json
+// Build fix: 2026-04-14 18:50 CET - Fixed startTime declaration + added withdraw-profits
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
