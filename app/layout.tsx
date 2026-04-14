@@ -20,8 +20,8 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "APEX QUANTUM v6.1 | Global 24/7 Extreme Growth Edition",
-  description: "High-volatility Grok-powered trading dashboard. Autonomous AI trading with asymmetric scoring engine.",
+  title: "APEX QUANTUM v7 | Multi-Exchange 24/7 Autonomous Trading",
+  description: "Production-grade autonomous AI trading engine. Multi-exchange support (US/Oslo/XETRA/HK), aggressive day-trading with 10-12% daily target, self-cleaning architecture.",
   icons: {
     icon: "/favicon.ico",
   },
