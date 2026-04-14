@@ -4,7 +4,6 @@
 
 import { inngest } from '@/lib/inngest';
 import {
-  safeSaxoFetch,
   findInstrument,
   getPrice,
   placeOrder,
@@ -12,7 +11,6 @@ import {
   getPositions,
   startAutoPurge,
   clearDebugLog,
-  addDebugEntry,
   isLiveMode,
   type SaxoPosition,
 } from '@/lib/saxo';
@@ -399,20 +397,22 @@ export const apexQuantumTick = inngest.createFunction(
     id: 'apex-quantum-tick',
     name: 'APEX QUANTUM v7 Trading Tick',
     retries: 3,
+    triggers: [{ cron: '*/1 * * * *' }], // Every minute, but internal logic handles 30s
   },
-  { cron: '*/1 * * * *' }, // Every minute, but internal logic handles 30s
   async ({ step }) => {
     console.log('[APEX-INNGEST] ========== TICK START ==========');
     
     // Get credentials from environment
     const accessToken = process.env.APEX_SAXO_TOKEN;
     const accountKey = process.env.APEX_SAXO_ACCOUNT_KEY;
-    const clientKey = process.env.APEX_SAXO_CLIENT_KEY || accountKey;
     
     if (!accessToken || !accountKey) {
       console.log('[APEX-INNGEST] Missing credentials');
       return { error: 'Missing APEX_SAXO_TOKEN or APEX_SAXO_ACCOUNT_KEY' };
     }
+    
+    // clientKey is now guaranteed string since accountKey is validated above
+    const clientKey = process.env.APEX_SAXO_CLIENT_KEY || accountKey;
     
     // Start auto-purge
     startAutoPurge(CONFIG.PURGE_INTERVAL_SECONDS * 1000);
@@ -559,8 +559,8 @@ export const apexMetaCognition = inngest.createFunction(
     id: 'apex-meta-cognition',
     name: 'APEX QUANTUM Meta-Cognition',
     retries: 2,
+    triggers: [{ event: 'apex/meta-cognition' }],
   },
-  { event: 'apex/meta-cognition' },
   async ({ event, step }) => {
     const { portfolioValue, pnl, openPositions } = event.data;
     
