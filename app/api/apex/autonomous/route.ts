@@ -853,9 +853,9 @@ export async function POST(request: NextRequest) {
       getPositions(accessToken, clientKey || accountKey),
     ]);
 
-    const actualTotalValue = balanceData.total;
-    const actualCash = balanceData.cash;
-    const currentProfit = actualTotalValue - BASE_TRADING_CAPITAL;
+  const actualTotalValue = balanceData.total;
+  let actualCash = balanceData.cash; // Use let to allow updating after auto-sells
+  const currentProfit = actualTotalValue - BASE_TRADING_CAPITAL;
     const locked = lockedProfits.get(accountKey) || 0;
     const tradingCapital = getAvailableTradingCapital(actualCash, actualTotalValue, accountKey);
 
