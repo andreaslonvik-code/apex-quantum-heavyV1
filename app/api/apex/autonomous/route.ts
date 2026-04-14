@@ -1,5 +1,5 @@
 // APEX QUANTUM v6.2 - TimesFM Hybrid AI + Extreme 10% Daily Mode
-// Build fix: 2026-04-14 19:10 CET - Fixed auto-sell types + placeMarketOrder params
+// Build fix: 2026-04-14 19:12 CET - Fixed getOrSearchUIC to findInstrument
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
@@ -902,17 +902,17 @@ export async function POST(request: NextRequest) {
         const info = APEX_BLUEPRINT[ticker];
         if (!info || pos.amount <= 10) continue;
         
-        // Get UIC for this ticker first
-        const uicData = await getOrSearchUIC(accessToken, ticker, info.assetType);
-        if (!uicData) continue;
+        // Find instrument to get UIC for price lookup
+        const instrument = await findInstrument(accessToken, ticker, info.saxoSymbol, info.assetType);
+        if (!instrument) continue;
         
         // Get current price for this ticker
-        const priceData = await getPrice(accessToken, uicData.uic, uicData.assetType);
+        const priceData = await getPrice(accessToken, instrument.uic, instrument.assetType);
         const currentPrice = priceData.last;
         
         if (currentPrice > pos.avgPrice) {
           const profitPercent = (currentPrice - pos.avgPrice) / pos.avgPrice;
-          if (profitPercent > 0.005) { // At least 0.5% profit (lowered for more activity)
+          if (profitPercent > 0.005) { // At least 0.5% profit
             const sellAmount = Math.floor(pos.amount * 0.3); // Sell 30% of position
             if (sellAmount > 0) {
               console.log(`[APEX] AUTO-SALG: ${sellAmount} ${ticker} for a frigjore kontanter (profitt: ${(profitPercent * 100).toFixed(2)}%)`);
