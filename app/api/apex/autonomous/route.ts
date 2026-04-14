@@ -1,5 +1,5 @@
 // APEX QUANTUM v6.2 - TimesFM Hybrid AI + Extreme 10% Daily Mode
-// Build fix: 2026-04-14 18:50 CET - Fixed startTime declaration + added withdraw-profits
+// Build fix: 2026-04-14 19:10 CET - Fixed auto-sell types + placeMarketOrder params
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 
@@ -902,16 +902,20 @@ export async function POST(request: NextRequest) {
         const info = APEX_BLUEPRINT[ticker];
         if (!info || pos.amount <= 10) continue;
         
+        // Get UIC for this ticker first
+        const uicData = await getOrSearchUIC(accessToken, ticker, info.assetType);
+        if (!uicData) continue;
+        
         // Get current price for this ticker
-        const priceData = await getPrice(accessToken, info.saxoSymbol, info.assetType);
+        const priceData = await getPrice(accessToken, uicData.uic, uicData.assetType);
         const currentPrice = priceData.last;
         
         if (currentPrice > pos.avgPrice) {
           const profitPercent = (currentPrice - pos.avgPrice) / pos.avgPrice;
-          if (profitPercent > 0.01) { // At least 1% profit
-            const sellAmount = Math.floor(pos.amount * 0.2); // Sell 20% of position
+          if (profitPercent > 0.005) { // At least 0.5% profit (lowered for more activity)
+            const sellAmount = Math.floor(pos.amount * 0.3); // Sell 30% of position
             if (sellAmount > 0) {
-              console.log(`[APEX] AUTO-SALG: ${sellAmount} ${ticker} for a frigjore kontanter (profitt: ${(profitPercent * 100).toFixed(1)}%)`);
+              console.log(`[APEX] AUTO-SALG: ${sellAmount} ${ticker} for a frigjore kontanter (profitt: ${(profitPercent * 100).toFixed(2)}%)`);
               
               const result = await placeMarketOrder(
                 accessToken,
@@ -943,6 +947,9 @@ export async function POST(request: NextRequest) {
                   reason: '[AUTO] Frigjor kapital',
                   market: info.market,
                 });
+                
+                // Break after one successful sell to avoid over-selling
+                break;
               }
             }
           }
