@@ -893,65 +893,84 @@ export async function POST(request: NextRequest) {
     console.log(`[APEX] Utforer ${signals.length} signaler...`);
     console.log(`[APEX] Tilgjengelig kontant: ${actualCash.toFixed(0)} kr`);
     
-    // If cash is very low, generate SELL signals to free up capital
-    if (actualCash < 10000) {
-      console.log(`[APEX] LAV KONTANT (${actualCash.toFixed(0)} kr) - Genererer salg for a frigjore kapital`);
+    // ALWAYS check for profitable positions to sell when cash is low
+    console.log(`[APEX] Sjekker posisjoner for auto-salg. Cash: ${actualCash.toFixed(0)} kr, Posisjoner: ${positions.size}`);
+    
+    if (actualCash < 50000) { // Increased threshold from 10000 to 50000
+      console.log(`[APEX] LAV KONTANT (${actualCash.toFixed(0)} kr) - Starter auto-salg`);
       
-      // Find positions with profit that we can sell
+      // Find ANY position we can sell to free up capital
       for (const [ticker, pos] of positions) {
+        console.log(`[APEX] Sjekker ${ticker}: amount=${pos.amount}, avgPrice=${pos.avgPrice.toFixed(2)}`);
+        
         const info = APEX_BLUEPRINT[ticker];
-        if (!info || pos.amount <= 10) continue;
+        if (!info) {
+          console.log(`[APEX] ${ticker} ikke i APEX_BLUEPRINT, hopper over`);
+          continue;
+        }
+        
+        if (pos.amount < 5) {
+          console.log(`[APEX] ${ticker} for fa aksjer (${pos.amount}), hopper over`);
+          continue;
+        }
         
         // Find instrument to get UIC for price lookup
         const instrument = await findInstrument(accessToken, ticker, info.saxoSymbol, info.assetType);
-        if (!instrument) continue;
+        if (!instrument) {
+          console.log(`[APEX] Fant ikke instrument for ${ticker}`);
+          continue;
+        }
         
         // Get current price for this ticker
         const priceData = await getPrice(accessToken, instrument.uic, instrument.assetType);
         const currentPrice = priceData.last;
+        console.log(`[APEX] ${ticker}: currentPrice=${currentPrice.toFixed(2)}, avgPrice=${pos.avgPrice.toFixed(2)}`);
         
-        if (currentPrice > pos.avgPrice) {
-          const profitPercent = (currentPrice - pos.avgPrice) / pos.avgPrice;
-          if (profitPercent > 0.005) { // At least 0.5% profit
-            const sellAmount = Math.floor(pos.amount * 0.3); // Sell 30% of position
-            if (sellAmount > 0) {
-              console.log(`[APEX] AUTO-SALG: ${sellAmount} ${ticker} for a frigjore kontanter (profitt: ${(profitPercent * 100).toFixed(2)}%)`);
-              
-              const result = await placeMarketOrder(
-                accessToken,
-                accountKey,
-                ticker,
-                info.saxoSymbol,
-                info.assetType,
-                sellAmount,
-                'Sell',
-                '[AUTO] Frigjor kapital - lav kontant',
-                info.market
-              );
-              
-              if (result.success) {
-                const saleValue = sellAmount * currentPrice;
-                totalSold += saleValue;
-                actualCash += saleValue; // Update available cash
-                console.log(`[APEX] AUTO-SALG VELLYKKET: +${saleValue.toFixed(0)} kr frigjort`);
-                
-                executedTrades.push({
-                  ticker,
-                  saxoSymbol: info.saxoSymbol,
-                  action: 'SELL',
-                  amount: sellAmount,
-                  price: currentPrice,
-                  value: saleValue,
-                  orderId: result.orderId,
-                  status: 'OK',
-                  reason: '[AUTO] Frigjor kapital',
-                  market: info.market,
-                });
-                
-                // Break after one successful sell to avoid over-selling
-                break;
-              }
-            }
+        // Sell if ANY profit at all, or even at small loss to free up capital
+        const profitPercent = (currentPrice - pos.avgPrice) / pos.avgPrice;
+        console.log(`[APEX] ${ticker} profitt: ${(profitPercent * 100).toFixed(2)}%`);
+        
+        // Sell 20% of position regardless of profit/loss to free up cash
+        const sellAmount = Math.max(1, Math.floor(pos.amount * 0.2));
+        console.log(`[APEX] Forsoker a selge ${sellAmount} ${ticker}`);
+        
+        const result = await placeMarketOrder(
+          accessToken,
+          accountKey,
+          ticker,
+          info.saxoSymbol,
+          info.assetType,
+          sellAmount,
+          'Sell',
+          `[AUTO] Frigjor kapital (${(profitPercent * 100).toFixed(1)}%)`,
+          info.market
+        );
+        
+        console.log(`[APEX] Salgsordre resultat for ${ticker}: ${result.success ? 'OK' : 'FEIL'} - ${result.orderId || result.error}`);
+        
+        if (result.success) {
+          const saleValue = sellAmount * currentPrice;
+          totalSold += saleValue;
+          actualCash += saleValue;
+          console.log(`[APEX] AUTO-SALG VELLYKKET: +${saleValue.toFixed(0)} kr frigjort fra ${ticker}`);
+          
+          executedTrades.push({
+            ticker,
+            saxoSymbol: info.saxoSymbol,
+            action: 'SELL',
+            amount: sellAmount,
+            price: currentPrice,
+            value: saleValue,
+            orderId: result.orderId,
+            status: 'OK',
+            reason: '[AUTO] Frigjor kapital',
+            market: info.market,
+          });
+          
+          // Continue to sell more if still low on cash
+          if (actualCash >= 50000) {
+            console.log(`[APEX] Nok kontanter frigjort (${actualCash.toFixed(0)} kr), stopper auto-salg`);
+            break;
           }
         }
       }
