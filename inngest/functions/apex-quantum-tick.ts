@@ -4,7 +4,6 @@
 
 import { inngest } from '@/lib/inngest';
 import {
-  safeSaxoFetch,
   findInstrument,
   getPrice,
   placeOrder,
@@ -12,7 +11,6 @@ import {
   getPositions,
   startAutoPurge,
   clearDebugLog,
-  addDebugEntry,
   isLiveMode,
   type SaxoPosition,
 } from '@/lib/saxo';
