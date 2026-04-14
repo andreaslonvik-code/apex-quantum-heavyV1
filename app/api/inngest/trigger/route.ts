@@ -71,28 +71,36 @@ export async function GET() {
 }
 
 export async function POST() {
-  // Force reload token from env vars
+  // Token from Vercel env, AccountKey from cookies (personal per customer)
   const envToken = process.env.SAXO_ACCESS_TOKEN;
-  const envAccountKey = process.env.SAXO_ACCOUNT_KEY;
-  
-  // Fallback to cookies
   const cookieStore = await cookies();
+  
+  // Token: ENV first, then cookie fallback
   const accessToken = envToken || cookieStore.get('apex_saxo_token')?.value;
-  const accountKey = envAccountKey || cookieStore.get('apex_saxo_account_key')?.value;
+  // AccountKey: ALWAYS from cookies (personal per customer after OAuth login)
+  const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
   
   const tokenSource = envToken ? 'ENV' : 'COOKIE';
   const tokenPreview = accessToken ? `${accessToken.substring(0, 20)}...` : 'NONE';
   
   console.log(`[APEX TICK] Token source: ${tokenSource} | Preview: ${tokenPreview}`);
-  console.log(`[APEX TICK] AccountKey: ${accountKey ? 'SET' : 'MISSING'}`);
+  console.log(`[APEX TICK] AccountKey: ${accountKey ? 'SET (cookie)' : 'MISSING - user must login'}`);
   
-  if (!accessToken || !accountKey) {
+  if (!accessToken) {
     return NextResponse.json({
       success: false,
-      error: 'Token not loaded from Vercel env - check Environment Variables',
+      error: 'Add SAXO_ACCESS_TOKEN to Vercel Environment Variables',
       tokenSource,
+      hasToken: false,
+    }, { status: 401 });
+  }
+  
+  if (!accountKey) {
+    return NextResponse.json({
+      success: false,
+      error: 'Ikke tilkoblet Saxo Bank. Klikk "Koble til Saxo" for a logge inn.',
+      needsLogin: true,
       hasToken: !!accessToken,
-      hasAccountKey: !!accountKey,
     }, { status: 401 });
   }
   
