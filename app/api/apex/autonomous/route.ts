@@ -602,7 +602,9 @@ const DIP_THRESHOLD = 0.0003;      // Buy on ANY 0.03% dip - ULTRA SENSITIVE
 const PEAK_THRESHOLD = 0.0005;     // Sell on 0.05% rise - RAPID profit-taking
 const RSI_OVERSOLD = 48;           // Almost always buying
 const RSI_OVERBOUGHT = 52;         // Almost always selling profits
-const POSITION_SIZE_PERCENT = 0.20; // 20% of capital per trade - MASSIVE positions
+const POSITION_SIZE_PERCENT = 0.02; // 2% of capital per trade - reasonable size
+const MAX_SHARES_PER_ORDER = 1000; // Maximum shares per single order
+const MAX_ORDER_VALUE = 50000; // Maximum order value in account currency (EUR)
 const MAX_TRADES_PER_SCAN = 15;    // Execute up to 15 trades per scan
 const ALWAYS_BUILD_POSITION = true; // ALWAYS build positions
 const FORCE_TRADE_EVERY_SCAN = true; // GUARANTEE trades every scan
@@ -649,9 +651,14 @@ async function generateSwingSignals(
     const dropFromHigh = momentum.localHigh > 0 ? (momentum.localHigh - currentPrice) / momentum.localHigh : 0;
     const riseFromLow = momentum.localLow > 0 ? (currentPrice - momentum.localLow) / momentum.localLow : 0;
     
-    // AGGRESSIVE position sizing - 8% of capital per trade
-    const baseSize = Math.max(10, Math.floor((balance * POSITION_SIZE_PERCENT) / currentPrice));
-    const volatilityMultiplier = 1 + (info.volatilitet - 2) * 0.3; // Increased multiplier
+    // Position sizing with MAX LIMITS to prevent order rejection
+    let baseSize = Math.max(10, Math.floor((balance * POSITION_SIZE_PERCENT) / currentPrice));
+    
+    // Apply maximum limits
+    baseSize = Math.min(baseSize, MAX_SHARES_PER_ORDER);
+    baseSize = Math.min(baseSize, Math.floor(MAX_ORDER_VALUE / currentPrice));
+    
+    const volatilityMultiplier = Math.min(1.5, 1 + (info.volatilitet - 2) * 0.2); // Capped multiplier
     
     const marketLabel = 'US';
     
@@ -666,7 +673,7 @@ async function generateSwingSignals(
     
     // TimesFM BUY signal - highest priority
     if (tfmSignal.action === 'BUY' && balance > baseSize * currentPrice * 2) {
-      const tfmSize = Math.floor(baseSize * 2 * volatilityMultiplier);
+      const tfmSize = Math.min(MAX_SHARES_PER_ORDER, Math.floor(baseSize * 1.5 * volatilityMultiplier));
       signals.push({
         ticker,
         action: 'BUY',
@@ -700,8 +707,8 @@ async function generateSwingSignals(
     
     // 1. DIP BUYING - very sensitive
     if (dropFromHigh >= DIP_THRESHOLD) {
-      const dipStrength = Math.min(5, dropFromHigh / DIP_THRESHOLD);
-      const orderSize = Math.floor(baseSize * dipStrength * volatilityMultiplier);
+      const dipStrength = Math.min(3, dropFromHigh / DIP_THRESHOLD);
+      const orderSize = Math.min(MAX_SHARES_PER_ORDER, Math.floor(baseSize * dipStrength * volatilityMultiplier));
       
       if (orderSize > 0 && balance > orderSize * currentPrice) {
         signals.push({
@@ -719,7 +726,7 @@ async function generateSwingSignals(
     
     // 2. RSI oversold - more sensitive
     if (momentum.rsi < RSI_OVERSOLD && balance > baseSize * currentPrice) {
-      const orderSize = Math.floor(baseSize * 2 * volatilityMultiplier);
+      const orderSize = Math.min(MAX_SHARES_PER_ORDER, Math.floor(baseSize * 1.5 * volatilityMultiplier));
       signals.push({
         ticker,
         action: 'BUY',
@@ -734,7 +741,7 @@ async function generateSwingSignals(
     
     // 3. TREND DOWN = buy opportunity
     if (momentum.trend === 'DOWN' && balance > baseSize * currentPrice) {
-      const orderSize = Math.floor(baseSize * volatilityMultiplier);
+      const orderSize = Math.min(MAX_SHARES_PER_ORDER, Math.floor(baseSize * volatilityMultiplier));
       signals.push({
         ticker,
         action: 'BUY',
@@ -788,8 +795,8 @@ async function generateSwingSignals(
     
     if (ALWAYS_BUILD_POSITION) {
       if (!pos || pos.amount === 0) {
-        // No position - MUST buy to build
-        const buildSize = Math.floor(baseSize * 3);
+        // No position - MUST buy to build (with MAX limit)
+        const buildSize = Math.min(MAX_SHARES_PER_ORDER, Math.floor(baseSize * 2));
         if (balance > buildSize * currentPrice) {
           signals.push({
             ticker,
@@ -803,8 +810,8 @@ async function generateSwingSignals(
           console.log(`[APEX] SIGNAL: ${ticker} BYGG POSISJON ${buildSize} aksjer`);
         }
       } else if (deviation < -10) {
-        // Underweight - add more
-        const addSize = Math.floor(baseSize * 1.5);
+        // Underweight - add more (with MAX limit)
+        const addSize = Math.min(MAX_SHARES_PER_ORDER, Math.floor(baseSize * 1.2));
         if (balance > addSize * currentPrice) {
           signals.push({
             ticker,
@@ -855,9 +862,9 @@ async function generateSwingSignals(
         console.log(`[APEX] SCALP: SELG ${scalpSize} ${ticker} @ +${(profitPercent * 100).toFixed(2)}% profitt`);
       }
       
-      // DCA on dips
+      // DCA on dips (with MAX limit)
       if (profitPercent < -0.002 && balance > baseSize * currentPrice) {
-        const dcaSize = Math.floor(baseSize * 1.5);
+        const dcaSize = Math.min(MAX_SHARES_PER_ORDER, Math.floor(baseSize * 1.2));
         signals.push({
           ticker,
           action: 'BUY',
@@ -871,9 +878,9 @@ async function generateSwingSignals(
       }
     }
     
-    // FORCE_TRADE: Always add position if we have cash
+    // FORCE_TRADE: Always add position if we have cash (with MAX limit)
     if (FORCE_TRADE_EVERY_SCAN && balance > baseSize * currentPrice * 0.5) {
-      const forceSize = Math.max(10, Math.floor(baseSize * 1.2));
+      const forceSize = Math.min(MAX_SHARES_PER_ORDER, Math.max(10, Math.floor(baseSize)));
       signals.push({
         ticker,
         action: 'BUY',
