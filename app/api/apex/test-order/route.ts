@@ -19,10 +19,10 @@ export async function GET() {
       tests: [],
     };
 
-    // Test 1: Search for MU
-    console.log('[TEST] Searching for MU...');
+    // Test 1: Search for MU (STOCKS ONLY - NO CFD)
+    console.log('[TEST] Searching for MU (Stock only)...');
     const searchRes = await fetch(
-      `${SAXO_API_BASE}/ref/v1/instruments?Keywords=MU&AssetTypes=Stock,CfdOnStock`,
+      `${SAXO_API_BASE}/ref/v1/instruments?Keywords=MU&AssetTypes=Stock`,
       { headers: { 'Authorization': `Bearer ${accessToken}` } }
     );
     const searchText = await searchRes.text();

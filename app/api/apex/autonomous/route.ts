@@ -282,34 +282,34 @@ async function findInstrument(accessToken: string, ticker: string, saxoSymbol: s
       ticker
     ];
     
-    // Search for both Stock and CfdOnStock
-    const assetTypesToTry = preferredAssetType === 'CfdOnStock' 
-      ? ['CfdOnStock', 'Stock'] 
-      : ['Stock', 'CfdOnStock'];
+    // ONLY search for Stock - NO CFDs!
+    const assetType = 'Stock';
     
-    for (const assetType of assetTypesToTry) {
-      for (const keyword of searches) {
-        const result = await safeFetchJson<{ Data?: Array<{ Identifier: number; AssetType?: string; Symbol?: string }> }>(
-          `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${encodeURIComponent(keyword)}&AssetTypes=${assetType}&$top=10`,
-          { headers: { 'Authorization': `Bearer ${accessToken}` } }
-        );
+    for (const keyword of searches) {
+      const result = await safeFetchJson<{ Data?: Array<{ Identifier: number; AssetType?: string; Symbol?: string }> }>(
+        `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${encodeURIComponent(keyword)}&AssetTypes=${assetType}&$top=10`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+      
+      if (result.ok && result.data?.Data && result.data.Data.length > 0) {
+        // Filter to ONLY Stock, never CFD
+        const stocksOnly = result.data.Data.filter((i) => i.AssetType === 'Stock');
+        if (stocksOnly.length === 0) continue;
         
-        if (result.ok && result.data?.Data && result.data.Data.length > 0) {
-          // Try to find exact match
-          const match = result.data.Data.find((i) => 
-            i.Symbol?.toUpperCase() === ticker ||
-            i.Symbol?.toUpperCase().startsWith(ticker + ':')
-          ) || result.data.Data[0];
-          
-          const found = { uic: match.Identifier, assetType: match.AssetType || assetType };
-          uicCache.set(cacheKey, found);
-          console.log(`[APEX] Found ${ticker}: UIC=${found.uic}, AssetType=${found.assetType}, Symbol=${match.Symbol}`);
-          return found;
-        }
+        // Try to find exact match
+        const match = stocksOnly.find((i) => 
+          i.Symbol?.toUpperCase() === ticker ||
+          i.Symbol?.toUpperCase().startsWith(ticker + ':')
+        ) || stocksOnly[0];
+        
+        const found = { uic: match.Identifier, assetType: 'Stock' };
+        uicCache.set(cacheKey, found);
+        console.log(`[APEX] Found STOCK ${ticker}: UIC=${found.uic}, Symbol=${match.Symbol}`);
+        return found;
       }
     }
     
-    console.log(`[APEX] Could not find instrument: ${ticker} (tried Stock and CfdOnStock)`);
+    console.log(`[APEX] Could not find STOCK instrument: ${ticker}`);
     return null;
   } catch (e) {
     console.log(`[APEX] Search error for ${ticker}: ${e}`);

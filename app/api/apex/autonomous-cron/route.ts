@@ -40,8 +40,9 @@ async function getInstrumentWithPrice(
   exchange: string
 ): Promise<{ Uic: number; AssetType: string; CurrentPrice: number } | null> {
   try {
+    // STOCKS ONLY - NO CFD!
     const searchResponse = await fetch(
-      `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=Stock,CfdOnStock&IncludeNonTradable=false`,
+      `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}&AssetTypes=Stock&IncludeNonTradable=false`,
       { headers: { 'Authorization': `Bearer ${accessToken}` } }
     );
 
