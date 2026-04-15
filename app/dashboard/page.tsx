@@ -802,6 +802,9 @@ const startTrading = useCallback(() => {
           <div className="flex items-center justify-between mb-6">
             <div className="flex items-center gap-3">
               <h2 className="text-xl font-semibold">Aktiv Trading Engine</h2>
+              <span className="px-2 py-0.5 bg-gradient-to-r from-cyan-500 to-blue-600 text-white text-[10px] font-bold rounded tracking-wider">
+                v6.1
+              </span>
               <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
                 isTrading 
                   ? 'bg-emerald-500/20 text-emerald-400' 
