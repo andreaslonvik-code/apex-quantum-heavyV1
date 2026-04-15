@@ -67,9 +67,11 @@ function getMarketStatus(): MarketStatus {
 // AI-hybrid trading system combining:
 // 1. TimesFM time-series forecasting (40% weight)
 // 2. RSI momentum analysis (30% weight)  
-// 3. Apex Quantum portfolio logic (30% weight)
-// Target: 350-410% annual return through active intra-day trading
-// Total allocation: 100% across 6 AI-selected positions
+// ============ APEX QUANTUM v6.1 – GLOBAL 24/7 EXTREME GROWTH EDITION ============
+// Target: 120-300% CAR with max -25% drawdown
+// Kelly-weighted for max compounding
+// Algoritmen er selvtenkende (meta-cognition) og selvlærende (self-evolution)
+
 const APEX_BLUEPRINT: Record<string, {
   navn: string;
   targetVekt: number;
@@ -77,19 +79,42 @@ const APEX_BLUEPRINT: Record<string, {
   saxoSymbol: string;
   assetType: string;
   market: 'US' | 'OSLO';
+  score: number;
 }> = {
-  // ============ US STOCKS (50% allocation) ============
-  MU:   { navn: 'Micron Technology',    targetVekt: 20, volatilitet: 3, saxoSymbol: 'MU:xnas',   assetType: 'Stock', market: 'US' },  // AI/Memory chips
-  CEG:  { navn: 'Constellation Energy', targetVekt: 15, volatilitet: 2, saxoSymbol: 'CEG:xnas',  assetType: 'Stock', market: 'US' },  // Nuclear power
-  VRT:  { navn: 'Vertiv Holdings',      targetVekt: 10, volatilitet: 2, saxoSymbol: 'VRT:xnys',  assetType: 'Stock', market: 'US' },  // Data center infra
-  RKLB: { navn: 'Rocket Lab',           targetVekt: 5,  volatilitet: 4, saxoSymbol: 'RKLB:xnas', assetType: 'Stock', market: 'US' },  // Space tech
+  // ============ CORE HOLDINGS (fra v6.1 blueprint) ============
+  MU:   { navn: 'Micron Technology',    targetVekt: 69, volatilitet: 3, saxoSymbol: 'MU:xnas',   assetType: 'Stock', market: 'US', score: 8.8 },  // AI/Memory - hovedposisjon
+  CEG:  { navn: 'Constellation Energy', targetVekt: 13, volatilitet: 2, saxoSymbol: 'CEG:xnas',  assetType: 'Stock', market: 'US', score: 9.4 },  // Nuclear/Data center power
+  VRT:  { navn: 'Vertiv Holdings',      targetVekt: 7,  volatilitet: 2, saxoSymbol: 'VRT:xnys',  assetType: 'Stock', market: 'US', score: 8.5 },  // Data center cooling
+  ABSI: { navn: 'Absci Corporation',    targetVekt: 2,  volatilitet: 5, saxoSymbol: 'ABSI:xnas', assetType: 'Stock', market: 'US', score: 8.7 },  // AI drug discovery
+  RKLB: { navn: 'Rocket Lab',           targetVekt: 2,  volatilitet: 4, saxoSymbol: 'RKLB:xnas', assetType: 'Stock', market: 'US', score: 8.4 },  // Space tech
+  LMND: { navn: 'Lemonade Inc',         targetVekt: 1,  volatilitet: 4, saxoSymbol: 'LMND:xnys', assetType: 'Stock', market: 'US', score: 8.2 },  // AI insurance
   
-  // ============ OSLO BØRS STOCKS (50% allocation) ============
-  EQNR: { navn: 'Equinor',              targetVekt: 15, volatilitet: 2, saxoSymbol: 'EQNR:xosl', assetType: 'Stock', market: 'OSLO' }, // Energy giant
-  DNB:  { navn: 'DNB Bank',             targetVekt: 10, volatilitet: 2, saxoSymbol: 'DNB:xosl',  assetType: 'Stock', market: 'OSLO' }, // Banking
-  MOWI: { navn: 'Mowi ASA',             targetVekt: 10, volatilitet: 3, saxoSymbol: 'MOWI:xosl', assetType: 'Stock', market: 'OSLO' }, // Salmon/Seafood
-  NHY:  { navn: 'Norsk Hydro',          targetVekt: 8,  volatilitet: 3, saxoSymbol: 'NHY:xosl',  assetType: 'Stock', market: 'OSLO' }, // Aluminium/Green energy
-  AKRBP: { navn: 'Aker BP',             targetVekt: 7,  volatilitet: 3, saxoSymbol: 'AKRBP:xosl', assetType: 'Stock', market: 'OSLO' }, // Oil & Gas
+  // ============ OSLO BØRS (Norwegian exposure) ============
+  NAS:  { navn: 'Norwegian Air Shuttle', targetVekt: 4, volatilitet: 4, saxoSymbol: 'NAS:xosl',  assetType: 'Stock', market: 'OSLO', score: 8.4 }, // Airline recovery
+  NORSE: { navn: 'Norse Atlantic',       targetVekt: 2, volatilitet: 5, saxoSymbol: 'NORSE:xosl', assetType: 'Stock', market: 'OSLO', score: 8.4 }, // Atlantic routes
+};
+
+// ============ GLOBAL WATCHLIST (22 elite-tickers) ============
+const APEX_WATCHLIST: Record<string, { navn: string; triggerPrice?: number; action: string; score: number }> = {
+  PLTR: { navn: 'Palantir', triggerPrice: 122, action: 'AUTO_BUY_AT_122_USD', score: 9.2 },
+  AMD:  { navn: 'AMD', action: 'MONITOR', score: 8.6 },
+  KLAC: { navn: 'KLA Corp', action: 'MONITOR', score: 8.5 },
+  LRCX: { navn: 'Lam Research', action: 'MONITOR', score: 8.5 },
+  BE:   { navn: 'Bloom Energy', action: 'MONITOR', score: 8.3 },
+  CIEN: { navn: 'Ciena', action: 'MONITOR', score: 8.2 },
+  FIX:  { navn: 'Comfort Systems', action: 'MONITOR', score: 8.1 },
+  VST:  { navn: 'Vistra Corp', action: 'MONITOR', score: 8.8 },
+  NVDA: { navn: 'NVIDIA', action: 'MONITOR', score: 9.5 },
+  SMCI: { navn: 'Super Micro', action: 'MONITOR', score: 8.4 },
+};
+
+// PLTR Auto-buy configuration (from blueprint)
+const PLTR_AUTO_BUY = {
+  enabled: true,
+  triggerPrice: 122, // USD
+  targetShares: 950,
+  allocation: 2.75, // %
+  sellToFund: ['LMND', 'RKLB'], // Sell these to fund PLTR purchase
 };
 
 // Momentum tracking for intra-day swings
