@@ -67,11 +67,51 @@ function getMarketStatus(): MarketStatus {
 // AI-hybrid trading system combining:
 // 1. TimesFM time-series forecasting (40% weight)
 // 2. RSI momentum analysis (30% weight)  
-// ============ APEX QUANTUM v6.1 – GLOBAL 24/7 EXTREME GROWTH EDITION ============
-// Target: 120-300% CAR with max -25% drawdown
-// Kelly-weighted for max compounding
-// Algoritmen er selvtenkende (meta-cognition) og selvlærende (self-evolution)
+// ============ APEX QUANTUM v6.2 – OSLO BØRS VOLATILITY HUNTER ============
+// Target: Capture ALL market movements through high-frequency volatility trading
+// Oslo Børs: Dynamic stock discovery + aggressive momentum trading
+// US: Core holdings for stability
 
+// ============ US CORE HOLDINGS (static, long-term) ============
+const US_CORE_HOLDINGS: Record<string, {
+  navn: string;
+  targetVekt: number;
+  volatilitet: number;
+  saxoSymbol: string;
+  assetType: string;
+  market: 'US';
+  score: number;
+}> = {
+  MU:   { navn: 'Micron Technology',    targetVekt: 50, volatilitet: 3, saxoSymbol: 'MU:xnas',   assetType: 'Stock', market: 'US', score: 8.8 },
+  CEG:  { navn: 'Constellation Energy', targetVekt: 25, volatilitet: 2, saxoSymbol: 'CEG:xnas',  assetType: 'Stock', market: 'US', score: 9.4 },
+  VRT:  { navn: 'Vertiv Holdings',      targetVekt: 15, volatilitet: 2, saxoSymbol: 'VRT:xnys',  assetType: 'Stock', market: 'US', score: 8.5 },
+  RKLB: { navn: 'Rocket Lab',           targetVekt: 10, volatilitet: 4, saxoSymbol: 'RKLB:xnas', assetType: 'Stock', market: 'US', score: 8.4 },
+};
+
+// ============ OSLO BØRS VOLATILITY SCANNER CONFIG ============
+// These are SEED tickers for discovery - system will find more dynamically
+const OSLO_VOLATILITY_SEEDS = [
+  'NAS', 'NORSE', 'NEL', 'REC', 'AKER', 'PGS', 'SCHA', 'AKSO', 'BWO', 'SUBC',
+  'KAHOT', 'OTELLO', 'ENDUR', 'PROT', 'AUSS', 'FLNG', 'COOL', 'BELCO', 'BORR', 'IDEX'
+];
+
+// Dynamic Oslo stocks discovered during runtime
+interface OsloVolatilityStock {
+  ticker: string;
+  navn: string;
+  uic: number;
+  volatility: number;  // Calculated from price movements
+  lastPrice: number;
+  change24h: number;   // % change in 24h
+  volume: number;
+  score: number;       // Volatility score 1-10
+  lastUpdated: number;
+}
+
+// In-memory cache for discovered Oslo stocks
+const osloVolatilityCache: Map<string, OsloVolatilityStock> = new Map();
+
+// Combined blueprint for signal generation
 const APEX_BLUEPRINT: Record<string, {
   navn: string;
   targetVekt: number;
@@ -80,42 +120,13 @@ const APEX_BLUEPRINT: Record<string, {
   assetType: string;
   market: 'US' | 'OSLO';
   score: number;
-}> = {
-  // ============ CORE HOLDINGS (fra v6.1 blueprint) ============
-  MU:   { navn: 'Micron Technology',    targetVekt: 69, volatilitet: 3, saxoSymbol: 'MU:xnas',   assetType: 'Stock', market: 'US', score: 8.8 },  // AI/Memory - hovedposisjon
-  CEG:  { navn: 'Constellation Energy', targetVekt: 13, volatilitet: 2, saxoSymbol: 'CEG:xnas',  assetType: 'Stock', market: 'US', score: 9.4 },  // Nuclear/Data center power
-  VRT:  { navn: 'Vertiv Holdings',      targetVekt: 7,  volatilitet: 2, saxoSymbol: 'VRT:xnys',  assetType: 'Stock', market: 'US', score: 8.5 },  // Data center cooling
-  ABSI: { navn: 'Absci Corporation',    targetVekt: 2,  volatilitet: 5, saxoSymbol: 'ABSI:xnas', assetType: 'Stock', market: 'US', score: 8.7 },  // AI drug discovery
-  RKLB: { navn: 'Rocket Lab',           targetVekt: 2,  volatilitet: 4, saxoSymbol: 'RKLB:xnas', assetType: 'Stock', market: 'US', score: 8.4 },  // Space tech
-  LMND: { navn: 'Lemonade Inc',         targetVekt: 1,  volatilitet: 4, saxoSymbol: 'LMND:xnys', assetType: 'Stock', market: 'US', score: 8.2 },  // AI insurance
-  
-  // ============ OSLO BØRS (Norwegian exposure) ============
-  NAS:  { navn: 'Norwegian Air Shuttle', targetVekt: 4, volatilitet: 4, saxoSymbol: 'NAS:xosl',  assetType: 'Stock', market: 'OSLO', score: 8.4 }, // Airline recovery
-  NORSE: { navn: 'Norse Atlantic',       targetVekt: 2, volatilitet: 5, saxoSymbol: 'NORSE:xosl', assetType: 'Stock', market: 'OSLO', score: 8.4 }, // Atlantic routes
-};
+}> = { ...US_CORE_HOLDINGS };
 
-// ============ GLOBAL WATCHLIST (22 elite-tickers) ============
-const APEX_WATCHLIST: Record<string, { navn: string; triggerPrice?: number; action: string; score: number }> = {
-  PLTR: { navn: 'Palantir', triggerPrice: 122, action: 'AUTO_BUY_AT_122_USD', score: 9.2 },
-  AMD:  { navn: 'AMD', action: 'MONITOR', score: 8.6 },
-  KLAC: { navn: 'KLA Corp', action: 'MONITOR', score: 8.5 },
-  LRCX: { navn: 'Lam Research', action: 'MONITOR', score: 8.5 },
-  BE:   { navn: 'Bloom Energy', action: 'MONITOR', score: 8.3 },
-  CIEN: { navn: 'Ciena', action: 'MONITOR', score: 8.2 },
-  FIX:  { navn: 'Comfort Systems', action: 'MONITOR', score: 8.1 },
-  VST:  { navn: 'Vistra Corp', action: 'MONITOR', score: 8.8 },
-  NVDA: { navn: 'NVIDIA', action: 'MONITOR', score: 9.5 },
-  SMCI: { navn: 'Super Micro', action: 'MONITOR', score: 8.4 },
-};
-
-// PLTR Auto-buy configuration (from blueprint)
-const PLTR_AUTO_BUY = {
-  enabled: true,
-  triggerPrice: 122, // USD
-  targetShares: 950,
-  allocation: 2.75, // %
-  sellToFund: ['LMND', 'RKLB'], // Sell these to fund PLTR purchase
-};
+// Oslo allocation settings
+const OSLO_ALLOCATION_PERCENT = 40; // 40% of capital for Oslo volatility trading
+const US_ALLOCATION_PERCENT = 60;   // 60% for US core holdings
+const MIN_VOLATILITY_SCORE = 6;     // Minimum score to trade Oslo stock
+const MAX_OSLO_POSITIONS = 5;       // Max concurrent Oslo positions
 
 // Momentum tracking for intra-day swings
 interface PricePoint {
@@ -198,6 +209,164 @@ function runTimesFMPrediction(prices: number[], horizonSteps: number = 5): {
     predictedReturn > 0.005 ? 'UP' : predictedReturn < -0.005 ? 'DOWN' : 'NEUTRAL';
   
   return { predictions, predictedReturn, confidence, direction };
+}
+
+// ============ OSLO BØRS VOLATILITY SCANNER ============
+// Scans Oslo Børs for high-volatility stocks and ranks them for trading
+async function scanOsloVolatility(
+  accessToken: string
+): Promise<OsloVolatilityStock[]> {
+  console.log(`[APEX OSLO] Scanning Oslo Børs for high-volatility opportunities...`);
+  
+  const discoveredStocks: OsloVolatilityStock[] = [];
+  
+  for (const ticker of OSLO_VOLATILITY_SEEDS) {
+    try {
+      // Search for the stock on Oslo Børs
+      const searchResult = await safeFetchJson<{ Data?: Array<{ Identifier: number; Symbol: string; Description: string; AssetType: string }> }>(
+        `${SAXO_API_BASE}/ref/v1/instruments?Keywords=${ticker}:xosl&AssetTypes=Stock&$top=5`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+      
+      if (!searchResult.ok || !searchResult.data?.Data?.length) continue;
+      
+      // Filter to only stocks (no CFD)
+      const stockMatch = searchResult.data.Data.find(i => i.AssetType === 'Stock');
+      if (!stockMatch) continue;
+      
+      const uic = stockMatch.Identifier;
+      
+      // Get current price and intraday data
+      const priceResult = await safeFetchJson<{ Quote?: { Ask?: number; Bid?: number; Mid?: number; PriceChangePercent?: number } }>(
+        `${SAXO_API_BASE}/trade/v1/infoprices?Uic=${uic}&AssetType=Stock&FieldGroups=Quote`,
+        { headers: { 'Authorization': `Bearer ${accessToken}` } }
+      );
+      
+      if (!priceResult.ok || !priceResult.data?.Quote) continue;
+      
+      const quote = priceResult.data.Quote;
+      const price = quote.Mid || quote.Ask || quote.Bid || 0;
+      const change24h = quote.PriceChangePercent || 0;
+      
+      // Calculate volatility score based on % change
+      // Higher absolute change = higher volatility = more opportunity
+      const absChange = Math.abs(change24h);
+      const volatilityScore = Math.min(10, Math.max(1, absChange * 2 + 3));
+      
+      // Only add stocks with meaningful volatility
+      if (volatilityScore >= MIN_VOLATILITY_SCORE || absChange >= 2) {
+        const stock: OsloVolatilityStock = {
+          ticker,
+          navn: stockMatch.Description || ticker,
+          uic,
+          volatility: absChange,
+          lastPrice: price,
+          change24h,
+          volume: 0, // Would need separate API call
+          score: volatilityScore,
+          lastUpdated: Date.now(),
+        };
+        
+        discoveredStocks.push(stock);
+        osloVolatilityCache.set(ticker, stock);
+        console.log(`[APEX OSLO] Found: ${ticker} @ ${price.toFixed(2)} NOK, change: ${change24h.toFixed(2)}%, score: ${volatilityScore.toFixed(1)}`);
+      }
+    } catch (err) {
+      console.log(`[APEX OSLO] Error scanning ${ticker}:`, err);
+    }
+  }
+  
+  // Sort by volatility score (highest first)
+  discoveredStocks.sort((a, b) => b.score - a.score);
+  
+  // Return top performers
+  const topStocks = discoveredStocks.slice(0, MAX_OSLO_POSITIONS);
+  console.log(`[APEX OSLO] Top ${topStocks.length} volatile stocks: ${topStocks.map(s => `${s.ticker}(${s.score.toFixed(1)})`).join(', ')}`);
+  
+  return topStocks;
+}
+
+// ============ OSLO VOLATILITY TRADING SIGNALS ============
+async function generateOsloVolatilitySignals(
+  accessToken: string,
+  accountKey: string,
+  balance: number,
+  marketStatus: MarketStatus
+): Promise<Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; uic: number; market: 'OSLO' }>> {
+  if (!marketStatus.osloOpen) {
+    console.log(`[APEX OSLO] Market closed - skipping volatility scan`);
+    return [];
+  }
+  
+  const signals: Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; uic: number; market: 'OSLO' }> = [];
+  
+  // Scan for volatile stocks
+  const volatileStocks = await scanOsloVolatility(accessToken);
+  
+  if (volatileStocks.length === 0) {
+    console.log(`[APEX OSLO] No high-volatility stocks found`);
+    return signals;
+  }
+  
+  // Calculate Oslo allocation
+  const osloCapital = balance * (OSLO_ALLOCATION_PERCENT / 100);
+  const perStockAllocation = osloCapital / Math.max(1, volatileStocks.length);
+  
+  console.log(`[APEX OSLO] Capital for Oslo: ${osloCapital.toFixed(0)} EUR, per stock: ${perStockAllocation.toFixed(0)} EUR`);
+  
+  for (const stock of volatileStocks) {
+    const orderValue = Math.min(perStockAllocation, MAX_ORDER_VALUE);
+    let shares = Math.floor(orderValue / stock.lastPrice);
+    shares = Math.min(shares, MAX_SHARES_PER_ORDER);
+    shares = Math.max(shares, 10); // Minimum 10 shares
+    
+    if (shares * stock.lastPrice > balance * 0.1) {
+      // Cap at 10% of total balance per trade
+      shares = Math.floor((balance * 0.1) / stock.lastPrice);
+    }
+    
+    if (shares < 10) continue;
+    
+    // Determine action based on momentum
+    let action: 'BUY' | 'SELL' = 'BUY';
+    let reason = '';
+    
+    if (stock.change24h < -3) {
+      // Big dip - aggressive buy
+      action = 'BUY';
+      reason = `[OSLO] DIP KJOP ${stock.change24h.toFixed(1)}% - Volatility score ${stock.score.toFixed(1)}`;
+      shares = Math.min(MAX_SHARES_PER_ORDER, Math.floor(shares * 1.5)); // Larger on dips
+    } else if (stock.change24h > 5) {
+      // Big pump - take profits if we have position
+      action = 'SELL';
+      reason = `[OSLO] TA GEVINST ${stock.change24h.toFixed(1)}% - Score ${stock.score.toFixed(1)}`;
+    } else if (stock.score >= 7) {
+      // High volatility = opportunity
+      action = 'BUY';
+      reason = `[OSLO] HØY VOLATILITET ${stock.volatility.toFixed(1)}% - Score ${stock.score.toFixed(1)}`;
+    } else {
+      // Moderate volatility - smaller position
+      action = 'BUY';
+      reason = `[OSLO] MOMENTUM ${stock.change24h > 0 ? '+' : ''}${stock.change24h.toFixed(1)}%`;
+      shares = Math.floor(shares * 0.7);
+    }
+    
+    if (shares >= 10) {
+      signals.push({
+        ticker: stock.ticker,
+        action,
+        amount: shares,
+        reason,
+        price: stock.lastPrice,
+        uic: stock.uic,
+        market: 'OSLO',
+      });
+      
+      console.log(`[APEX OSLO] SIGNAL: ${action} ${shares}x ${stock.ticker} @ ${stock.lastPrice.toFixed(2)} NOK - ${reason}`);
+    }
+  }
+  
+  return signals;
 }
 
 // Calculate TimesFM-enhanced score
@@ -1023,10 +1192,28 @@ export async function POST(request: NextRequest) {
 
     // Generate signals only for OPEN markets
     console.log(`[APEX] Kaller generateSwingSignals med balance=${tradingCapital}, total=${BASE_TRADING_CAPITAL}`);
-    const signals = await generateSwingSignals(accessToken, positions, tradingCapital, BASE_TRADING_CAPITAL, marketStatus);
+    const usSignals = await generateSwingSignals(accessToken, positions, tradingCapital * (US_ALLOCATION_PERCENT / 100), BASE_TRADING_CAPITAL, marketStatus);
+    
+    // Generate Oslo volatility signals (dynamic discovery)
+    console.log(`[APEX] ===== OSLO VOLATILITY SCAN =====`);
+    const osloSignals = await generateOsloVolatilitySignals(accessToken, accountKey, tradingCapital, marketStatus);
+    
+    // Combine all signals
+    const signals = [
+      ...usSignals,
+      ...osloSignals.map(s => ({
+        ticker: s.ticker,
+        action: s.action,
+        amount: s.amount,
+        reason: s.reason,
+        price: s.price,
+        momentum: { prices: [], localHigh: s.price, localLow: s.price, rsi: 50, trend: 'NEUTRAL' as const },
+        market: s.market as 'US' | 'OSLO',
+      })),
+    ];
     
     console.log(`[APEX] ===== SIGNAL RESULTAT =====`);
-    console.log(`[APEX] Genererte ${signals.length} signaler for: ${marketStatus.activeMarkets.join(', ')}`);
+    console.log(`[APEX] US signaler: ${usSignals.length}, Oslo signaler: ${osloSignals.length}, Totalt: ${signals.length}`);
     signals.forEach((s, i) => {
       console.log(`[APEX] Signal ${i+1}: ${s.action} ${s.amount} ${s.ticker} @ ${s.price.toFixed(2)} - ${s.reason}`);
     });
@@ -1144,20 +1331,34 @@ export async function POST(request: NextRequest) {
     }
     
     for (const signal of signals) {
-      const info = APEX_BLUEPRINT[signal.ticker];
+      // Get info from blueprint OR from Oslo volatility cache
+      const blueprintInfo = APEX_BLUEPRINT[signal.ticker];
+      const osloInfo = osloVolatilityCache.get(signal.ticker);
+      
+      // Build info object - Oslo signals may not be in blueprint
+      const info = blueprintInfo || (osloInfo ? {
+        navn: osloInfo.navn,
+        targetVekt: 10,
+        volatilitet: osloInfo.volatility,
+        saxoSymbol: `${signal.ticker}:xosl`,
+        assetType: 'Stock',
+        market: 'OSLO' as const,
+        score: osloInfo.score,
+      } : null);
+      
       if (!info) {
-        console.log(`[APEX] Skip ${signal.ticker} - ikke i blueprint`);
+        console.log(`[APEX] Skip ${signal.ticker} - ikke i blueprint eller Oslo cache`);
         continue;
       }
 
       const tradeValue = signal.amount * signal.price;
-      console.log(`[APEX] Prosesserer: ${signal.action} ${signal.amount} ${signal.ticker} @ ${signal.price.toFixed(2)} = ${tradeValue.toFixed(0)} kr`);
+      console.log(`[APEX] Prosesserer: ${signal.action} ${signal.amount} ${signal.ticker} @ ${signal.price.toFixed(2)} = ${tradeValue.toFixed(0)} kr [${signal.market}]`);
 
       // Check if we have enough cash to buy
       if (signal.action === 'BUY') {
         const maxBuyable = actualCash * 0.95;
         if (tradeValue > maxBuyable) {
-          console.log(`[APEX] SKIP KJOP ${signal.ticker}: Koster ${tradeValue.toFixed(0)} kr, men kun ${actualCash.toFixed(0)} kr tilgjengelig (max: ${maxBuyable.toFixed(0)} kr)`);
+          console.log(`[APEX] SKIP KJOP ${signal.ticker}: Koster ${tradeValue.toFixed(0)} kr, men kun ${actualCash.toFixed(0)} kr tilgjengelig`);
           failedTickers.push(`${signal.ticker}: Ikke nok kontanter`);
           continue;
         }
@@ -1171,7 +1372,7 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      console.log(`[APEX] Sender ordre: ${signal.action} ${signal.amount} ${signal.ticker}`);
+      console.log(`[APEX] Sender ordre: ${signal.action} ${signal.amount} ${signal.ticker} [${signal.market}]`);
       
       const result = await placeMarketOrder(
         accessToken,
@@ -1182,7 +1383,7 @@ export async function POST(request: NextRequest) {
         signal.amount,
         signal.action === 'BUY' ? 'Buy' : 'Sell',
         signal.reason,
-        info.market
+        signal.market
       );
 
       console.log(`[APEX] Ordre resultat: ${result.success ? 'OK' : 'FEIL'} - ${result.orderId || result.error}`);
@@ -1191,11 +1392,14 @@ export async function POST(request: NextRequest) {
         if (signal.action === 'BUY') {
           totalBought += tradeValue;
           recordPurchase(accountKey, signal.ticker, signal.price, signal.amount);
-          console.log(`[APEX] KJOPT: ${signal.amount} ${signal.ticker} @ ${signal.price.toFixed(2)} = ${tradeValue.toFixed(0)} kr`);
+          console.log(`[APEX] KJOPT: ${signal.amount} ${signal.ticker} @ ${signal.price.toFixed(2)} = ${tradeValue.toFixed(0)} kr [${signal.market}]`);
+          // Update actual cash tracking
+          actualCash -= tradeValue;
         } else {
           totalSold += tradeValue;
           lockProfit(accountKey, signal.ticker, signal.price, signal.amount);
-          console.log(`[APEX] SOLGT: ${signal.amount} ${signal.ticker} @ ${signal.price.toFixed(2)} = ${tradeValue.toFixed(0)} kr`);
+          console.log(`[APEX] SOLGT: ${signal.amount} ${signal.ticker} @ ${signal.price.toFixed(2)} = ${tradeValue.toFixed(0)} kr [${signal.market}]`);
+          actualCash += tradeValue;
         }
       } else {
         console.log(`[APEX] FEIL: ${signal.ticker} - ${result.error}`);
@@ -1211,7 +1415,7 @@ export async function POST(request: NextRequest) {
         orderId: result.orderId,
         status: result.success ? 'OK' : 'FEIL',
         reason: result.success ? signal.reason : 'Ordre feilet',
-        market: info.market,
+        market: signal.market,
       });
 
       if (!result.success) {
