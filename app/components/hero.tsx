@@ -13,7 +13,7 @@ export function Hero({ language }: HeroProps) {
       description:
         'Apex Quantum analyserer markedet og utforer handler autonomt hvert 2. sekund. Koble til din Saxo-konto og la AI-en bygge portefoljen din.',
       cta: 'Start nå',
-      price: '499 kr/mnd',
+      price: '4 990 kr/mnd',
     },
     en: {
       badge: 'Autonomous AI Trading',
@@ -22,7 +22,7 @@ export function Hero({ language }: HeroProps) {
       description:
         'Apex Quantum analyzes the market and executes trades autonomously every 2 seconds. Connect your Saxo account and let the AI build your portfolio.',
       cta: 'Get Started',
-      price: '499 NOK/mo',
+      price: '4,990 NOK/mo',
     },
   };
 

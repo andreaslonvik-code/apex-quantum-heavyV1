@@ -27,7 +27,7 @@ export function LiveReport({ content, isLoading, language, onRefresh, isSubscrib
       lastUpdate: 'Oppdateres automatisk hvert 10. minutt',
       paywallTitle: 'Abonner for full tilgang',
       paywallDesc: 'Få daglige porteføljeanbefalinger med tydelige kjøps- og salgssignaler. Følg anbefalingene og oppnå eksepsjonell avkastning.',
-      subscribe: 'Abonner nå - 499 kr/mnd',
+      subscribe: 'Abonner nå - 4 990 kr/mnd',
       preview: 'Forhåndsvisning',
       portfolioTitle: 'AI-Portefølje',
       stock: 'Aksje',
