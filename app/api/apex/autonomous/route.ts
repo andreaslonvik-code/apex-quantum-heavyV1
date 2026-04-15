@@ -400,7 +400,7 @@ async function placeMarketOrder(
   amount: number,
   buySell: 'Buy' | 'Sell',
   reason: string,
-  market: 'US'
+  market: 'US' | 'OSLO'
 ): Promise<{ success: boolean; orderId?: string; error?: string; uic?: number }> {
   try {
     const instrument = await findInstrument(accessToken, ticker, saxoSymbol, assetType);
@@ -591,19 +591,19 @@ async function generateSwingSignals(
   balance: number,
   totalValue: number,
   marketStatus: MarketStatus
-): Promise<Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData; market: 'US' }>> {
-  const signals: Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData; market: 'US' }> = [];
+): Promise<Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData; market: 'US' | 'OSLO' }>> {
+  const signals: Array<{ ticker: string; action: 'BUY' | 'SELL'; amount: number; reason: string; price: number; momentum: MomentumData; market: 'US' | 'OSLO' }> = [];
   
   console.log(`[APEX] Genererer signaler for ${Object.keys(APEX_BLUEPRINT).length} aksjer...`);
   console.log(`[APEX] Aktive markeder: ${marketStatus.activeMarkets.join(', ') || 'INGEN'}`);
-  console.log(`[APEX] US Market open: ${marketStatus.usOpen}`);
+  console.log(`[APEX] Oslo open: ${marketStatus.osloOpen}, US open: ${marketStatus.usOpen}`);
   
   for (const [ticker, info] of Object.entries(APEX_BLUEPRINT)) {
-    // CRITICAL: Only trade stocks from OPEN markets
-    // Fix: Check usOpen directly since all stocks are US
-    if (!marketStatus.usOpen) {
-      console.log(`[APEX] Skip ${ticker} - US market stengt`);
-      continue; // Skip - market is closed
+    // Check if this stock's market is open
+    const isMarketOpen = info.market === 'OSLO' ? marketStatus.osloOpen : marketStatus.usOpen;
+    if (!isMarketOpen) {
+      console.log(`[APEX] Skip ${ticker} - ${info.market} market stengt`);
+      continue;
     }
     
     const instrument = await findInstrument(accessToken, ticker, info.saxoSymbol, info.assetType);
