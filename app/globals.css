@@ -251,3 +251,263 @@ body {
   background: rgba(0, 240, 255, 0.05);
   box-shadow: inset 0 0 20px rgba(0, 240, 255, 0.05);
 }
+
+/* ============================================================ */
+/* MOBILE RESPONSIVENESS & ADAPTIVE DESIGN */
+/* ============================================================ */
+
+/* Base mobile optimizations */
+* {
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: rgba(0, 240, 255, 0.1);
+}
+
+textarea, input {
+  -webkit-user-select: text;
+}
+
+/* Small devices (mobile) - 320px to 640px */
+@media (max-width: 640px) {
+  :root {
+    font-size: 14px;
+  }
+
+  body {
+    overflow-x: hidden;
+  }
+
+  .scanline {
+    height: 1px;
+  }
+
+  /* Responsive padding */
+  .container {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+
+  /* Responsive text */
+  h1 {
+    font-size: 1.75rem;
+    line-height: 1.2;
+  }
+
+  h2 {
+    font-size: 1.5rem;
+  }
+
+  h3 {
+    font-size: 1.25rem;
+  }
+
+  p {
+    font-size: 0.95rem;
+  }
+
+  /* Responsive grid */
+  .grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* Full width buttons on mobile */
+  button {
+    min-height: 44px; /* Touch target */
+  }
+
+  /* Responsive forms */
+  input, textarea, select {
+    font-size: 16px; /* Prevent iOS zoom */
+    min-height: 44px;
+  }
+
+  /* Responsive cards */
+  .glass-card {
+    padding: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  /* Hide desktop-only elements */
+  .hidden-mobile {
+    display: none !important;
+  }
+
+  /* Responsive tables */
+  table {
+    font-size: 0.85rem;
+  }
+
+  /* Responsive modals */
+  .modal {
+    width: 95vw;
+    max-height: 90vh;
+    margin: auto;
+  }
+
+  /* Horizontal scroll for tables */
+  .table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Responsive sidebar */
+  .sidebar {
+    position: fixed;
+    left: -280px;
+    transition: left 0.3s ease;
+    z-index: 100;
+  }
+
+  .sidebar.active {
+    left: 0;
+  }
+
+  /* Bottom navigation for mobile */
+  nav {
+    position: sticky;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: var(--background);
+    border-top: 1px solid var(--border);
+  }
+}
+
+/* Tablet devices - 641px to 1024px */
+@media (min-width: 641px) and (max-width: 1024px) {
+  :root {
+    font-size: 15px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Show smaller sidebar */
+  .sidebar {
+    width: 200px;
+  }
+}
+
+/* Large devices - 1025px+ */
+@media (min-width: 1025px) {
+  :root {
+    font-size: 16px;
+  }
+
+  .grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  /* Show full sidebar */
+  .sidebar {
+    width: 280px;
+  }
+
+  /* Show desktop-only elements */
+  .hidden-desktop {
+    display: none !important;
+  }
+}
+
+/* ============================================================ */
+/* DARK MODE ENHANCEMENTS */
+/* ============================================================ */
+
+@media (prefers-color-scheme: dark) {
+  /* Already dark, but ensure consistency */
+  :root {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: #0a0a0a;
+    color: #fafafa;
+  }
+
+  /* Dark form enhancements */
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  textarea,
+  select {
+    background-color: #18181b;
+    color: #fafafa;
+    border-color: rgba(39, 39, 42, 0.8);
+  }
+
+  input::placeholder {
+    color: #71717a;
+  }
+
+  /* Dark focus states */
+  input:focus,
+  textarea:focus,
+  select:focus {
+    outline: none;
+    border-color: #00f0ff;
+    box-shadow: 0 0 0 3px rgba(0, 240, 255, 0.1);
+  }
+}
+
+/* ============================================================ */
+/* ACCESSIBILITY IMPROVEMENTS */
+/* ============================================================ */
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .scanline {
+    animation: none;
+  }
+
+  .quantum-particle {
+    animation: none;
+  }
+
+  .pulse-live {
+    animation: none;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: more) {
+  :root {
+    --neon-cyan: #00ffff;
+    --neon-magenta: #ff00ff;
+    --neon-green: #00ff00;
+  }
+
+  .neon-text-cyan {
+    text-shadow: 0 0 15px rgba(0, 255, 255, 0.8);
+  }
+}
+
+/* ============================================================ */
+/* PRINT STYLES */
+/* ============================================================ */
+
+@media print {
+  body {
+    background: white;
+    color: black;
+  }
+
+  .scanline,
+  .quantum-particle,
+  nav,
+  footer,
+  .hidden-print {
+    display: none !important;
+  }
+
+  /* Better print layout */
+  * {
+    page-break-inside: avoid;
+  }
+}
