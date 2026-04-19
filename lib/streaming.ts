@@ -30,7 +30,7 @@ export class ApexWebSocket {
   private listeners: Map<string, Set<Function>> = new Map();
   private messageBuffer: string[] = [];
   private maxBufferSize: number = 1000;
-  private heartbeatInterval: NodeJS.Timer | null = null;
+  private heartbeatInterval: NodeJS.Timeout | null = null;
 
   constructor(url: string, maxReconnectAttempts: number = 10) {
     this.url = url;
@@ -71,7 +71,7 @@ export class ApexWebSocket {
 
         this.ws.onerror = (error: Event) => {
           this.state = WebSocketState.ERROR;
-          logger.error('WebSocket error', error as Error);
+          logger.error('WebSocket error', error as unknown as Error);
           this.emit('error', error);
           reject(error);
         };

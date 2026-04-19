@@ -97,7 +97,6 @@ ${additionalContext ? `Additional Context: ${JSON.stringify(additionalContext)}`
 
 Provide a precise trading signal with confidence score.`,
           temperature: 0.7,
-          maxTokens: 500,
         }),
       3
     );
@@ -144,7 +143,6 @@ ${JSON.stringify(marketData, null, 2)}
 
 Analyze this real-time data and provide instant trading recommendations, risk assessment, and next actions.`,
       temperature: 0.7,
-      maxTokens: 1024,
     });
 
     logger.info('Streaming trading analysis', { symbol });
@@ -186,7 +184,6 @@ ${JSON.stringify(marketConditions, null, 2)}
 
 Provide specific reallocation recommendations with target weights and rationale.`,
           temperature: 0.8,
-          maxTokens: 800,
         }),
       3
     );
@@ -237,7 +234,6 @@ Identify:
 3. Risk factors
 4. Recommended risk mitigations`,
           temperature: 0.6,
-          maxTokens: 600,
         }),
       3
     );
@@ -284,7 +280,6 @@ Provide insights for:
 3. Strategy adjustments
 4. Parameter optimization`,
           temperature: 0.8,
-          maxTokens: 700,
         }),
       3
     );

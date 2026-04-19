@@ -97,7 +97,6 @@ const nextConfig: NextConfig = {
   // ============================================================
 
   productionBrowserSourceMaps: process.env.ENABLE_SOURCE_MAPS === 'true',
-  swcMinify: true,
 
   // ============================================================
   // ENVIRONMENT VARIABLES

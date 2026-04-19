@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { rateLimiter } from './rate-limiter';
 import { logger } from './logger';
-import { v4 as uuidv4 } from 'crypto';
+import { randomUUID } from 'crypto';
 
 declare global {
   namespace globalThis {
@@ -39,7 +39,7 @@ export function getClientIP(request: NextRequest): string {
  * Generate unique request ID
  */
 export function generateRequestID(): string {
-  return uuidv4();
+  return randomUUID();
 }
 
 /**

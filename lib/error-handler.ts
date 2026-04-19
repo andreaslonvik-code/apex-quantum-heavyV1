@@ -152,6 +152,91 @@ export function withErrorHandling(handler: Function) {
 }
 
 /**
+ * Grok-specific error
+ */
+export class GrokError extends ApexError {
+  constructor(message: string, statusCode: number = 500, context?: Record<string, any>) {
+    super(
+      ErrorCodes.GROK_API_ERROR,
+      statusCode,
+      message,
+      context,
+      false
+    );
+    this.name = 'GrokError';
+  }
+}
+
+/**
+ * Validation error
+ */
+export class ValidationError extends ApexError {
+  constructor(message: string, context?: Record<string, any>) {
+    super(
+      ErrorCodes.INVALID_INPUT,
+      400,
+      message,
+      context,
+      false
+    );
+    this.name = 'ValidationError';
+  }
+}
+
+/**
+ * Streaming/WebSocket error
+ */
+export class StreamingError extends ApexError {
+  constructor(message: string, context?: Record<string, any>) {
+    super(
+      'STREAMING_ERROR',
+      500,
+      message,
+      context,
+      false
+    );
+    this.name = 'StreamingError';
+  }
+}
+
+/**
+ * Retry logic for transient errors
+ */
+export async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  delayMs: number = 1000
+): Promise<T> {
+  let lastError: Error | undefined;
+
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+
+      const apexError = error instanceof ApexError ? error : undefined;
+      if (apexError && !apexError.isDeveloperError) {
+        // Don't retry if error is not retryable
+        throw apexError;
+      }
+
+      if (i < maxRetries - 1) {
+        const delay = delayMs * Math.pow(2, i);
+        logger.warn(`Retrying after ${delay}ms`, { attempt: i + 1, maxRetries });
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+  }
+
+  throw lastError || new ApexError(
+    ErrorCodes.INTERNAL_SERVER_ERROR,
+    500,
+    'Max retries exceeded'
+  );
+}
+
+/**
  * Creates a validation error
  */
 export function createValidationError(message: string, context?: Record<string, any>) {

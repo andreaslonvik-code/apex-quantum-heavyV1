@@ -109,7 +109,7 @@ class ApexLogger {
     const level = statusCode >= 500 ? 'error' : statusCode >= 400 ? 'warn' : 'info';
     this.log(level, `${method} ${endpoint}`, {
       statusCode,
-      duration: `${duration}ms`,
+      duration,
       ...context,
     });
   }
@@ -118,7 +118,7 @@ class ApexLogger {
   logPerformance(operation: string, duration: number, context?: LogContext) {
     const level = duration > 1000 ? 'warn' : 'info';
     this.log(level, `Performance: ${operation}`, {
-      duration: `${duration}ms`,
+      duration,
       ...context,
     });
   }

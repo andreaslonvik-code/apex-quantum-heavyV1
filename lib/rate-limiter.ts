@@ -18,7 +18,7 @@ interface RateLimitEntry {
 
 class RateLimiter {
   private store: Map<string, RateLimitEntry> = new Map();
-  private cleanupInterval: NodeJS.Timer | null = null;
+  private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor() {
     // Cleanup old entries every 5 minutes
