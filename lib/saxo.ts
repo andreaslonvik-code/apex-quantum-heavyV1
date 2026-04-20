@@ -341,12 +341,13 @@ export async function findInstrument(
     return { success: true, data: uicCache.get(cacheKey)! };
   }
   
-  // Search patterns for multi-exchange support
+  // Search patterns for multi-exchange support - APEX QUANTUM SUPPORTS STOCKS ONLY
+  // Including Oslo Børs (XOSL) for Norwegian equities
   const searchPatterns = [
     ticker,
     `${ticker}:xnas`,  // NASDAQ
     `${ticker}:xnys`,  // NYSE
-    `${ticker}:xosl`,  // Oslo Bors
+    `${ticker}:xosl`,  // Oslo Børs (Norway) - PRIMARY FOR NORWEGIAN STOCKS
     `${ticker}:xetr`,  // XETRA (Germany)
     `${ticker}:xhkg`,  // Hong Kong
     `${ticker}:xshg`,  // Shanghai
@@ -357,8 +358,10 @@ export async function findInstrument(
   }
   
   for (const keyword of searchPatterns) {
+    // APEX QUANTUM: Only search for Stock assets (equities)
+    // No CFD, futures, options, or other derivatives
     const result = await safeSaxoFetch<{ Data: Array<{ Identifier: number; AssetType: string; Symbol: string; Description: string; ExchangeId: string }> }>(
-      `/ref/v1/instruments?Keywords=${encodeURIComponent(keyword)}&AssetTypes=Stock,CfdOnStock&$top=10`,
+      `/ref/v1/instruments?Keywords=${encodeURIComponent(keyword)}&AssetTypes=Stock&$top=10`,
       { accessToken }
     );
     
@@ -368,6 +371,17 @@ export async function findInstrument(
         i.Symbol?.toUpperCase() === ticker.toUpperCase() ||
         i.Symbol?.toUpperCase().startsWith(`${ticker}:`)
       ) || result.data.Data[0];
+      
+      // APEX QUANTUM: Validate that asset type is Stock (equities)
+      // Reject any CFD, futures, options, or other derivatives
+      if (match.AssetType !== 'Stock') {
+        addDebugEntry({
+          type: 'error',
+          endpoint: 'findInstrument',
+          message: `Rejected non-stock asset: ${ticker} is ${match.AssetType}. APEX QUANTUM only trades equities.`,
+        });
+        continue; // Skip to next search pattern
+      }
       
       const instrument: SaxoInstrument = {
         uic: match.Identifier,
@@ -440,6 +454,10 @@ export async function placeOrder(
   let uic = order.uic;
   let assetType = order.assetType || 'Stock';
   
+  // APEX QUANTUM: Force asset type to Stock (equities only)
+  // This prevents any CFD, futures, or derivatives from being traded
+  assetType = 'Stock';
+  
   if (!uic) {
     const instrumentResult = await findInstrument(accessToken, order.ticker);
     if (!instrumentResult.success || !instrumentResult.data) {
@@ -450,6 +468,14 @@ export async function placeOrder(
     }
     uic = instrumentResult.data.uic;
     assetType = instrumentResult.data.assetType;
+    
+    // Validation: ensure we got a Stock asset type
+    if (assetType !== 'Stock') {
+      return {
+        success: false,
+        error: `APEX QUANTUM only trades equities (stocks). ${order.ticker} is ${assetType}.`,
+      };
+    }
   }
   
   const payload = {

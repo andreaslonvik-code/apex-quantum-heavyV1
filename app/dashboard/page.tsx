@@ -3,6 +3,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { PortfolioOverview } from './components/portfolio-overview';
+import { OpenPositions } from './components/open-positions';
+import { TradeLog } from './components/trade-log';
+import { SystemStatus } from './components/system-status';
+import { WithdrawProfits } from './components/withdraw-profits';
 import {
   AreaChart,
   Area,
