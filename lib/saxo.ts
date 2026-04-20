@@ -1,6 +1,9 @@
 // lib/saxo.ts - APEX QUANTUM v7 - Bulletproof Saxo Integration
 // Production-grade Saxo API wrapper with safeSaxoFetch that NEVER crashes
 
+// ============ IMPORTS ============
+import { isExchangeAllowed, validateInstrumentExchange } from './exchange-validator';
+
 // ============ ENVIRONMENT CONFIG ============
 const SAXO_SIM_BASE = 'https://gateway.saxobank.com/sim/openapi';
 const SAXO_LIVE_BASE = 'https://gateway.saxobank.com/openapi';
@@ -383,6 +386,17 @@ export async function findInstrument(
         continue; // Skip to next search pattern
       }
       
+      // APEX QUANTUM: Validate exchange is in whitelist
+      const exchangeValidation = validateInstrumentExchange(match.ExchangeId);
+      if (!exchangeValidation.valid) {
+        addDebugEntry({
+          type: 'error',
+          endpoint: 'findInstrument',
+          message: `[EXCHANGE FILTER] ❌ ${ticker} on ${match.ExchangeId}: ${exchangeValidation.reason}`,
+        });
+        continue; // Skip to next search pattern
+      }
+      
       const instrument: SaxoInstrument = {
         uic: match.Identifier,
         assetType: match.AssetType,
@@ -396,7 +410,7 @@ export async function findInstrument(
       addDebugEntry({
         type: 'info',
         endpoint: 'findInstrument',
-        message: `Found ${ticker}: UIC=${instrument.uic}, Exchange=${instrument.exchange}`,
+        message: `[EXCHANGE FILTER] ✅ Found ${ticker}: UIC=${instrument.uic}, Exchange=${instrument.exchange}`,
       });
       
       return { success: true, data: instrument };
@@ -453,6 +467,7 @@ export async function placeOrder(
   // Find instrument if UIC not provided
   let uic = order.uic;
   let assetType = order.assetType || 'Stock';
+  let exchangeId: string | undefined;
   
   // APEX QUANTUM: Force asset type to Stock (equities only)
   // This prevents any CFD, futures, or derivatives from being traded
@@ -468,12 +483,22 @@ export async function placeOrder(
     }
     uic = instrumentResult.data.uic;
     assetType = instrumentResult.data.assetType;
+    exchangeId = instrumentResult.data.exchange;
     
     // Validation: ensure we got a Stock asset type
     if (assetType !== 'Stock') {
       return {
         success: false,
         error: `APEX QUANTUM only trades equities (stocks). ${order.ticker} is ${assetType}.`,
+      };
+    }
+    
+    // Validation: ensure exchange is allowed
+    const exchangeValidation = validateInstrumentExchange(exchangeId);
+    if (!exchangeValidation.valid) {
+      return {
+        success: false,
+        error: `[EXCHANGE FILTER] Cannot place order: ${exchangeValidation.reason}`,
       };
     }
   }
@@ -492,7 +517,7 @@ export async function placeOrder(
   addDebugEntry({
     type: 'info',
     endpoint: 'placeOrder',
-    message: `Placing ${order.action} ${order.quantity}x ${order.ticker} (UIC: ${uic})`,
+    message: `[EXCHANGE FILTER] ✅ Placing ${order.action} ${order.quantity}x ${order.ticker} on ${exchangeId} (UIC: ${uic})`,
   });
   
   const result = await safeSaxoFetch<{ OrderId: string; OrderStatus?: string }>(

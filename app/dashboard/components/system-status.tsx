@@ -86,11 +86,30 @@ export function SystemStatus({
       </div>
 
       <div className="mt-4 pt-4 border-t border-border/50">
-        <div className="flex items-center gap-2 text-xs">
+        <div className="flex items-center gap-2 text-xs mb-3">
           <CheckCircle className="w-4 h-4 text-emerald-400" />
           <span className="text-muted-foreground">
             System er {isTrading ? 'operasjonelt' : 'på standby'}. {isBotEnabled ? 'Auto-trading aktivert.' : 'Manual-modus.'}
           </span>
+        </div>
+        
+        {/* Active exchanges */}
+        <div className="mt-3 space-y-2">
+          <div className="text-xs text-muted-foreground uppercase tracking-wider">📊 Aktive Børser</div>
+          <div className="flex gap-2 flex-wrap">
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-500/20 rounded-full text-xs font-medium text-blue-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+              NASDAQ
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-500/20 rounded-full text-xs font-medium text-blue-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+              NYSE
+            </div>
+            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/20 rounded-full text-xs font-medium text-emerald-400">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+              Oslo Børs
+            </div>
+          </div>
         </div>
       </div>
     </div>

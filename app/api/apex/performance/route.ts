@@ -13,7 +13,9 @@ const performanceHistory: Map<string, Array<{
   pnlPercent: number;
 }>> = new Map();
 
-const INITIAL_VALUE = 1000000; // Starting capital 1M NOK
+// Get starting balance from .env or default to 1M NOK
+const START_BALANCE = Number(process.env.START_BALANCE) || 1000000;
+const INITIAL_VALUE = START_BALANCE;
 
 export async function GET() {
   try {
@@ -30,27 +32,40 @@ export async function GET() {
     let totalValue = INITIAL_VALUE;
     let cashBalance = 0;
     let positionsValue = 0;
+    let saxoSyncLog = '';
     
     try {
-      // First try to get TotalValue from balances endpoint
+      // MANDATORY: Fetch TotalValue directly from Saxo API
+      // This is THE source of truth for account value
       const balRes = await fetch(
         `${SAXO_API_BASE}/port/v1/balances?AccountKey=${accountKey}&ClientKey=${clientKey}`,
         { headers: { 'Authorization': `Bearer ${accessToken}` } }
       );
+      
       if (balRes.ok) {
         const balData = await balRes.json();
-        // TotalValue is the complete account value (cash + positions)
-        // This matches "Kontoverdi" in SaxoTrader
-        totalValue = balData.TotalValue || INITIAL_VALUE;
-        cashBalance = balData.CashAvailableForTrading || balData.CashBalance || 0;
+        // SAXO SYNC: Log what Saxo returns
+        const saxoTotalValue = balData.TotalValue;
+        const saxoCash = balData.CashAvailableForTrading || balData.CashBalance || 0;
         
-        console.log(`[APEX-PERF] TotalValue from Saxo: ${totalValue}, Cash: ${cashBalance}`);
+        totalValue = saxoTotalValue || INITIAL_VALUE;
+        cashBalance = saxoCash;
+        
+        saxoSyncLog = `[SAXO SYNC] TotalValue: ${totalValue.toLocaleString('nb-NO')} NOK, Cash: ${cashBalance.toLocaleString('nb-NO')} NOK`;
+        console.log(saxoSyncLog);
+      } else {
+        const errorText = await balRes.text();
+        saxoSyncLog = `[SAXO SYNC] Balance fetch failed: HTTP ${balRes.status}`;
+        console.warn(saxoSyncLog, errorText);
       }
     } catch (e) {
-      console.log(`[APEX-PERF] Balance fetch error: ${e}`);
+      saxoSyncLog = `[SAXO SYNC] Network error: ${e}`;
+      console.error(saxoSyncLog);
+      // Use last known value as fallback
+      totalValue = INITIAL_VALUE;
     }
 
-    // Get positions value separately for display
+    // Get positions value separately from Saxo for detailed breakdown
     try {
       const posRes = await fetch(
         `${SAXO_API_BASE}/port/v1/positions?ClientKey=${clientKey}&FieldGroups=PositionBase,PositionView`,
@@ -58,18 +73,28 @@ export async function GET() {
       );
       if (posRes.ok) {
         const posData = await posRes.json();
+        positionsValue = 0;
         for (const pos of posData.Data || []) {
-          positionsValue += Math.abs(pos.PositionView?.MarketValue || 0);
+          const posValue = Math.abs(pos.PositionView?.MarketValue || 0);
+          positionsValue += posValue;
         }
+        console.log(`[SAXO SYNC] Positions value: ${positionsValue.toLocaleString('nb-NO')} NOK`);
       }
-    } catch {}
-    
-    // Use positions + cash as fallback if TotalValue seems wrong
-    const calculatedTotal = cashBalance + positionsValue;
-    if (totalValue < calculatedTotal * 0.5 && calculatedTotal > 0) {
-      console.log(`[APEX-PERF] Using calculated total: ${calculatedTotal} instead of ${totalValue}`);
-      totalValue = calculatedTotal;
+    } catch (e) {
+      console.log(`[SAXO SYNC] Positions fetch error: ${e}`);
     }
+    
+    // Validate the total value makes sense
+    const calculatedTotal = cashBalance + positionsValue;
+    if (totalValue < calculatedTotal * 0.8 && calculatedTotal > 0) {
+      console.log(`[SAXO SYNC] ⚠️ WARNING: Saxo TotalValue (${totalValue}) seems low compared to Cash+Positions (${calculatedTotal})`);
+      // If Saxo TotalValue is clearly wrong, use calculated value
+      if (totalValue < 100) {
+        totalValue = calculatedTotal;
+      }
+    }
+    
+    // Calculate P&L against starting capital
     const pnl = totalValue - INITIAL_VALUE;
     const pnlPercent = ((totalValue - INITIAL_VALUE) / INITIAL_VALUE) * 100;
 
@@ -83,7 +108,7 @@ export async function GET() {
     
     const history = performanceHistory.get(userKey)!;
     
-    // Add new data point (max 1000 points, ~3 sec intervals = ~50 min of data)
+    // Add new data point (max 1000 points, ~30 sec intervals = ~500 min of data)
     history.push({
       timestamp: now,
       balance: cashBalance,
@@ -97,16 +122,16 @@ export async function GET() {
       history.shift();
     }
 
-    // Format for chart
+    // Format for chart - show porteføljeverdi MINUS startbeløp = avkastning
     const chartData = history.map((h, i) => ({
       time: new Date(h.timestamp).toLocaleTimeString('no-NO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
       timestamp: h.timestamp,
-      value: Math.round(h.portfolioValue),
+      value: Math.round(h.portfolioValue - INITIAL_VALUE), // Y-axis: avkastning i NOK
       pnl: Math.round(h.pnl),
       pnlPercent: Number(h.pnlPercent.toFixed(2)),
     }));
 
-    // Calculate stats
+    // Calculate session stats
     const firstValue = history[0]?.portfolioValue || INITIAL_VALUE;
     const lastValue = totalValue;
     const sessionPnl = lastValue - firstValue;
@@ -145,8 +170,39 @@ export async function GET() {
       },
       chartData,
       timestamp: now,
+      saxoSync: {
+        log: saxoSyncLog,
+        cashFromSaxo: cashBalance,
+        totalFromSaxo: totalValue,
+        positionsValue,
+      },
     });
   } catch (e) {
-    return NextResponse.json({ error: String(e) }, { status: 500 });
+    const errorMsg = String(e);
+    console.error(`[APEX-PERF] Error: ${errorMsg}`);
+    return NextResponse.json({ 
+      error: 'Failed to fetch performance data',
+      details: errorMsg,
+      fallback: {
+        current: {
+          balance: 0,
+          positionsValue: 0,
+          totalValue: INITIAL_VALUE,
+          pnl: 0,
+          pnlPercent: 0,
+          initialValue: INITIAL_VALUE,
+        },
+        session: {
+          startValue: INITIAL_VALUE,
+          currentValue: INITIAL_VALUE,
+          pnl: 0,
+          pnlPercent: 0,
+          peak: INITIAL_VALUE,
+          maxDrawdown: 0,
+          dataPoints: 0,
+        },
+        chartData: [],
+      }
+    }, { status: 500 });
   }
 }

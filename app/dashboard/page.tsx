@@ -208,6 +208,19 @@ export default function Dashboard() {
     };
   }, [isTrading, isConnected]);
 
+  // Fetch positions data every 30 seconds when connected
+  useEffect(() => {
+    if (isConnected) {
+      const positionsIntervalRef = setInterval(() => {
+        fetchPositions();
+      }, 30000); // 30 seconds
+      
+      return () => {
+        clearInterval(positionsIntervalRef);
+      };
+    }
+  }, [isConnected]);
+
   const addDebugLog = (entry: Omit<DebugEntry, 'timestamp'>) => {
     setDebugLogs(prev => [{
       ...entry,
@@ -226,6 +239,30 @@ export default function Dashboard() {
             ...prev,
             balance: data.current.totalValue,
           } : prev);
+        }
+      }
+    } catch {}
+  };
+
+  const fetchPositions = async () => {
+    try {
+      const res = await fetch('/api/apex/positions', { credentials: 'include' });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.positions && Array.isArray(data.positions)) {
+          // Map Saxo positions to dashboard Position type
+          const mappedPositions: Position[] = data.positions.map((pos: any) => ({
+            ticker: pos.ticker,
+            navn: pos.ticker,
+            vekt: pos.vekt || 0,
+            aksjon: 'HOLD',
+            antall: pos.antall || 0,
+            avgPrice: pos.avgPrice,
+            currentPrice: pos.currentPrice,
+            pnl: pos.pnl || 0,
+            pnlPercent: pos.pnlPercent || 0,
+          }));
+          setPortfolio(mappedPositions);
         }
       }
     } catch {}
@@ -253,6 +290,7 @@ export default function Dashboard() {
           });
         }
         fetchPerformance();
+        fetchPositions();
       } else {
         setIsConnected(false);
       }
