@@ -8,6 +8,7 @@ import { RightSidebar } from "./components/right-sidebar";
 import { PriceChart } from "./components/price-chart";
 import { AIChat } from "./components/ai-chat";
 import { Footer } from "./components/footer";
+import { useToast, ToastContainer } from '@/app/components/toast';
 
 // Quantum particles background
 function QuantumParticles() {
@@ -56,6 +57,8 @@ function QuantumParticles() {
 }
 
 export default function QuantumDashboard() {
+  const { toasts, remove: removeToast } = useToast();
+
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white overflow-hidden">
       <QuantumParticles />
@@ -96,6 +99,9 @@ export default function QuantumDashboard() {
       
       {/* Footer */}
       <Footer />
+
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

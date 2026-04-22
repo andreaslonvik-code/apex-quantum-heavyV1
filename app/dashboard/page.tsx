@@ -8,6 +8,7 @@ import { OpenPositions } from './components/open-positions';
 import { TradeLog } from './components/trade-log';
 import { SystemStatus } from './components/system-status';
 import { WithdrawProfits } from './components/withdraw-profits';
+import { useToast, ToastContainer } from '@/app/components/toast';
 import {
   AreaChart,
   Area,
@@ -98,6 +99,7 @@ interface SaxoStatus {
 // ============ COMPONENT ============
 export default function Dashboard() {
   const router = useRouter();
+  const { toasts, add: addToast, remove: removeToast } = useToast();
   
   // Connection state
   const [isConnected, setIsConnected] = useState(false);
@@ -314,6 +316,7 @@ export default function Dashboard() {
     isRunningRef.current = true;
     
     const startTime = Date.now();
+    const toastId = addToast('🔍 Scannende marked...', 'loading');
     
     try {
       addDebugLog({
@@ -342,7 +345,8 @@ export default function Dashboard() {
           message: `JSON Parse Error: ${e}`,
           rawBody: rawText.slice(0, 500),
         });
-        setError('Server returnerte ugyldig JSON. Se Debug Info for detaljer.');
+        removeToast(toastId);
+        addToast('⚠️ Server returnerte ugyldig JSON', 'error');
         return;
       }
       
@@ -356,6 +360,7 @@ export default function Dashboard() {
       });
       
       if (!res.ok) {
+        removeToast(toastId);
         if (res.status === 401) {
           setError('Saxo-tilkobling utlopt. Vennligst koble til pa nytt.');
           if (intervalRef.current) {
@@ -364,8 +369,10 @@ export default function Dashboard() {
           }
           setIsTrading(false);
           setIsConnected(false);
+          addToast('❌ Saxo-tilkobling utlopt', 'error');
         } else {
           setError(data.error || 'Feil ved scan');
+          addToast(`❌ ${data.error || 'Feil ved scan'}`, 'error');
         }
         return;
       }
@@ -386,6 +393,11 @@ export default function Dashboard() {
       const successful = (data.executedTrades || []).filter((t: Trade) => t.status === 'OK');
       if (successful.length > 0) {
         setTradeHistory(prev => [...successful, ...prev].slice(0, 100));
+        removeToast(toastId);
+        addToast(`✅ Scan fullfort - ${successful.length} handler utfĺrt`, 'success');
+      } else {
+        removeToast(toastId);
+        addToast(`✅ Scan fullfort - ingen handler for nå`, 'info', 2000);
       }
       
     } catch (e) {
@@ -394,11 +406,13 @@ export default function Dashboard() {
         endpoint: '/api/apex/autonomous',
         message: `Network error: ${e}`,
       });
+      removeToast(toastId);
       setError('Nettverksfeil');
+      addToast(`❌ Nettverksfeil: ${e}`, 'error');
     } finally {
       isRunningRef.current = false;
     }
-  }, [tradingMode, scanCount]);
+  }, [tradingMode, scanCount, addToast, removeToast]);
 
   const startTrading = useCallback(() => {
     if (intervalRef.current || !isConnected) return;
@@ -412,9 +426,11 @@ export default function Dashboard() {
       message: `Trading engine started in ${tradingMode.toUpperCase()} mode`,
     });
     
+    addToast(`✅ Trading engine startet (${tradingMode.toUpperCase()} mode)`, 'success', 2000);
+    
     runScan();
     intervalRef.current = setInterval(runScan, 2000);
-  }, [runScan, isConnected, tradingMode]);
+  }, [runScan, isConnected, tradingMode, addToast]);
 
   const handleManualTick = async () => {
     addDebugLog({
@@ -422,6 +438,7 @@ export default function Dashboard() {
       endpoint: 'manualTick',
       message: 'Manual tick triggered',
     });
+    addToast('🔍 Manuell scan startet...', 'loading');
     await runScan();
   };
 
@@ -485,6 +502,7 @@ export default function Dashboard() {
         success: false,
         message: 'Ingen avkastning a hente ut. Kontoverdien er under eller lik startkapitalen.',
       });
+      addToast('⚠️ Ingen avkastning å ta ut ennå', 'info');
       return;
     }
     
@@ -496,6 +514,7 @@ export default function Dashboard() {
     
     setIsWithdrawing(true);
     setWithdrawResult(null);
+    const toastId = addToast('💰 Tar ut avkastning...', 'loading');
     
     try {
       const res = await fetch('/api/apex/withdraw-profits', {
@@ -506,23 +525,29 @@ export default function Dashboard() {
       const data = await res.json();
       
       if (data.success) {
+        removeToast(toastId);
         setWithdrawResult({
           success: true,
           message: data.message,
           totalSold: data.totalSold,
         });
+        addToast(`✅ Uttak vellykket - ${data.totalSold.toLocaleString('no-NO')} kr solgt`, 'success');
         fetchPerformance();
       } else {
+        removeToast(toastId);
         setWithdrawResult({
           success: false,
           message: data.message || data.error || 'Kunne ikke hente ut avkastning',
         });
+        addToast(`❌ ${data.message || data.error || 'Feil ved uttak'}`, 'error');
       }
-    } catch {
+    } catch (e) {
+      removeToast(toastId);
       setWithdrawResult({
         success: false,
         message: 'Nettverksfeil ved uttak av avkastning',
       });
+      addToast('❌ Nettverksfeil ved uttak', 'error');
     } finally {
       setIsWithdrawing(false);
     }
@@ -1187,6 +1212,9 @@ export default function Dashboard() {
         )}
 
       </main>
+      
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

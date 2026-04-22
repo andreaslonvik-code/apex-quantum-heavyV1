@@ -5,7 +5,7 @@ import { Eye, TrendingUp, TrendingDown, AlertTriangle, Zap, BarChart2, RefreshCw
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
+import { useToast } from '@/app/components/toast';
 
 // Dynamic watchlist with asymmetric scores
 const watchlistData = [
@@ -68,17 +68,14 @@ const suggestedActions = [
 ];
 
 export function RightSidebar() {
+  const { add: addToast } = useToast();
+
   const handleRebalance = () => {
-    toast.success("Reallokering startet!", {
-      description: "APEX QUANTUM analyserer optimale posisjoner...",
-    });
+    addToast("Reallokering startet!", "success");
   };
 
   const handlePurge = () => {
-    toast("Self-Evolution aktivert", {
-      description: "Rensker suboptimale strategier fra systemet.",
-      icon: <RefreshCw className="w-4 h-4 text-[#ff00aa]" />,
-    });
+    addToast("Self-Evolution aktivert", "info");
   };
 
   return (

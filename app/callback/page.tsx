@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useToast, ToastContainer } from '@/app/components/toast';
 
 export default function CallbackPage() {
   return (
@@ -35,6 +36,7 @@ interface SaxoPosition {
 function CallbackContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { toasts, add: addToast, remove: removeToast } = useToast();
   const [status, setStatus] = useState<'loading' | 'fetching_portfolio' | 'building_portfolio' | 'starting_trading' | 'error'>('loading');
   const [message, setMessage] = useState('Kobler til Saxo...');
   const [subMessage, setSubMessage] = useState('');
@@ -197,6 +199,7 @@ function CallbackContent() {
 
         // Redirect to dashboard
         setSubMessage('Omdirigerer til dashboard...');
+        addToast('✅ Saxo Bank tilkobling vellykket! Apex Quantum er aktiv.', 'success', 3000);
         setTimeout(() => {
           router.push('/dashboard');
         }, 1000);
@@ -377,6 +380,9 @@ function CallbackContent() {
           {status === 'error' && 'Paper Trading - Kun simulert handel'}
         </p>
       </div>
+
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }

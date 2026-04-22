@@ -6,7 +6,7 @@ import { Send, Sparkles, Zap, RefreshCw, Target, Brain, AlertTriangle } from "lu
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { toast } from "sonner";
+import { useToast } from '@/app/components/toast';
 
 interface Message {
   id: string;
@@ -147,6 +147,33 @@ export function AIChat() {
   const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const { add: addToast } = useToast();
+
+  // Self-learning: Load and save interactions
+  const [interactionHistory, setInteractionHistory] = useState<Array<{input: string, response: string, timestamp: Date}>>([]);
+
+  useEffect(() => {
+    // Load interaction history from localStorage
+    const saved = localStorage.getItem('apex-quantum-interactions');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved).map((item: any) => ({
+          ...item,
+          timestamp: new Date(item.timestamp)
+        }));
+        setInteractionHistory(parsed);
+      } catch (e) {
+        console.error('Failed to load interaction history:', e);
+      }
+    }
+  }, []);
+
+  const saveInteraction = (input: string, response: string) => {
+    const newInteraction = { input, response, timestamp: new Date() };
+    const updated = [...interactionHistory, newInteraction].slice(-50); // Keep last 50
+    setInteractionHistory(updated);
+    localStorage.setItem('apex-quantum-interactions', JSON.stringify(updated));
+  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -168,28 +195,60 @@ export function AIChat() {
     setInput("");
     setIsTyping(true);
 
+    addToast("Melding sendt til APEX QUANTUM AI", "info", 2000);
+
+    // Self-learning: Check for similar previous interactions
+    const similarInteractions = interactionHistory.filter(item =>
+      item.input.toLowerCase().includes(input.toLowerCase().split(' ')[0]) ||
+      input.toLowerCase().includes(item.input.toLowerCase().split(' ')[0])
+    );
+
     // Simulate AI response
     await new Promise(resolve => setTimeout(resolve, 1500));
 
-    const matchedResponse = grokResponses.find(r => 
+    let responseContent = grokResponses.find(r => 
       input.toLowerCase().includes(r.trigger)
-    );
+    )?.response;
 
-    const aiMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: "assistant",
-      content: matchedResponse?.response || `**ANALYSERER: "${input}"**
+    if (!responseContent) {
+      // Use self-learning to generate better response
+      if (similarInteractions.length > 0) {
+        const lastSimilar = similarInteractions[similarInteractions.length - 1];
+        responseContent = `**LÆRT FRA TIDLIGERE INTERAKSJONER**
+
+Basert pa tidligere samtaler om lignende emner:
+
+${lastSimilar.response.split('\n').slice(0, 3).join('\n')}
+
+**OPPdatERT ANALYSE:**
+Interessant sporrsmal. La meg analysere dette med hensyn til dine tidligere interesser...
+
+*Jeg har na lært fra ${interactionHistory.length} tidligere interaksjoner for a gi bedre svar.*`;
+      } else {
+        responseContent = `**ANALYSERER: "${input}"**
 
 Interessant sporrsmal. La meg grave dypere i dataene...
 
 Basert pa min analyse av 10,000+ datapunkter, ser jeg ingen umiddelbar edge her. Markedet er effisient pa dette omradet.
 
-*Forslag: Fokuser pa de 6 kjerneposisjonene i blueprint. De har hoeyest asymmetrisk potensial.*`,
+*Forslag: Fokuser pa de 6 kjerneposisjonene i blueprint. De har hoeyest asymmetrisk potensial.*`;
+      }
+    }
+
+    const aiMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      role: "assistant",
+      content: responseContent,
       timestamp: new Date(),
     };
 
     setMessages(prev => [...prev, aiMessage]);
     setIsTyping(false);
+
+    // Save interaction for self-learning
+    saveInteraction(input, responseContent);
+
+    addToast("APEX QUANTUM AI har svart", "success", 2000);
   };
 
   const handleQuickAction = (action: string) => {
