@@ -3,7 +3,6 @@
 import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 /**
  * Apex Quantum Design System Showcase Component
@@ -210,5 +209,4 @@ export function DesignSystemShowcase() {
       </section>
     </div>
   );
-}</content>
-<parameter name="filePath">/workspaces/apex-quantum-heavyV1/components/design-system-showcase.tsx
+}
