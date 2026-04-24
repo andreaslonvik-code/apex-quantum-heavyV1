@@ -3,6 +3,16 @@ import { cookies } from 'next/headers';
 
 const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
 
+interface SaxoPositionRaw {
+  DisplayAndFormat?: { Symbol?: string; Description?: string };
+  PositionBase?: { Amount?: number; AverageOpenPrice?: number; Uic?: number };
+  PositionView?: {
+    MarketValue?: number;
+    ProfitLossOnTrade?: number;
+    ProfitLossOnTradeInPercentage?: number;
+  };
+}
+
 export async function GET() {
   try {
     const cookieStore = await cookies();
@@ -28,8 +38,9 @@ export async function GET() {
     }
 
     const posData = await posRes.json();
-    const positions = (posData.Data || []).map((pos: any) => {
-      const ticker = pos.DisplayAndFormat?.Symbol?.split(':')[0] || 'UNKNOWN';
+    const positions = (posData.Data as SaxoPositionRaw[] || []).map((pos) => {
+      const symbol = pos.DisplayAndFormat?.Symbol || '';
+      const ticker = symbol.split(':')[0] || 'UNKNOWN';
       const amount = Math.abs(pos.PositionBase?.Amount || 0);
       const avgPrice = pos.PositionBase?.AverageOpenPrice || 0;
       const marketValue = Math.abs(pos.PositionView?.MarketValue || 0);
@@ -41,7 +52,7 @@ export async function GET() {
         ticker,
         navn: pos.DisplayAndFormat?.Description || '',
         antall: amount,
-        vekt: 0, // Will be calculated based on portfolio value
+        vekt: 0,
         aksjon: '',
         avgPrice,
         currentPrice,
@@ -49,7 +60,7 @@ export async function GET() {
         pnl,
         pnlPercent,
         uic: pos.PositionBase?.Uic || 0,
-        exchange: pos.DisplayAndFormat?.Symbol?.split(':')[1]?.toUpperCase() || 'UNKNOWN',
+        exchange: symbol.split(':')[1]?.toUpperCase() || 'UNKNOWN',
       };
     });
 
@@ -69,7 +80,7 @@ export async function GET() {
     }
 
     // Calculate weights
-    const positionsWithWeights = positions.map((pos: any) => ({
+    const positionsWithWeights = positions.map((pos) => ({
       ...pos,
       vekt: totalValue > 0 ? (pos.marketValue / totalValue) * 100 : 0,
     }));

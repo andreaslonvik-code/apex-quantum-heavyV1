@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     // Validate input
     if (!accessToken) {
       return NextResponse.json(
-        { error: 'Access token er pakrevd' },
+        { error: 'Access token er påkrevd' },
         { status: 400 }
       );
     }
@@ -55,7 +55,7 @@ export async function POST(request: NextRequest) {
     
     if (!accountsData.Data || accountsData.Data.length === 0) {
       return NextResponse.json(
-        { error: 'Ingen kontoer funnet pa denne Saxo-kontoen' },
+        { error: 'Ingen kontoer funnet på denne Saxo-kontoen' },
         { status: 404 }
       );
     }
@@ -130,7 +130,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('Connect Saxo error:', error);
     return NextResponse.json(
-      { error: 'En uventet feil oppstod. Vennligst prov igjen.' },
+      { error: 'En uventet feil oppstod. Vennligst prøv igjen.' },
       { status: 500 }
     );
   }

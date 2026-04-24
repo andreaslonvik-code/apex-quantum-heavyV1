@@ -485,7 +485,7 @@ export async function POST(request: NextRequest) {
     console.log(`[APEX] ${marketStatus.message}`);
     
     // Get balance
-    const balanceResult = await getBalance(accessToken, accountKey);
+    const balanceResult = await getBalance(accessToken, accountKey, clientKey);
     if (!balanceResult.success || !balanceResult.data) {
       console.log(`[APEX] Balance error: ${balanceResult.error}`);
       return NextResponse.json({ error: balanceResult.error }, { status: 500 });

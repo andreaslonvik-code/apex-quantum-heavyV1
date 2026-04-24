@@ -362,14 +362,14 @@ export default function Dashboard() {
       if (!res.ok) {
         removeToast(toastId);
         if (res.status === 401) {
-          setError('Saxo-tilkobling utlopt. Vennligst koble til pa nytt.');
+          setError('Saxo-tilkobling utløpt. Vennligst koble til på nytt.');
           if (intervalRef.current) {
             clearInterval(intervalRef.current);
             intervalRef.current = null;
           }
           setIsTrading(false);
           setIsConnected(false);
-          addToast('❌ Saxo-tilkobling utlopt', 'error');
+          addToast('❌ Saxo-tilkobling utløpt', 'error');
         } else {
           setError(data.error || 'Feil ved scan');
           addToast(`❌ ${data.error || 'Feil ved scan'}`, 'error');
@@ -394,10 +394,10 @@ export default function Dashboard() {
       if (successful.length > 0) {
         setTradeHistory(prev => [...successful, ...prev].slice(0, 100));
         removeToast(toastId);
-        addToast(`✅ Scan fullfort - ${successful.length} handler utfĺrt`, 'success');
+        addToast(`✅ Scan fullført - ${successful.length} handler utført`, 'success');
       } else {
         removeToast(toastId);
-        addToast(`✅ Scan fullfort - ingen handler for nå`, 'info', 2000);
+        addToast(`✅ Scan fullført - ingen handler for nå`, 'info', 2000);
       }
       
     } catch (e) {
@@ -463,11 +463,13 @@ export default function Dashboard() {
 
   const handleDisconnect = () => {
     stopTrading();
-    fetch('/api/apex/disconnect', { method: 'POST' }).then(() => {
-      localStorage.removeItem('apex_saxo_connected');
-      localStorage.removeItem('apex_saxo_account');
-      router.push('/');
-    });
+    fetch('/api/apex/disconnect', { method: 'POST' })
+      .catch(() => {})
+      .finally(() => {
+        localStorage.removeItem('apex_saxo_connected');
+        localStorage.removeItem('apex_saxo_account');
+        router.push('/');
+      });
   };
 
   const handleModeToggle = () => {
@@ -500,14 +502,14 @@ export default function Dashboard() {
     if (currentProfit <= 0) {
       setWithdrawResult({
         success: false,
-        message: 'Ingen avkastning a hente ut. Kontoverdien er under eller lik startkapitalen.',
+        message: 'Ingen avkastning å hente ut. Kontoverdien er under eller lik startkapitalen.',
       });
       addToast('⚠️ Ingen avkastning å ta ut ennå', 'info');
       return;
     }
     
     const confirmed = window.confirm(
-      `Er du sikker pa at du vil hente ut ${currentProfit.toLocaleString('no-NO', { maximumFractionDigits: 0 })} kr i avkastning?\n\nDette vil selge nok posisjoner til a ta ut profitten, og trading vil fortsette med startkapitalen pa 1 000 000 kr.`
+      `Er du sikker på at du vil hente ut ${currentProfit.toLocaleString('no-NO', { maximumFractionDigits: 0 })} kr i avkastning?\n\nDette vil selge nok posisjoner til å ta ut profitten, og trading vil fortsette med startkapitalen på 1 000 000 kr.`
     );
     
     if (!confirmed) return;
@@ -577,7 +579,7 @@ export default function Dashboard() {
           </div>
           <h2 className="text-xl font-semibold mb-2">Ikke tilkoblet</h2>
           <p className="text-muted-foreground mb-6">
-            Du ma koble til din Saxo-konto for a bruke Apex Quantum.
+            Du må koble til din Saxo-konto for å bruke Apex Quantum.
           </p>
           <Link
             href="/saxo-simulation"
@@ -623,7 +625,7 @@ export default function Dashboard() {
             
             <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6">
               <p className="text-sm text-red-300 mb-2">
-                Du er i ferd med a bytte til LIVE modus. Dette betyr:
+                Du er i ferd med å bytte til LIVE modus. Dette betyr:
               </p>
               <ul className="text-sm text-red-200 space-y-1 list-disc list-inside">
                 <li>Alle handler vil utfores med ekte penger</li>
@@ -837,7 +839,7 @@ export default function Dashboard() {
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
                     </svg>
                   </div>
-                  <p className="text-sm">Start trading for a se avkastningsgrafen</p>
+                  <p className="text-sm">Start trading for å se avkastningsgrafen</p>
                 </div>
               </div>
             )}
@@ -1037,7 +1039,7 @@ export default function Dashboard() {
                 ))}
               </div>
             ) : (
-              <p className="text-muted-foreground text-sm">Ingen handler enna</p>
+              <p className="text-muted-foreground text-sm">Ingen handler ennå</p>
             )}
             
             {failedTrades.length > 0 && (
@@ -1135,7 +1137,7 @@ export default function Dashboard() {
                       ))}
                     </div>
                   ) : (
-                    <p className="text-muted-foreground text-xs">Ingen debug logs enna</p>
+                    <p className="text-muted-foreground text-xs">Ingen debug logs ennå</p>
                   )}
                 </div>
               </div>

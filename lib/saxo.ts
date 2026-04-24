@@ -546,15 +546,17 @@ export async function placeOrder(
 // ============ BALANCE & POSITIONS ============
 export async function getBalance(
   accessToken: string,
-  accountKey: string
+  accountKey: string,
+  clientKey?: string
 ): Promise<SaxoFetchResult<SaxoBalance>> {
+  const resolvedClientKey = clientKey || accountKey;
   const result = await safeSaxoFetch<{
     CashAvailableForTrading?: number;
     TotalValue?: number;
     MarginAvailableForTrading?: number;
     Currency?: string;
   }>(
-    `/port/v1/balances?AccountKey=${accountKey}&ClientKey=${accountKey}`,
+    `/port/v1/balances?AccountKey=${accountKey}&ClientKey=${resolvedClientKey}`,
     { accessToken }
   );
   

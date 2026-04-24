@@ -7,6 +7,7 @@ export async function POST() {
   // Clear all Apex Quantum cookies
   cookieStore.delete('apex_saxo_token');
   cookieStore.delete('apex_saxo_account_key');
+  cookieStore.delete('apex_saxo_client_key');
   cookieStore.delete('apex_saxo_connected');
   
   return NextResponse.json({ success: true });

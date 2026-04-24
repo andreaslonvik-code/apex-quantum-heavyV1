@@ -122,8 +122,8 @@ function CallbackContent() {
 
         // STEP 3: Fetch existing portfolio from Saxo
         setStatus('fetching_portfolio');
-        setMessage('Henter eksisterende portefolje fra Saxo...');
-        setSubMessage('Analyserer din navaerende posisjon');
+        setMessage('Henter eksisterende portefølje fra Saxo...');
+        setSubMessage('Analyserer din nåværende posisjon');
 
         const portfolioResponse = await fetch('/api/apex/get-positions', {
           method: 'GET',
@@ -143,8 +143,8 @@ function CallbackContent() {
         // STEP 4: Build portfolio if none exists
         if (!hasExistingPortfolio) {
           setStatus('building_portfolio');
-          setMessage('Bygger Apex Quantum-portefolje...');
-          setSubMessage('Ingen eksisterende portefolje - bygger fra v6.1 blueprint');
+          setMessage('Bygger Apex Quantum-portefølje...');
+          setSubMessage('Ingen eksisterende portefølje - bygger fra v6.1 blueprint');
 
           const buildResponse = await fetch('/api/apex/autonomous', {
             method: 'POST',
@@ -163,7 +163,7 @@ function CallbackContent() {
           }
 
           const buildData = await buildResponse.json();
-          setSubMessage(`Portefolje bygget: ${buildData.executedTrades?.length || 0} posisjoner opprettet`);
+          setSubMessage(`Portefølje bygget: ${buildData.executedTrades?.length || 0} posisjoner opprettet`);
 
           // Store initial portfolio
           if (typeof window !== 'undefined' && buildData.portfolio) {
@@ -282,14 +282,14 @@ function CallbackContent() {
                   <svg className="w-4 h-4 text-cyan-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  Ingen eksisterende portefolje
+                  Ingen eksisterende portefølje
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground justify-center">
                   <span className="relative flex h-2 w-2">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
                   </span>
-                  Bygger v6.1 blueprint-portefolje...
+                  Bygger v6.1 blueprint-portefølje...
                 </div>
               </div>
 
@@ -324,7 +324,7 @@ function CallbackContent() {
                   <svg className="w-4 h-4 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
-                  Portefolje klar
+                  Portefølje klar
                 </div>
                 <div className="flex items-center gap-2 text-sm text-muted-foreground justify-center">
                   <span className="relative flex h-2 w-2">
@@ -367,7 +367,7 @@ function CallbackContent() {
                 onClick={() => router.push('/saxo-simulation')}
                 className="w-full py-3 px-6 bg-accent text-accent-foreground font-medium rounded-xl hover:bg-accent/90 transition-colors"
               >
-                Prov igjen
+                Prøv igjen
               </button>
             </>
           )}

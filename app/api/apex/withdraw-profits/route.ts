@@ -2,8 +2,8 @@
 // Sells enough positions to extract profit and continue trading with starting capital
 import { NextRequest, NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
+import { getSaxoBase } from '@/lib/saxo';
 
-const SAXO_API_URL = 'https://gateway.saxobank.com/sim/openapi';
 const BASE_TRADING_CAPITAL = 1000000; // 1 million NOK starting capital
 
 interface Position {
@@ -31,6 +31,7 @@ async function getAccountValue(accessToken: string, accountKey: string): Promise
   cashBalance: number;
   positionsValue: number;
 }> {
+  const SAXO_API_URL = getSaxoBase();
   const balanceRes = await fetch(
     `${SAXO_API_URL}/port/v1/balances?AccountKey=${accountKey}&ClientKey=${accountKey}`,
     {
@@ -52,6 +53,7 @@ async function getAccountValue(accessToken: string, accountKey: string): Promise
 }
 
 async function getPositions(accessToken: string, clientKey: string): Promise<Position[]> {
+  const SAXO_API_URL = getSaxoBase();
   const res = await fetch(
     `${SAXO_API_URL}/port/v1/positions?ClientKey=${clientKey}&FieldGroups=PositionBase,PositionView,DisplayAndFormat`,
     {
@@ -73,6 +75,7 @@ async function sellPosition(
   position: Position,
   amount: number
 ): Promise<{ success: boolean; orderId?: string; error?: string }> {
+  const SAXO_API_URL = getSaxoBase();
   const orderData = {
     AccountKey: accountKey,
     Amount: amount,
