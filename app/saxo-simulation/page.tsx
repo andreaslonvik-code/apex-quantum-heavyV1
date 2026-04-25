@@ -3,6 +3,7 @@
 import { useState } from 'react';
 
 const SAXO_ENV = process.env.NEXT_PUBLIC_SAXO_ENV === 'live' ? 'live' : 'sim';
+const IS_LIVE = SAXO_ENV === 'live';
 const SAXO_AUTH_URL = `https://${SAXO_ENV}.logonvalidation.net/authorize`;
 const CLIENT_ID = process.env.NEXT_PUBLIC_SAXO_CLIENT_ID || '';
 const REDIRECT_URI = process.env.NEXT_PUBLIC_SAXO_REDIRECT_URI || 'https://apex-quantum.com/callback';
@@ -45,11 +46,15 @@ export default function SaxoSimulationPage() {
         <div className="max-w-2xl mx-auto">
           <div className="bg-card border border-border rounded-2xl p-8 sm:p-10">
             <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-4 text-balance">
-              Koble din Saxo Simulation-konto til Apex Quantum
+              {IS_LIVE
+                ? 'Koble din Saxo LIVE-konto til Apex Quantum'
+                : 'Koble din Saxo Simulation-konto til Apex Quantum'}
             </h1>
-            
+
             <p className="text-muted-foreground mb-8 leading-relaxed">
-              Apex Quantum vil nå handle autonomt i Paper Trading-modus med dine 100 000 kr virtuelle penger. Ingen ekte penger brukes.
+              {IS_LIVE
+                ? 'Apex Quantum vil nå handle autonomt på din ekte Saxo-konto med ekte penger. Sørg for at du forstår risikoen før du fortsetter.'
+                : 'Apex Quantum vil nå handle autonomt i Paper Trading-modus med dine 100 000 kr virtuelle penger. Ingen ekte penger brukes.'}
             </p>
 
             <div className="space-y-6">
@@ -70,32 +75,40 @@ export default function SaxoSimulationPage() {
                 </div>
 
                 <div className="bg-muted/50 border border-border rounded-xl p-4">
-                  <div className="flex items-center gap-3 mb-2">
-                    <div className="w-8 h-8 rounded-lg bg-cyan-500/20 flex items-center justify-center">
-                      <svg viewBox="0 0 24 24" fill="none" className="w-4 h-4 text-cyan-400" stroke="currentColor" strokeWidth="2">
+                  <div className={`flex items-center gap-3 mb-2`}>
+                    <div className={`w-8 h-8 rounded-lg ${IS_LIVE ? 'bg-red-500/20' : 'bg-cyan-500/20'} flex items-center justify-center`}>
+                      <svg viewBox="0 0 24 24" fill="none" className={`w-4 h-4 ${IS_LIVE ? 'text-red-400' : 'text-cyan-400'}`} stroke="currentColor" strokeWidth="2">
                         <circle cx="12" cy="12" r="10" />
                         <path d="M12 6v6l4 2" />
                       </svg>
                     </div>
-                    <span className="font-medium text-foreground text-sm">Paper Trading</span>
+                    <span className="font-medium text-foreground text-sm">
+                      {IS_LIVE ? 'Live Trading' : 'Paper Trading'}
+                    </span>
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    Kun virtuelle penger. Perfekt for testing av AI-strategien.
+                    {IS_LIVE
+                      ? 'Ekte penger på din Saxo LIVE-konto. All handel er reell.'
+                      : 'Kun virtuelle penger. Perfekt for testing av AI-strategien.'}
                   </p>
                 </div>
               </div>
 
-              {/* Simulation Mode indicator */}
-              <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4">
+              {/* Mode indicator */}
+              <div className={`${IS_LIVE ? 'bg-red-500/10 border-red-500/30' : 'bg-cyan-500/10 border-cyan-500/30'} border rounded-xl p-4`}>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="w-3 h-3 rounded-full bg-cyan-400 animate-pulse" />
+                    <div className={`w-3 h-3 rounded-full ${IS_LIVE ? 'bg-red-400' : 'bg-cyan-400'} animate-pulse`} />
                     <div>
-                      <p className="font-medium text-foreground">Simulation Mode</p>
-                      <p className="text-sm text-cyan-400">Paper Trading – virtuelle penger</p>
+                      <p className="font-medium text-foreground">
+                        {IS_LIVE ? 'Live Mode' : 'Simulation Mode'}
+                      </p>
+                      <p className={`text-sm ${IS_LIVE ? 'text-red-400' : 'text-cyan-400'}`}>
+                        {IS_LIVE ? 'Live Trading – ekte penger' : 'Paper Trading – virtuelle penger'}
+                      </p>
                     </div>
                   </div>
-                  <div className="w-12 h-6 bg-cyan-500 rounded-full flex items-center px-1">
+                  <div className={`w-12 h-6 ${IS_LIVE ? 'bg-red-500' : 'bg-cyan-500'} rounded-full flex items-center px-1`}>
                     <div className="w-4 h-4 bg-white rounded-full ml-auto" />
                   </div>
                 </div>
@@ -180,7 +193,9 @@ export default function SaxoSimulationPage() {
 
               {/* Note */}
               <p className="text-center text-xs text-muted-foreground">
-                Dette er kun simulert handel for testing.
+                {IS_LIVE
+                  ? 'Live Trading bruker ekte penger på din Saxo-konto. Du er selv ansvarlig for resultatet.'
+                  : 'Dette er kun simulert handel for testing.'}
               </p>
             </div>
           </div>
