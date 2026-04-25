@@ -2,8 +2,8 @@
 
 import { useState } from 'react';
 
-// Saxo OAuth2 configuration
-const SAXO_AUTH_URL = 'https://sim.logonvalidation.net/authorize';
+const SAXO_ENV = process.env.NEXT_PUBLIC_SAXO_ENV === 'live' ? 'live' : 'sim';
+const SAXO_AUTH_URL = `https://${SAXO_ENV}.logonvalidation.net/authorize`;
 const CLIENT_ID = process.env.NEXT_PUBLIC_SAXO_CLIENT_ID || '';
 const REDIRECT_URI = process.env.NEXT_PUBLIC_SAXO_REDIRECT_URI || 'https://apex-quantum.com/callback';
 
@@ -11,16 +11,18 @@ export default function SaxoSimulationPage() {
   const [isConnecting, setIsConnecting] = useState(false);
 
   const handleConnect = () => {
+    if (!CLIENT_ID) {
+      alert('Saxo client_id er ikke konfigurert. Kontakt support.');
+      return;
+    }
     setIsConnecting(true);
-    
-    // Build OAuth2 authorization URL
+
     const authUrl = new URL(SAXO_AUTH_URL);
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('client_id', CLIENT_ID);
     authUrl.searchParams.set('redirect_uri', REDIRECT_URI);
     authUrl.searchParams.set('state', crypto.randomUUID());
-    
-    // Redirect to Saxo login
+
     window.location.href = authUrl.toString();
   };
 
