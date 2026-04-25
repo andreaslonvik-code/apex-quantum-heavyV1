@@ -1,9 +1,17 @@
+/**
+ * Vercel Cron — runs every minute.
+ * Iterates over EVERY connected customer, refreshes their token if needed,
+ * and triggers an autonomous trading scan against THEIR Saxo account.
+ *
+ * Authentication: requires Authorization: Bearer ${CRON_SECRET}.
+ * Vercel automatically sends this when the route is configured in vercel.json.
+ */
 import { NextResponse } from 'next/server';
+import { getAllConnectedUsers } from '@/lib/user-saxo';
+import { ensureFreshToken } from '@/lib/saxo-refresh';
+import { getSaxoBase, type SaxoEnv } from '@/lib/saxo';
 
-// Saxo SIM API
-const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
-
-// APEX QUANTUM v6.1 Blueprint - Ekte aksjer (Stock), ikke CFD
+// APEX QUANTUM v6.1 Blueprint - Stocks only, multi-exchange
 const APEX_BLUEPRINT: Record<string, {
   uic: number;
   assetType: string;
@@ -18,10 +26,10 @@ const APEX_BLUEPRINT: Record<string, {
   'ABSI': { uic: 24347426, assetType: 'Stock', saxoSymbol: 'ABSI:xnas', vekt: 5 },
 };
 
-const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-// Place order to Saxo
 async function placeOrder(
+  base: string,
   token: string,
   accountKey: string,
   uic: number,
@@ -31,10 +39,10 @@ async function placeOrder(
   saxoSymbol: string
 ): Promise<string | null> {
   try {
-    const res = await fetch(`${SAXO_API_BASE}/trade/v2/orders`, {
+    const res = await fetch(`${base}/trade/v2/orders`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`,
+        Authorization: `Bearer ${token}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -50,115 +58,122 @@ async function placeOrder(
     });
 
     if (!res.ok) {
-      console.log(`[CRON] Order FAILED for ${saxoSymbol}: ${res.status}`);
+      console.log(`[CRON] Order FAILED ${saxoSymbol}: ${res.status}`);
       return null;
     }
 
     const data = await res.json();
-    console.log(`[CRON] >>> Utforer: ${buySell.toUpperCase()} ${amount}x ${saxoSymbol} [${data.OrderId}]`);
+    console.log(`[CRON] ${buySell.toUpperCase()} ${amount}x ${saxoSymbol} [${data.OrderId}]`);
     return data.OrderId;
   } catch (e) {
-    console.log(`[CRON] Order ERROR: ${e}`);
+    console.log(`[CRON] Order ERROR ${saxoSymbol}: ${e}`);
     return null;
   }
 }
 
-// Single trading scan with multiple signals
-async function executeTradingScan(token: string, accountKey: string, scanNumber: number) {
-  const results: string[] = [];
+interface UserScanResult {
+  clerkUserId: string;
+  environment: SaxoEnv;
+  ordersAttempted: number;
+  ordersExecuted: number;
+  errors?: string[];
+}
+
+async function scanForUser(user: Awaited<ReturnType<typeof getAllConnectedUsers>>[number]): Promise<UserScanResult> {
+  const result: UserScanResult = {
+    clerkUserId: user.clerkUserId,
+    environment: user.environment,
+    ordersAttempted: 0,
+    ordersExecuted: 0,
+  };
+
+  // Refresh token if needed
+  const fresh = await ensureFreshToken(user.clerkUserId, user);
+  if (!fresh) {
+    result.errors = ['Token expired and refresh failed — user must reconnect'];
+    return result;
+  }
+
+  const base = getSaxoBase(user.environment);
   const tickers = Object.keys(APEX_BLUEPRINT);
-  
-  // Pick 2-4 random tickers for this scan
+
+  // Pick 2-4 tickers per minute (per user)
   const shuffled = [...tickers].sort(() => Math.random() - 0.5);
   const selected = shuffled.slice(0, 2 + Math.floor(Math.random() * 3));
-  
+
   for (const ticker of selected) {
     const info = APEX_BLUEPRINT[ticker];
-    
-    // Active trading: 65% buy, 35% sell
-    const momentum = Math.random();
-    const action = momentum > 0.35 ? 'Buy' : 'Sell';
+    const action = Math.random() > 0.35 ? 'Buy' : 'Sell';
     const amount = 5 + Math.floor(Math.random() * 15);
-    
+
+    result.ordersAttempted++;
     const orderId = await placeOrder(
-      token,
-      accountKey,
+      base,
+      fresh.accessToken,
+      user.accountKey,
       info.uic,
       info.assetType,
       amount,
       action,
       info.saxoSymbol
     );
-    
-    if (orderId) {
-      results.push(`Scan ${scanNumber}: ${action} ${amount}x ${info.saxoSymbol} [${orderId}]`);
-    }
+    if (orderId) result.ordersExecuted++;
   }
-  
-  return results;
+
+  return result;
 }
 
-// Cron endpoint - runs every minute with 25x 2-sec iterations
 export async function GET(request: Request) {
-  // Verify cron secret
   const authHeader = request.headers.get('authorization');
   const cronSecret = process.env.CRON_SECRET;
-  
+
   if (cronSecret && authHeader !== `Bearer ${cronSecret}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
-  
-  // Get stored credentials from env (for cron jobs)
-  const token = process.env.APEX_SAXO_TOKEN;
-  const accountKey = process.env.APEX_SAXO_ACCOUNT_KEY;
-  
-  if (!token || !accountKey) {
-    return NextResponse.json({ 
-      error: 'Missing APEX_SAXO_TOKEN or APEX_SAXO_ACCOUNT_KEY',
-      help: 'Set these in Vercel Environment Variables for cron to work',
-    }, { status: 400 });
-  }
-  
+
   const startTime = Date.now();
-  const allResults: string[] = [];
-  const ITERATIONS = 25; // 25 iterations x 2 sec = ~50 sec
-  
-  console.log(`[CRON] ========== APEX QUANTUM v6.1 CRON START ==========`);
-  console.log(`[CRON] Running ${ITERATIONS} scans with 2-sec intervals`);
-  
-  let totalOrders = 0;
-  
-  for (let i = 1; i <= ITERATIONS; i++) {
-    try {
-      const scanResults = await executeTradingScan(token, accountKey, i);
-      allResults.push(...scanResults);
-      totalOrders += scanResults.length;
-      
-      // Wait 2 seconds before next scan (except last)
-      if (i < ITERATIONS) {
-        await sleep(2000);
-      }
-    } catch (e) {
-      console.error(`[CRON] Scan ${i} error:`, e);
-    }
+  const users = await getAllConnectedUsers();
+
+  console.log(`[CRON] ====== APEX QUANTUM cron tick — ${users.length} connected user(s) ======`);
+
+  if (users.length === 0) {
+    return NextResponse.json({ success: true, users: 0, message: 'No connected users' });
   }
-  
+
+  // Scan each user in parallel — every customer gets their own autonomous tick.
+  // Limit concurrency so we don't overwhelm Saxo's per-app rate limits.
+  const CONCURRENCY = 5;
+  const results: UserScanResult[] = [];
+  for (let i = 0; i < users.length; i += CONCURRENCY) {
+    const batch = users.slice(i, i + CONCURRENCY);
+    const batchResults = await Promise.all(batch.map((u) => scanForUser(u).catch((e) => ({
+      clerkUserId: u.clerkUserId,
+      environment: u.environment,
+      ordersAttempted: 0,
+      ordersExecuted: 0,
+      errors: [String(e)],
+    } as UserScanResult))));
+    results.push(...batchResults);
+    if (i + CONCURRENCY < users.length) await sleep(500);
+  }
+
   const elapsed = Date.now() - startTime;
-  
-  console.log(`[CRON] ========== CRON COMPLETE ==========`);
-  console.log(`[CRON] ${totalOrders} orders in ${elapsed}ms`);
-  
+  const totals = results.reduce(
+    (acc, r) => ({
+      attempted: acc.attempted + r.ordersAttempted,
+      executed: acc.executed + r.ordersExecuted,
+    }),
+    { attempted: 0, executed: 0 }
+  );
+
+  console.log(`[CRON] Done in ${elapsed}ms — ${totals.executed}/${totals.attempted} orders across ${users.length} users`);
+
   return NextResponse.json({
     success: true,
-    version: 'APEX QUANTUM v6.1',
-    scans: ITERATIONS,
-    totalOrders,
-    results: allResults.slice(-30),
-    elapsed: `${elapsed}ms`,
-    blueprint: Object.entries(APEX_BLUEPRINT).map(([ticker, info]) => ({
-      ticker,
-      saxoSymbol: info.saxoSymbol,
-      vekt: info.vekt,
-    })),
+    users: users.length,
+    totalAttempted: totals.attempted,
+    totalExecuted: totals.executed,
+    elapsedMs: elapsed,
+    perUser: results,
   });
 }

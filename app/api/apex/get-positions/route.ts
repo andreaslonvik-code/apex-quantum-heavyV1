@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-
-const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
+import { getRequestCreds } from '@/lib/get-request-creds';
+import { getSaxoBase } from '@/lib/saxo';
 
 interface Position {
   ticker: string;
@@ -13,20 +12,19 @@ interface Position {
 
 export async function GET() {
   try {
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get('apex_saxo_token')?.value;
-    const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
-
-    if (!accessToken || !accountKey) {
+    const creds = await getRequestCreds();
+    if (!creds) {
       return NextResponse.json({
         error: 'Ikke tilkoblet Saxo',
         positions: [],
       }, { status: 401 });
     }
+    const { accessToken, clientKey, environment } = creds;
+    const SAXO_API_BASE = getSaxoBase(environment);
 
     // Get positions from Saxo
     const response = await fetch(
-      `${SAXO_API_BASE}/port/v1/positions?ClientKey=${accountKey}`,
+      `${SAXO_API_BASE}/port/v1/positions?ClientKey=${clientKey}`,
       { headers: { 'Authorization': `Bearer ${accessToken}` } }
     );
 

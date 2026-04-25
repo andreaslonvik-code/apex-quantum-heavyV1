@@ -12,11 +12,10 @@ import {
   getBalance,
   getPositions,
   getDebugLog,
-  clearDebugLog,
   isLiveMode,
   startAutoPurge,
   type SaxoPosition,
-  type SaxoPrice,
+  type SaxoEnv,
 } from '@/lib/saxo';
 
 // ============ APEX QUANTUM v7 BLUEPRINT ============
@@ -183,10 +182,11 @@ async function placeMarketOrder(
   assetType: string,
   amount: number,
   buySell: 'Buy' | 'Sell',
-  reason: string
+  reason: string,
+  env: SaxoEnv
 ): Promise<{ success: boolean; orderId?: string; error?: string; uic?: number }> {
   // Find instrument
-  const instrumentResult = await findInstrument(accessToken, ticker, saxoSymbol.split(':')[1]);
+  const instrumentResult = await findInstrument(accessToken, ticker, saxoSymbol.split(':')[1], env);
   if (!instrumentResult.success || !instrumentResult.data) {
     console.log(`[APEX] Could not find instrument ${ticker}: ${instrumentResult.error}`);
     return { success: false, error: instrumentResult.error || `Instrument not found: ${ticker}` };
@@ -212,6 +212,7 @@ async function placeMarketOrder(
     {
       method: 'POST',
       accessToken,
+      env,
       body: JSON.stringify(payload),
     }
   );
@@ -240,7 +241,8 @@ async function generateSignals(
   positions: Map<string, SaxoPosition>,
   cash: number,
   totalValue: number,
-  marketStatus: MarketStatus
+  marketStatus: MarketStatus,
+  env: SaxoEnv
 ): Promise<TradingSignal[]> {
   const signals: TradingSignal[] = [];
   
@@ -261,14 +263,14 @@ async function generateSignals(
     }
     
     // Find instrument
-    const instrumentResult = await findInstrument(accessToken, ticker, info.exchange.toLowerCase());
+    const instrumentResult = await findInstrument(accessToken, ticker, info.exchange.toLowerCase(), env);
     if (!instrumentResult.success || !instrumentResult.data) {
       console.log(`[APEX] Skip ${ticker} - instrument not found`);
       continue;
     }
-    
+
     // Get price
-    const priceResult = await getPrice(accessToken, instrumentResult.data.uic, info.assetType);
+    const priceResult = await getPrice(accessToken, instrumentResult.data.uic, info.assetType, env);
     if (!priceResult.success || !priceResult.data) {
       console.log(`[APEX] Skip ${ticker} - price unavailable`);
       continue;
@@ -457,11 +459,10 @@ export async function POST(request: NextRequest) {
   
   console.log(`[APEX] ========== APEX QUANTUM v7 SCAN ==========`);
   console.log(`[APEX] Mode: ${mode.toUpperCase()} | Time: ${new Date().toISOString()}`);
-  console.log(`[APEX] Live: ${isLiveMode()} | Force: ${CONFIG.FORCE_TRADING_ALWAYS}`);
-  
+
   // Start auto-purge (self-cleaning)
   startAutoPurge(CONFIG.PURGE_INTERVAL_MS);
-  
+
   // Get credentials (DB-first, cookie fallback — user-scoped)
   const creds = await getRequestCreds();
   if (!creds) {
@@ -471,7 +472,9 @@ export async function POST(request: NextRequest) {
       { status: 401 }
     );
   }
-  const { accessToken, accountKey, clientKey } = creds;
+  const { accessToken, accountKey, clientKey, environment } = creds;
+  const env: SaxoEnv = environment;
+  console.log(`[APEX] User env: ${env} | Live: ${isLiveMode(env)} | Force: ${CONFIG.FORCE_TRADING_ALWAYS}`);
   
   try {
     const startTime = Date.now();
@@ -480,7 +483,7 @@ export async function POST(request: NextRequest) {
     console.log(`[APEX] ${marketStatus.message}`);
     
     // Get balance
-    const balanceResult = await getBalance(accessToken, accountKey, clientKey);
+    const balanceResult = await getBalance(accessToken, accountKey, clientKey, env);
     if (!balanceResult.success || !balanceResult.data) {
       console.log(`[APEX] Balance error: ${balanceResult.error}`);
       return NextResponse.json({ error: balanceResult.error }, { status: 500 });
@@ -493,7 +496,7 @@ export async function POST(request: NextRequest) {
     console.log(`[APEX] Balance: cash=${cash.toFixed(0)}, total=${totalValue.toFixed(0)}, P/L=${currentProfit.toFixed(0)}`);
     
     // Get positions
-    const positionsResult = await getPositions(accessToken, clientKey);
+    const positionsResult = await getPositions(accessToken, clientKey, env);
     const positionsMap = new Map<string, SaxoPosition>();
     
     if (positionsResult.success && positionsResult.data) {
@@ -505,7 +508,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Generate signals
-    const signals = await generateSignals(accessToken, positionsMap, cash, totalValue, marketStatus);
+    const signals = await generateSignals(accessToken, positionsMap, cash, totalValue, marketStatus, env);
     
     // Execute trades
     const executedTrades: Array<{
@@ -554,7 +557,8 @@ export async function POST(request: NextRequest) {
         info.assetType,
         signal.amount,
         signal.action === 'BUY' ? 'Buy' : 'Sell',
-        signal.reason
+        signal.reason,
+        env
       );
       
       if (result.success) {

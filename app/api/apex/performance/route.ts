@@ -13,13 +13,15 @@ const performanceHistory: Map<string, Array<{
 }>> = new Map();
 
 export async function GET() {
+  let INITIAL_VALUE = Number(process.env.START_BALANCE) || 1000000;
   try {
     const creds = await getRequestCreds();
     if (!creds) {
       return NextResponse.json({ error: 'Not connected' }, { status: 401 });
     }
-    const { accessToken, accountKey, clientKey, startBalance: INITIAL_VALUE } = creds;
-    const SAXO_API_BASE = getSaxoBase();
+    const { accessToken, accountKey, clientKey, startBalance, environment } = creds;
+    INITIAL_VALUE = startBalance;
+    const SAXO_API_BASE = getSaxoBase(environment);
 
     // Get total account value from Saxo (this is the full account value including positions)
     let totalValue = INITIAL_VALUE;

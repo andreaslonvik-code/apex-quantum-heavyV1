@@ -12,7 +12,7 @@ export interface RequestCreds {
   accountKey: string;
   clientKey: string;
   accountId: string;
-  environment: string;
+  environment: 'sim' | 'live';
   startBalance: number;
   source: 'db' | 'cookie';
 }
@@ -44,7 +44,7 @@ export async function getRequestCreds(): Promise<RequestCreds | null> {
     accountKey,
     clientKey: clientKey || accountKey,
     accountId: accountKey,
-    environment: process.env.SAXO_ENV || 'sim',
+    environment: (process.env.SAXO_ENV as 'sim' | 'live') || 'sim',
     startBalance: Number(process.env.START_BALANCE) || 1000000,
     source: 'cookie',
   };

@@ -8,14 +8,20 @@ import { isExchangeAllowed, validateInstrumentExchange } from './exchange-valida
 const SAXO_SIM_BASE = 'https://gateway.saxobank.com/sim/openapi';
 const SAXO_LIVE_BASE = 'https://gateway.saxobank.com/openapi';
 
-// Get current environment mode
-export function getSaxoBase(): string {
-  const env = process.env.SAXO_ENV || 'sim';
-  return env === 'live' ? SAXO_LIVE_BASE : SAXO_SIM_BASE;
+export type SaxoEnv = 'sim' | 'live';
+
+/**
+ * Base URL for the Saxo REST API.
+ * Caller may pass a per-user env; falls back to SAXO_ENV (default 'sim').
+ */
+export function getSaxoBase(env?: SaxoEnv): string {
+  const resolved = env ?? (process.env.SAXO_ENV as SaxoEnv) ?? 'sim';
+  return resolved === 'live' ? SAXO_LIVE_BASE : SAXO_SIM_BASE;
 }
 
-export function isLiveMode(): boolean {
-  return process.env.SAXO_ENV === 'live';
+export function isLiveMode(env?: SaxoEnv): boolean {
+  const resolved = env ?? (process.env.SAXO_ENV as SaxoEnv) ?? 'sim';
+  return resolved === 'live';
 }
 
 // ============ TYPES ============
@@ -119,12 +125,14 @@ export function clearDebugLog(): void {
 
 export async function safeSaxoFetch<T = unknown>(
   endpoint: string,
-  options: RequestInit & { accessToken?: string } = {}
+  options: RequestInit & { accessToken?: string; env?: SaxoEnv } = {}
 ): Promise<SaxoFetchResult<T>> {
-  const base = getSaxoBase();
+  const base = getSaxoBase(options.env);
   const url = endpoint.startsWith('http') ? endpoint : `${base}${endpoint}`;
   
-  const { accessToken, ...fetchOptions } = options;
+  // Strip non-fetch fields (env, accessToken) so they don't leak into RequestInit
+  const { accessToken, env: _env, ...fetchOptions } = options;
+  void _env;
   
   // Build headers
   const headers: Record<string, string> = {
@@ -276,10 +284,10 @@ export async function safeSaxoFetch<T = unknown>(
 // ============ TOKEN MANAGEMENT ============
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
-export async function refreshSaxoToken(refreshToken: string): Promise<SaxoFetchResult<{ access_token: string; expires_in: number }>> {
+export async function refreshSaxoToken(refreshToken: string, env?: SaxoEnv): Promise<SaxoFetchResult<{ access_token: string; expires_in: number }>> {
   const clientId = process.env.SAXO_CLIENT_ID;
   const clientSecret = process.env.SAXO_CLIENT_SECRET;
-  
+
   if (!clientId || !clientSecret) {
     return {
       success: false,
@@ -287,13 +295,16 @@ export async function refreshSaxoToken(refreshToken: string): Promise<SaxoFetchR
       errorCode: 'MISSING_CONFIG',
     };
   }
-  
-  const base = getSaxoBase().replace('/openapi', '');
-  
+
+  const tokenUrl = (env ?? (process.env.SAXO_ENV as SaxoEnv) ?? 'sim') === 'live'
+    ? 'https://live.logonvalidation.net/token'
+    : 'https://sim.logonvalidation.net/token';
+
   const result = await safeSaxoFetch<{ access_token: string; expires_in: number; refresh_token?: string }>(
-    `${base}/oauth/token`,
+    tokenUrl,
     {
       method: 'POST',
+      env,
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
       },
@@ -336,7 +347,8 @@ const uicCache: Map<string, SaxoInstrument> = new Map();
 export async function findInstrument(
   accessToken: string,
   ticker: string,
-  preferredExchange?: string
+  preferredExchange?: string,
+  env?: SaxoEnv
 ): Promise<SaxoFetchResult<SaxoInstrument>> {
   const cacheKey = `${ticker}_${preferredExchange || 'any'}`;
   
@@ -365,7 +377,7 @@ export async function findInstrument(
     // No CFD, futures, options, or other derivatives
     const result = await safeSaxoFetch<{ Data: Array<{ Identifier: number; AssetType: string; Symbol: string; Description: string; ExchangeId: string }> }>(
       `/ref/v1/instruments?Keywords=${encodeURIComponent(keyword)}&AssetTypes=Stock&$top=10`,
-      { accessToken }
+      { accessToken, env }
     );
     
     if (result.success && result.data?.Data?.length) {
@@ -428,14 +440,15 @@ export async function findInstrument(
 export async function getPrice(
   accessToken: string,
   uic: number,
-  assetType: string
+  assetType: string,
+  env?: SaxoEnv
 ): Promise<SaxoFetchResult<SaxoPrice>> {
   const result = await safeSaxoFetch<{
     Quote?: { Bid?: number; Ask?: number; Last?: number; Change?: number; ChangePercent?: number };
     PriceInfo?: { LastTraded?: number };
   }>(
     `/trade/v1/infoprices?Uic=${uic}&AssetType=${assetType}&FieldGroups=Quote,PriceInfo`,
-    { accessToken }
+    { accessToken, env }
   );
   
   if (!result.success) {
@@ -462,19 +475,20 @@ export async function getPrice(
 // ============ ORDER PLACEMENT ============
 export async function placeOrder(
   accessToken: string,
-  order: SaxoOrder
+  order: SaxoOrder,
+  env?: SaxoEnv
 ): Promise<SaxoOrderResult> {
   // Find instrument if UIC not provided
   let uic = order.uic;
   let assetType = order.assetType || 'Stock';
   let exchangeId: string | undefined;
-  
+
   // APEX QUANTUM: Force asset type to Stock (equities only)
   // This prevents any CFD, futures, or derivatives from being traded
   assetType = 'Stock';
-  
+
   if (!uic) {
-    const instrumentResult = await findInstrument(accessToken, order.ticker);
+    const instrumentResult = await findInstrument(accessToken, order.ticker, undefined, env);
     if (!instrumentResult.success || !instrumentResult.data) {
       return {
         success: false,
@@ -525,6 +539,7 @@ export async function placeOrder(
     {
       method: 'POST',
       accessToken,
+      env,
       body: JSON.stringify(payload),
     }
   );
@@ -547,7 +562,8 @@ export async function placeOrder(
 export async function getBalance(
   accessToken: string,
   accountKey: string,
-  clientKey?: string
+  clientKey?: string,
+  env?: SaxoEnv
 ): Promise<SaxoFetchResult<SaxoBalance>> {
   const resolvedClientKey = clientKey || accountKey;
   const result = await safeSaxoFetch<{
@@ -557,7 +573,7 @@ export async function getBalance(
     Currency?: string;
   }>(
     `/port/v1/balances?AccountKey=${accountKey}&ClientKey=${resolvedClientKey}`,
-    { accessToken }
+    { accessToken, env }
   );
   
   if (!result.success) {
@@ -577,7 +593,8 @@ export async function getBalance(
 
 export async function getPositions(
   accessToken: string,
-  clientKey: string
+  clientKey: string,
+  env?: SaxoEnv
 ): Promise<SaxoFetchResult<SaxoPosition[]>> {
   const result = await safeSaxoFetch<{
     Data?: Array<{
@@ -588,7 +605,7 @@ export async function getPositions(
     }>;
   }>(
     `/port/v1/positions?ClientKey=${clientKey}&FieldGroups=PositionBase,PositionView,DisplayAndFormat`,
-    { accessToken }
+    { accessToken, env }
   );
   
   if (!result.success) {

@@ -13,7 +13,10 @@ import {
   clearDebugLog,
   isLiveMode,
   type SaxoPosition,
+  type SaxoEnv,
 } from '@/lib/saxo';
+import { getAllConnectedUsers } from '@/lib/user-saxo';
+import { ensureFreshToken } from '@/lib/saxo-refresh';
 
 // ============ APEX QUANTUM v7 BLUEPRINT ============
 // Multi-exchange support: US, Oslo, Germany, China/HK
@@ -202,7 +205,8 @@ async function generateSignals(
   positions: Map<string, SaxoPosition>,
   cash: number,
   totalValue: number,
-  marketStatus: MarketStatus
+  marketStatus: MarketStatus,
+  env: SaxoEnv
 ): Promise<TradingSignal[]> {
   const signals: TradingSignal[] = [];
   
@@ -215,17 +219,17 @@ async function generateSignals(
       (info.market === 'CHINA' && marketStatus.chinaOpen);
     
     // In SIM mode, always allow US stocks
-    const isSimMode = !isLiveMode();
+    const isSimMode = !isLiveMode(env);
     if (!marketOpen && !isSimMode) continue;
-    
+
     // Find instrument
-    const instrumentResult = await findInstrument(accessToken, ticker, info.exchange.toLowerCase());
+    const instrumentResult = await findInstrument(accessToken, ticker, info.exchange.toLowerCase(), env);
     if (!instrumentResult.success || !instrumentResult.data) continue;
-    
+
     const instrument = instrumentResult.data;
-    
+
     // Get current price
-    const priceResult = await getPrice(accessToken, instrument.uic, info.assetType);
+    const priceResult = await getPrice(accessToken, instrument.uic, info.assetType, env);
     if (!priceResult.success || !priceResult.data) continue;
     
     const currentPrice = priceResult.data.last;
@@ -391,164 +395,173 @@ async function generateSignals(
 
 // ============ INNGEST FUNCTIONS ============
 
-// Main trading tick - runs every 30 seconds
+// ============ PER-USER TICK ============
+// Run a single trading scan against ONE customer's Saxo account.
+// Refreshes their token, fetches their balance/positions, places trades.
+//
+// NOTE: Inngest serializes step output as JSON, so a user object loaded inside
+// `step.run('load-users')` arrives here with `expiresAt` as an ISO string
+// rather than a Date. We rehydrate before handing to refresh helpers.
+type SerializedUser = Omit<Awaited<ReturnType<typeof getAllConnectedUsers>>[number], 'expiresAt'> & {
+  expiresAt?: string | Date | null;
+};
+
+async function runUserTick(input: SerializedUser) {
+  const user: Awaited<ReturnType<typeof getAllConnectedUsers>>[number] = {
+    ...input,
+    expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+  };
+  const fresh = await ensureFreshToken(user.clerkUserId, user);
+  if (!fresh) {
+    return { clerkUserId: user.clerkUserId, error: 'Token refresh failed — user must reconnect' };
+  }
+
+  const accessToken = fresh.accessToken;
+  const env: SaxoEnv = user.environment;
+  const accountKey = user.accountKey;
+  const clientKey = user.clientKey || accountKey;
+
+  const marketStatus = getMarketStatus();
+
+  const balanceResult = await getBalance(accessToken, accountKey, clientKey, env);
+  if (!balanceResult.success || !balanceResult.data) {
+    return { clerkUserId: user.clerkUserId, error: 'Balance fetch failed', details: balanceResult.error };
+  }
+
+  const positionsResult = await getPositions(accessToken, clientKey, env);
+  const positionsMap = new Map<string, SaxoPosition>();
+  if (positionsResult.success && positionsResult.data) {
+    for (const pos of positionsResult.data) {
+      if (pos.ticker) positionsMap.set(pos.ticker, pos);
+    }
+  }
+
+  const cash = balanceResult.data.cash;
+  const totalValue = balanceResult.data.total || user.startBalance;
+  const currentProfit = totalValue - user.startBalance;
+
+  console.log(
+    `[APEX-INNGEST] user=${user.clerkUserId} env=${env} cash=${cash.toFixed(0)} total=${totalValue.toFixed(0)} P/L=${currentProfit.toFixed(0)}`
+  );
+
+  const signals = await generateSignals(accessToken, positionsMap, cash, totalValue, marketStatus, env);
+
+  const executedTrades: Array<{
+    ticker: string;
+    action: string;
+    amount: number;
+    price: number;
+    value: number;
+    orderId?: string;
+    reason: string;
+  }> = [];
+  let totalBought = 0;
+  let totalSold = 0;
+
+  for (const signal of signals) {
+    const tradeValue = signal.amount * signal.price;
+
+    if (signal.action === 'BUY' && tradeValue > cash * 0.95) continue;
+    if (signal.action === 'SELL') {
+      const pos = positionsMap.get(signal.ticker);
+      if (!pos || pos.amount < signal.amount) continue;
+    }
+
+    const orderResult = await placeOrder(
+      accessToken,
+      {
+        ticker: signal.ticker,
+        action: signal.action,
+        quantity: signal.amount,
+        accountKey,
+      },
+      env
+    );
+
+    if (orderResult.success) {
+      if (signal.action === 'BUY') totalBought += tradeValue;
+      else totalSold += tradeValue;
+      executedTrades.push({
+        ticker: signal.ticker,
+        action: signal.action,
+        amount: signal.amount,
+        price: signal.price,
+        value: tradeValue,
+        orderId: orderResult.orderId,
+        reason: signal.reason,
+      });
+    }
+  }
+
+  return {
+    clerkUserId: user.clerkUserId,
+    env,
+    marketStatus,
+    signals: signals.length,
+    executed: executedTrades.length,
+    totalBought,
+    totalSold,
+    refreshed: fresh.refreshed,
+  };
+}
+
+// Main trading tick — runs every minute, fans out to every connected user.
 export const apexQuantumTick = inngest.createFunction(
   {
     id: 'apex-quantum-tick',
-    name: 'APEX QUANTUM v7 Trading Tick',
+    name: 'APEX QUANTUM v7 Per-User Trading Tick',
     retries: 3,
-    triggers: [{ cron: '*/1 * * * *' }], // Every minute, but internal logic handles 30s
+    triggers: [{ cron: '*/1 * * * *' }],
   },
   async ({ step }) => {
-    console.log('[APEX-INNGEST] ========== TICK START ==========');
-    
-    // Get credentials from environment
-    const accessToken = process.env.APEX_SAXO_TOKEN;
-    const accountKey = process.env.APEX_SAXO_ACCOUNT_KEY;
-    
-    if (!accessToken || !accountKey) {
-      console.log('[APEX-INNGEST] Missing credentials');
-      return { error: 'Missing APEX_SAXO_TOKEN or APEX_SAXO_ACCOUNT_KEY' };
-    }
-    
-    // clientKey is now guaranteed string since accountKey is validated above
-    const clientKey = process.env.APEX_SAXO_CLIENT_KEY || accountKey;
-    
-    // Start auto-purge
+    console.log('[APEX-INNGEST] ========== TICK START (multi-user) ==========');
+
     startAutoPurge(CONFIG.PURGE_INTERVAL_SECONDS * 1000);
-    
-    // Run two ticks per minute (30s each)
-    const results = [];
-    
-    for (let tick = 0; tick < 2; tick++) {
-      const tickResult = await step.run(`tick-${tick}`, async () => {
-        const startTime = Date.now();
-        const marketStatus = getMarketStatus();
-        
-        console.log(`[APEX-INNGEST] Tick ${tick + 1}/2 at ${marketStatus.cetTime}`);
-        console.log(`[APEX-INNGEST] Active markets: ${marketStatus.activeMarkets.join(', ') || 'NONE'}`);
-        console.log(`[APEX-INNGEST] Mode: ${isLiveMode() ? 'LIVE' : 'SIM'}`);
-        
-        // Get balance and positions
-        const balanceResult = await getBalance(accessToken, accountKey);
-        if (!balanceResult.success || !balanceResult.data) {
-          return { error: 'Failed to get balance', details: balanceResult.error };
-        }
-        
-        const positionsResult = await getPositions(accessToken, clientKey);
-        const positionsMap = new Map<string, SaxoPosition>();
-        
-        if (positionsResult.success && positionsResult.data) {
-          for (const pos of positionsResult.data) {
-            if (pos.ticker) {
-              positionsMap.set(pos.ticker, pos);
-            }
-          }
-        }
-        
-        const cash = balanceResult.data.cash;
-        const totalValue = balanceResult.data.total || CONFIG.BASE_TRADING_CAPITAL;
-        const currentProfit = totalValue - CONFIG.BASE_TRADING_CAPITAL;
-        
-        console.log(`[APEX-INNGEST] Balance: ${cash.toFixed(0)} kr | Total: ${totalValue.toFixed(0)} kr | P/L: ${currentProfit.toFixed(0)} kr`);
-        
-        // Generate signals
-        const signals = await generateSignals(
-          accessToken,
-          positionsMap,
-          cash,
-          totalValue,
-          marketStatus
-        );
-        
-        console.log(`[APEX-INNGEST] Generated ${signals.length} signals`);
-        
-        // Execute trades
-        const executedTrades = [];
-        let totalBought = 0;
-        let totalSold = 0;
-        
-        for (const signal of signals) {
-          const tradeValue = signal.amount * signal.price;
-          
-          // Check cash for buys
-          if (signal.action === 'BUY' && tradeValue > cash * 0.95) {
-            console.log(`[APEX-INNGEST] Skip ${signal.ticker}: insufficient cash`);
-            continue;
-          }
-          
-          // Check position for sells
-          if (signal.action === 'SELL') {
-            const pos = positionsMap.get(signal.ticker);
-            if (!pos || pos.amount < signal.amount) {
-              console.log(`[APEX-INNGEST] Skip ${signal.ticker}: insufficient shares`);
-              continue;
-            }
-          }
-          
-          const orderResult = await placeOrder(accessToken, {
-            ticker: signal.ticker,
-            action: signal.action,
-            quantity: signal.amount,
-            accountKey,
-          });
-          
-          if (orderResult.success) {
-            console.log(`[APEX-INNGEST] ${signal.action} ${signal.amount}x ${signal.ticker} @ ${signal.price.toFixed(2)} [${orderResult.orderId}]`);
-            
-            if (signal.action === 'BUY') totalBought += tradeValue;
-            else totalSold += tradeValue;
-            
-            executedTrades.push({
-              ticker: signal.ticker,
-              action: signal.action,
-              amount: signal.amount,
-              price: signal.price,
-              value: tradeValue,
-              orderId: orderResult.orderId,
-              reason: signal.reason,
-            });
-          } else {
-            console.log(`[APEX-INNGEST] FAILED ${signal.ticker}: ${orderResult.error}`);
-          }
-        }
-        
-        const duration = Date.now() - startTime;
-        
-        return {
-          tick: tick + 1,
-          marketStatus,
-          signals: signals.length,
-          executed: executedTrades.length,
-          totalBought,
-          totalSold,
-          duration,
-          trades: executedTrades.slice(0, 10),
-        };
-      });
-      
-      results.push(tickResult);
-      
-      // Wait 30 seconds before next tick (except last)
-      if (tick < 1) {
-        await step.sleep('wait-30s', '30s');
-      }
+
+    const users = await step.run('load-users', async () => {
+      const list = await getAllConnectedUsers();
+      console.log(`[APEX-INNGEST] ${list.length} connected user(s)`);
+      return list;
+    });
+
+    if (!users.length) {
+      return { version: 'APEX QUANTUM v7', mode: 'multi-user', users: 0 };
     }
-    
-    // Auto-purge after ticks
+
+    // Two passes per minute (~30s gap) so each user gets two ticks
+    const results: unknown[] = [];
+    for (let tick = 0; tick < 2; tick++) {
+      const tickResults = await step.run(`tick-${tick}`, async () => {
+        const CONCURRENCY = 5;
+        const out: unknown[] = [];
+        for (let i = 0; i < users.length; i += CONCURRENCY) {
+          const batch = users.slice(i, i + CONCURRENCY);
+          const r = await Promise.all(batch.map((u) => runUserTick(u).catch((e) => ({
+            clerkUserId: u.clerkUserId,
+            error: String(e),
+          }))));
+          out.push(...r);
+        }
+        return out;
+      });
+      results.push(...tickResults);
+
+      if (tick < 1) await step.sleep('wait-30s', '30s');
+    }
+
     await step.run('purge', async () => {
       clearDebugLog();
       priceHistory.clear();
-      console.log('[APEX-INNGEST] Purged cache and logs');
       return { purged: true };
     });
-    
+
     console.log('[APEX-INNGEST] ========== TICK COMPLETE ==========');
-    
+
     return {
       version: 'APEX QUANTUM v7',
-      mode: isLiveMode() ? 'LIVE' : 'SIM',
-      ticks: results,
+      mode: 'multi-user',
+      users: users.length,
+      results,
     };
   }
 );

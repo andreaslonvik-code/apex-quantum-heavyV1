@@ -18,8 +18,8 @@ export async function GET() {
     if (!creds) {
       return NextResponse.json({ error: 'Not connected' }, { status: 401 });
     }
-    const { accessToken, clientKey } = creds;
-    const SAXO_API_BASE = getSaxoBase();
+    const { accessToken, accountKey, clientKey, environment } = creds;
+    const SAXO_API_BASE = getSaxoBase(environment);
 
     // MANDATORY: Fetch positions directly from Saxo API
     // GET /port/v1/positions - Returns all open positions

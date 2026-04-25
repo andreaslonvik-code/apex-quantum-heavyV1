@@ -11,29 +11,29 @@ export function BrokerConnect({ language }: BrokerConnectProps) {
   const content = {
     no: {
       title: 'Koble til Saxo Bank',
-      subtitle: 'Slik kobler du Apex Quantum til din Saxo Bank-konto for autonom handel',
-      description: 'Apex Quantum kan handle autonomt for deg gjennom Saxo Bank når du gir tillatelse. Dette krever at du kobler kontoen din én gang.',
-      stepsTitle: 'Steg-for-steg veiledning',
+      subtitle: 'Koble din Saxo-konto til Apex Quantum for autonom handel',
+      description: 'Apex Quantum bruker Saxo Banks offisielle OAuth-pålogging — du logger inn direkte hos Saxo og gir Apex Quantum tilgang til å handle på din konto. Vi ser aldri passordet ditt, og du kan trekke tilbake tilgangen når som helst fra Saxo-kontoen din.',
+      stepsTitle: 'Slik gjør du det',
       steps: [
         {
           number: '1',
-          title: 'Logg inn på din Saxo Bank-konto',
-          description: 'Gå til Saxo Developer Portal på developers.saxobank.com',
+          title: 'Trykk "Koble til Saxo Bank" nedenfor',
+          description: 'Du blir sendt til Saxos sikre påloggingsside.',
         },
         {
           number: '2',
-          title: 'Opprett en ny App',
-          description: 'Trykk "Create New App", gi den navnet Apex Quantum, og velg Trading API og Portfolio API',
+          title: 'Logg inn med din Saxo-bruker',
+          description: 'Bruk samme brukernavn og passord som du bruker på SaxoTraderGO.',
         },
         {
           number: '3',
-          title: 'Kopier dine API-nøkler',
-          description: 'Du får en Client ID og Client Secret',
+          title: 'Godkjenn tilgang for Apex Quantum',
+          description: 'Saxo viser deg nøyaktig hvilke rettigheter Apex Quantum får (lese portefølje, sende ordrer).',
         },
         {
           number: '4',
-          title: 'Koble kontoen i Apex Quantum',
-          description: 'Gå til "Koble Broker" nedenfor, lim inn Client ID og Client Secret, og godkjenn tilgangen',
+          title: 'Apex Quantum begynner autonom handel',
+          description: 'Du sendes tilbake til dashbordet og 24/7-handleren starter umiddelbart.',
         },
       ],
       benefitsTitle: 'Når koblingen er ferdig, vil Apex Quantum kunne:',
@@ -42,40 +42,33 @@ export function BrokerConnect({ language }: BrokerConnectProps) {
         'Sende kjøps- og salgsordrer autonomt',
         'Følge din risikoprofil og drawdown-grenser',
       ],
-      formTitle: 'Koble Broker',
-      clientId: 'Client ID',
-      clientSecret: 'Client Secret',
       connect: 'Koble til Saxo Bank',
-      placeholder: {
-        clientId: 'Lim inn din Client ID',
-        clientSecret: 'Lim inn din Client Secret',
-      },
     },
     en: {
       title: 'Connect to Saxo Bank',
-      subtitle: 'How to connect Apex Quantum to your Saxo Bank account for autonomous trading',
-      description: 'Apex Quantum can trade autonomously for you through Saxo Bank when you grant permission. This requires connecting your account once.',
-      stepsTitle: 'Step-by-step guide',
+      subtitle: 'Connect your Saxo account to Apex Quantum for autonomous trading',
+      description: 'Apex Quantum uses Saxo Bank\'s official OAuth login — you sign in directly at Saxo and grant Apex Quantum permission to trade on your account. We never see your password, and you can revoke access at any time from your Saxo account.',
+      stepsTitle: 'How it works',
       steps: [
         {
           number: '1',
-          title: 'Log in to your Saxo Bank account',
-          description: 'Go to Saxo Developer Portal at developers.saxobank.com',
+          title: 'Click "Connect to Saxo Bank" below',
+          description: 'You\'ll be redirected to Saxo\'s secure login page.',
         },
         {
           number: '2',
-          title: 'Create a new App',
-          description: 'Click "Create New App", name it Apex Quantum, and select Trading API and Portfolio API',
+          title: 'Sign in with your Saxo credentials',
+          description: 'Use the same username and password you use for SaxoTraderGO.',
         },
         {
           number: '3',
-          title: 'Copy your API keys',
-          description: 'You will receive a Client ID and Client Secret',
+          title: 'Approve access for Apex Quantum',
+          description: 'Saxo shows you exactly which permissions Apex Quantum receives (read portfolio, place orders).',
         },
         {
           number: '4',
-          title: 'Connect the account in Apex Quantum',
-          description: 'Go to "Connect Broker" below, paste your Client ID and Client Secret, and approve access',
+          title: 'Apex Quantum starts autonomous trading',
+          description: 'You\'re returned to the dashboard and the 24/7 trader begins immediately.',
         },
       ],
       benefitsTitle: 'Once connected, Apex Quantum will be able to:',
@@ -84,14 +77,7 @@ export function BrokerConnect({ language }: BrokerConnectProps) {
         'Send buy and sell orders autonomously',
         'Follow your risk profile and drawdown limits',
       ],
-      formTitle: 'Connect Broker',
-      clientId: 'Client ID',
-      clientSecret: 'Client Secret',
       connect: 'Connect to Saxo Bank',
-      placeholder: {
-        clientId: 'Paste your Client ID',
-        clientSecret: 'Paste your Client Secret',
-      },
     },
   };
 
@@ -144,33 +130,14 @@ export function BrokerConnect({ language }: BrokerConnectProps) {
           </div>
         </div>
 
-        <div className="bg-card border border-border rounded-2xl p-8">
-          <h3 className="text-xl font-semibold mb-6">{t.formTitle}</h3>
-          <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-            <div>
-              <label className="block text-sm font-medium mb-2">{t.clientId}</label>
-              <input
-                type="text"
-                placeholder={t.placeholder.clientId}
-                className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">{t.clientSecret}</label>
-              <input
-                type="password"
-                placeholder={t.placeholder.clientSecret}
-                className="w-full px-4 py-3 bg-background border border-border rounded-lg focus:outline-none focus:ring-2 focus:ring-accent focus:border-transparent"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => router.push('/saxo-simulation')}
-              className="w-full py-3 px-6 bg-accent text-accent-foreground font-medium rounded-lg hover:bg-accent/90 transition-colors"
-            >
-              {t.connect}
-            </button>
-          </form>
+        <div className="bg-card border border-border rounded-2xl p-8 text-center">
+          <button
+            type="button"
+            onClick={() => router.push('/saxo-simulation')}
+            className="w-full py-4 px-6 bg-accent text-accent-foreground font-semibold rounded-lg hover:bg-accent/90 transition-colors text-lg"
+          >
+            {t.connect}
+          </button>
         </div>
       </div>
     </section>

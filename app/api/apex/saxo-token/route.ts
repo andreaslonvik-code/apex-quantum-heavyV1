@@ -2,14 +2,13 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { cookies } from 'next/headers';
 import { saveUserSaxoCreds } from '@/lib/user-saxo';
-import { getSaxoBase } from '@/lib/saxo';
+import { getSaxoBase, type SaxoEnv } from '@/lib/saxo';
 
 const CLIENT_ID = process.env.SAXO_CLIENT_ID;
 const CLIENT_SECRET = process.env.SAXO_CLIENT_SECRET;
 const REDIRECT_URI = process.env.SAXO_REDIRECT_URI || 'https://apex-quantum.com/callback';
 
-function getSaxoTokenUrl() {
-  const env = process.env.SAXO_ENV || 'sim';
+function getSaxoTokenUrl(env: SaxoEnv) {
   return env === 'live'
     ? 'https://live.logonvalidation.net/token'
     : 'https://sim.logonvalidation.net/token';
@@ -22,14 +21,17 @@ export async function POST(request: NextRequest) {
     }
 
     const { userId } = await auth();
-    const { code } = await request.json();
+    const { code, environment: bodyEnv } = await request.json();
+    const env: SaxoEnv = (bodyEnv === 'live' || bodyEnv === 'sim')
+      ? bodyEnv
+      : ((process.env.SAXO_ENV as SaxoEnv) || 'sim');
 
     if (!code) {
       return NextResponse.json({ error: 'Autorisasjonskode mangler' }, { status: 400 });
     }
 
     // Exchange OAuth code for tokens
-    const tokenRes = await fetch(getSaxoTokenUrl(), {
+    const tokenRes = await fetch(getSaxoTokenUrl(env), {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
@@ -53,7 +55,7 @@ export async function POST(request: NextRequest) {
     const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
     // Fetch account info from Saxo
-    const SAXO_API_BASE = getSaxoBase();
+    const SAXO_API_BASE = getSaxoBase(env);
     const accountsRes = await fetch(`${SAXO_API_BASE}/port/v1/accounts/me`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
@@ -89,7 +91,7 @@ export async function POST(request: NextRequest) {
         accountKey,
         clientKey,
         accountId,
-        environment: process.env.SAXO_ENV || 'sim',
+        environment: env,
         expiresAt,
         currentBalance: balance,
       });

@@ -2,14 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { cookies } from 'next/headers';
 import { getUserSaxoCreds, saveUserSaxoCreds } from '@/lib/user-saxo';
-import { getSaxoBase } from '@/lib/saxo';
+import { getSaxoBase, type SaxoEnv } from '@/lib/saxo';
 
-function getApiBase() {
-  return getSaxoBase();
-}
-
-async function fetchAccountInfo(accessToken: string) {
-  const res = await fetch(`${getApiBase()}/port/v1/accounts/me`, {
+async function fetchAccountInfo(accessToken: string, env: SaxoEnv) {
+  const res = await fetch(`${getSaxoBase(env)}/port/v1/accounts/me`, {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
   if (!res.ok) return null;
@@ -17,9 +13,9 @@ async function fetchAccountInfo(accessToken: string) {
   return data.Data?.[0] || data;
 }
 
-async function fetchBalance(accessToken: string, accountKey: string, clientKey: string) {
+async function fetchBalance(accessToken: string, accountKey: string, clientKey: string, env: SaxoEnv) {
   const res = await fetch(
-    `${getApiBase()}/port/v1/balances?AccountKey=${accountKey}&ClientKey=${clientKey}`,
+    `${getSaxoBase(env)}/port/v1/balances?AccountKey=${accountKey}&ClientKey=${clientKey}`,
     { headers: { Authorization: `Bearer ${accessToken}` } }
   );
   if (!res.ok) return { balance: 1000000, currency: 'NOK' };
@@ -35,13 +31,16 @@ export async function POST(request: NextRequest) {
   try {
     const { userId } = await auth();
     const body = await request.json();
-    const { accessToken } = body;
+    const { accessToken, environment: bodyEnv } = body;
+    const env: SaxoEnv = (bodyEnv === 'live' || bodyEnv === 'sim')
+      ? bodyEnv
+      : ((process.env.SAXO_ENV as SaxoEnv) || 'sim');
 
     if (!accessToken) {
       return NextResponse.json({ error: 'Access token er påkrevd' }, { status: 400 });
     }
 
-    const account = await fetchAccountInfo(accessToken);
+    const account = await fetchAccountInfo(accessToken, env);
     if (!account) {
       return NextResponse.json(
         { error: 'Kunne ikke hente kontoinformasjon fra Saxo. Sjekk at tilkoblingen er gyldig.' },
@@ -52,7 +51,7 @@ export async function POST(request: NextRequest) {
     const accountKey: string = account.AccountKey || 'me';
     const clientKey: string = account.ClientKey || accountKey;
     const accountId: string = account.AccountId || accountKey;
-    const { balance, currency } = await fetchBalance(accessToken, accountKey, clientKey);
+    const { balance, currency } = await fetchBalance(accessToken, accountKey, clientKey, env);
 
     // Persist to database per user
     if (userId) {
@@ -61,7 +60,7 @@ export async function POST(request: NextRequest) {
         accountKey,
         clientKey,
         accountId,
-        environment: process.env.SAXO_ENV || 'sim',
+        environment: env,
         currentBalance: balance,
       });
     }
@@ -87,7 +86,7 @@ export async function POST(request: NextRequest) {
         accountKey,
         balance,
         currency,
-        simulationMode: process.env.SAXO_ENV !== 'live',
+        simulationMode: env !== 'live',
       },
     });
   } catch (error) {
@@ -105,13 +104,13 @@ export async function GET() {
     if (userId) {
       const creds = await getUserSaxoCreds(userId);
       if (creds) {
-        const res = await fetch(`${getApiBase()}/port/v1/accounts/me`, {
+        const res = await fetch(`${getSaxoBase(creds.environment)}/port/v1/accounts/me`, {
           headers: { Authorization: `Bearer ${creds.accessToken}` },
         });
         if (res.ok) {
           const accountsData = await res.json();
           const account = accountsData.Data?.[0] || accountsData;
-          const { balance, currency } = await fetchBalance(creds.accessToken, creds.accountKey, creds.clientKey);
+          const { balance, currency } = await fetchBalance(creds.accessToken, creds.accountKey, creds.clientKey, creds.environment);
 
           // Refresh cookies for this browser session
           const cookieStore = await cookies();
@@ -145,14 +144,15 @@ export async function GET() {
       return NextResponse.json({ connected: false });
     }
 
-    const res = await fetch(`${getApiBase()}/port/v1/accounts/me`, {
+    const fallbackEnv: SaxoEnv = (process.env.SAXO_ENV as SaxoEnv) || 'sim';
+    const res = await fetch(`${getSaxoBase(fallbackEnv)}/port/v1/accounts/me`, {
       headers: { Authorization: `Bearer ${token}` },
     });
     if (!res.ok) return NextResponse.json({ connected: false });
 
     const accountsData = await res.json();
     const account = accountsData.Data?.[0] || accountsData;
-    const { balance, currency } = await fetchBalance(token, accountKey, clientKey || accountKey);
+    const { balance, currency } = await fetchBalance(token, accountKey, clientKey || accountKey, fallbackEnv);
 
     return NextResponse.json({
       connected: true,

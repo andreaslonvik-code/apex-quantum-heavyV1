@@ -2,7 +2,7 @@
 // Sells enough positions to extract profit and continue trading with starting capital
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestCreds } from '@/lib/get-request-creds';
-import { getSaxoBase } from '@/lib/saxo';
+import { getSaxoBase, type SaxoEnv } from '@/lib/saxo';
 
 
 interface Position {
@@ -25,12 +25,12 @@ interface Position {
   };
 }
 
-async function getAccountValue(accessToken: string, accountKey: string): Promise<{
+async function getAccountValue(accessToken: string, accountKey: string, env: SaxoEnv): Promise<{
   totalValue: number;
   cashBalance: number;
   positionsValue: number;
 }> {
-  const SAXO_API_URL = getSaxoBase();
+  const SAXO_API_URL = getSaxoBase(env);
   const balanceRes = await fetch(
     `${SAXO_API_URL}/port/v1/balances?AccountKey=${accountKey}&ClientKey=${accountKey}`,
     {
@@ -51,8 +51,8 @@ async function getAccountValue(accessToken: string, accountKey: string): Promise
   };
 }
 
-async function getPositions(accessToken: string, clientKey: string): Promise<Position[]> {
-  const SAXO_API_URL = getSaxoBase();
+async function getPositions(accessToken: string, clientKey: string, env: SaxoEnv): Promise<Position[]> {
+  const SAXO_API_URL = getSaxoBase(env);
   const res = await fetch(
     `${SAXO_API_URL}/port/v1/positions?ClientKey=${clientKey}&FieldGroups=PositionBase,PositionView,DisplayAndFormat`,
     {
@@ -72,9 +72,10 @@ async function sellPosition(
   accessToken: string,
   accountKey: string,
   position: Position,
-  amount: number
+  amount: number,
+  env: SaxoEnv
 ): Promise<{ success: boolean; orderId?: string; error?: string }> {
-  const SAXO_API_URL = getSaxoBase();
+  const SAXO_API_URL = getSaxoBase(env);
   const orderData = {
     AccountKey: accountKey,
     Amount: amount,
@@ -129,11 +130,11 @@ export async function POST(request: NextRequest) {
   if (!creds) {
     return NextResponse.json({ error: 'Ikke tilkoblet Saxo Bank' }, { status: 401 });
   }
-  const { accessToken, accountKey, clientKey, startBalance: BASE_TRADING_CAPITAL } = creds;
+  const { accessToken, accountKey, clientKey, environment, startBalance: BASE_TRADING_CAPITAL } = creds;
 
   try {
     // Get current account value
-    const accountValue = await getAccountValue(accessToken, accountKey);
+    const accountValue = await getAccountValue(accessToken, accountKey, environment);
     const profit = accountValue.totalValue - BASE_TRADING_CAPITAL;
 
     console.log(`[APEX] Total value: ${accountValue.totalValue.toLocaleString()} kr`);
@@ -151,7 +152,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Get all positions
-    const positions = await getPositions(accessToken, clientKey || accountKey);
+    const positions = await getPositions(accessToken, clientKey || accountKey, environment);
     
     if (positions.length === 0) {
       return NextResponse.json({
@@ -199,7 +200,7 @@ export async function POST(request: NextRequest) {
         
         console.log(`[APEX] Selling ${sharesToSell} ${symbol} @ ${currentPrice.toFixed(2)} = ${sellValue.toFixed(0)} kr`);
         
-        const result = await sellPosition(accessToken, accountKey, position, sharesToSell);
+        const result = await sellPosition(accessToken, accountKey, position, sharesToSell, environment);
         
         sellOrders.push({
           symbol,
@@ -242,10 +243,10 @@ export async function GET() {
   if (!creds) {
     return NextResponse.json({ error: 'Ikke tilkoblet' }, { status: 401 });
   }
-  const { accessToken, accountKey, startBalance } = creds;
+  const { accessToken, accountKey, environment, startBalance } = creds;
 
   try {
-    const accountValue = await getAccountValue(accessToken, accountKey);
+    const accountValue = await getAccountValue(accessToken, accountKey, environment);
     const profit = accountValue.totalValue - startBalance;
 
     return NextResponse.json({
@@ -255,7 +256,7 @@ export async function GET() {
       profitPercent: (profit / startBalance) * 100,
       canWithdraw: profit > 0,
     });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: 'Kunne ikke hente kontostatus' },
       { status: 500 }
