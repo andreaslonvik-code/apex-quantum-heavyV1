@@ -3,12 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { PortfolioOverview } from './components/portfolio-overview';
-import { OpenPositions } from './components/open-positions';
-import { TradeLog } from './components/trade-log';
-import { SystemStatus } from './components/system-status';
-import { WithdrawProfits } from './components/withdraw-profits';
-import { useToast, ToastContainer } from '@/app/components/toast';
+import { toast } from 'sonner';
 import {
   AreaChart,
   Area,
@@ -19,7 +14,6 @@ import {
   ReferenceLine,
 } from 'recharts';
 
-// ============ TYPES ============
 interface Trade {
   ticker: string;
   saxoSymbol?: string;
@@ -86,31 +80,28 @@ interface DebugEntry {
   status?: number;
 }
 
-interface SaxoStatus {
-  isLiveMode: boolean;
-  baseUrl: string;
-  hasToken: boolean;
-  tokenValid: boolean;
-  lastPurge: string;
-  cacheSize: number;
-  debugLogSize: number;
+function AQLogo() {
+  return (
+    <svg width="26" height="26" viewBox="0 0 28 28" fill="none">
+      <defs>
+        <linearGradient id="aq-logo-d" x1="0" y1="0" x2="28" y2="28" gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="#00F5FF" />
+          <stop offset="100%" stopColor="#C026D3" />
+        </linearGradient>
+      </defs>
+      <polygon points="14,2 17,10 26,10 19,15.5 21.5,24 14,19 6.5,24 9,15.5 2,10 11,10" fill="url(#aq-logo-d)" opacity="0.9" />
+    </svg>
+  );
 }
 
-// ============ COMPONENT ============
 export default function Dashboard() {
   const router = useRouter();
-  const { toasts, add: addToast, remove: removeToast } = useToast();
-  
-  // Connection state
+
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [accountInfo, setAccountInfo] = useState<{ accountId: string; balance: number; currency: string } | null>(null);
-  
-  // Trading mode
   const [tradingMode, setTradingMode] = useState<'sim' | 'live'>('sim');
   const [showLiveWarning, setShowLiveWarning] = useState(false);
-  
-  // Trading state
   const [isTrading, setIsTrading] = useState(false);
   const [scanCount, setScanCount] = useState(0);
   const [totalBought, setTotalBought] = useState(0);
@@ -122,112 +113,72 @@ export default function Dashboard() {
   const [portfolio, setPortfolio] = useState<Position[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdate, setLastUpdate] = useState<string>('');
-  
-  // Performance chart state
   const [performanceData, setPerformanceData] = useState<PerformanceData | null>(null);
   const [chartTimeRange, setChartTimeRange] = useState<'1h' | '24h' | '7d'>('1h');
-  
-  // Withdraw profits state
   const [isWithdrawing, setIsWithdrawing] = useState(false);
-  const [withdrawResult, setWithdrawResult] = useState<{
-    success: boolean;
-    message: string;
-    totalSold?: number;
-  } | null>(null);
-  
-  // Debug panel state
+  const [withdrawResult, setWithdrawResult] = useState<{ success: boolean; message: string; totalSold?: number } | null>(null);
   const [showDebugPanel, setShowDebugPanel] = useState(false);
   const [debugLogs, setDebugLogs] = useState<DebugEntry[]>([]);
-  const [saxoStatus, setSaxoStatus] = useState<SaxoStatus | null>(null);
   const [lastRawResponse, setLastRawResponse] = useState<string>('');
-  
-  // CET Clock
   const [cetTime, setCetTime] = useState<string>('');
-  
-  // Self-cleaning status
-  const [lastPurgeTime, setLastPurgeTime] = useState<string>('');
   const [purgeCount, setPurgeCount] = useState(0);
-  
+
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
   const performanceIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const clockIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const purgeIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isRunningRef = useRef(false);
 
-  // Update CET clock every second
   useEffect(() => {
     const updateClock = () => {
       const now = new Date();
-      const cetTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Oslo' }));
-      setCetTime(cetTime.toLocaleTimeString('no-NO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+      const cet = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Oslo' }));
+      setCetTime(cet.toLocaleTimeString('no-NO', { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
     };
-    
     updateClock();
     clockIntervalRef.current = setInterval(updateClock, 1000);
-    
-    return () => {
-      if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
-    };
+    return () => { if (clockIntervalRef.current) clearInterval(clockIntervalRef.current); };
   }, []);
 
-  // Self-cleaning: auto-purge every 10 seconds
   useEffect(() => {
     const runPurge = () => {
-      // Clear old logs (keep last 50)
       setDebugLogs(prev => prev.slice(0, 50));
-      setLastPurgeTime(new Date().toLocaleTimeString('no-NO'));
       setPurgeCount(prev => prev + 1);
     };
-    
     purgeIntervalRef.current = setInterval(runPurge, 10000);
-    
-    return () => {
-      if (purgeIntervalRef.current) clearInterval(purgeIntervalRef.current);
-    };
+    return () => { if (purgeIntervalRef.current) clearInterval(purgeIntervalRef.current); };
   }, []);
 
-  // Check connection status on mount
-  useEffect(() => {
-    checkConnection();
-  }, []);
+  useEffect(() => { checkConnection(); }, []);
 
-  // Fetch performance data every 3 seconds when trading
   useEffect(() => {
     if (isTrading && isConnected) {
       fetchPerformance();
       performanceIntervalRef.current = setInterval(fetchPerformance, 3000);
     } else {
-      if (performanceIntervalRef.current) {
-        clearInterval(performanceIntervalRef.current);
-        performanceIntervalRef.current = null;
-      }
+      if (performanceIntervalRef.current) { clearInterval(performanceIntervalRef.current); performanceIntervalRef.current = null; }
     }
-    
-    return () => {
-      if (performanceIntervalRef.current) {
-        clearInterval(performanceIntervalRef.current);
-      }
-    };
+    return () => { if (performanceIntervalRef.current) clearInterval(performanceIntervalRef.current); };
   }, [isTrading, isConnected]);
 
-  // Fetch positions data every 30 seconds when connected
   useEffect(() => {
     if (isConnected) {
-      const positionsIntervalRef = setInterval(() => {
-        fetchPositions();
-      }, 30000); // 30 seconds
-      
-      return () => {
-        clearInterval(positionsIntervalRef);
-      };
+      const posInt = setInterval(() => { fetchPositions(); }, 30000);
+      return () => clearInterval(posInt);
     }
   }, [isConnected]);
 
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (performanceIntervalRef.current) clearInterval(performanceIntervalRef.current);
+      if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
+      if (purgeIntervalRef.current) clearInterval(purgeIntervalRef.current);
+    };
+  }, []);
+
   const addDebugLog = (entry: Omit<DebugEntry, 'timestamp'>) => {
-    setDebugLogs(prev => [{
-      ...entry,
-      timestamp: new Date().toISOString(),
-    }, ...prev].slice(0, 100));
+    setDebugLogs(prev => [{ ...entry, timestamp: new Date().toISOString() }, ...prev].slice(0, 100));
   };
 
   const fetchPerformance = async () => {
@@ -237,10 +188,7 @@ export default function Dashboard() {
         const data = await res.json();
         setPerformanceData(data);
         if (data.current) {
-          setAccountInfo(prev => prev ? {
-            ...prev,
-            balance: data.current.totalValue,
-          } : prev);
+          setAccountInfo(prev => prev ? { ...prev, balance: data.current.totalValue } : prev);
         }
       }
     } catch {}
@@ -252,19 +200,14 @@ export default function Dashboard() {
       if (res.ok) {
         const data = await res.json();
         if (data.positions && Array.isArray(data.positions)) {
-          // Map Saxo positions to dashboard Position type
-          const mappedPositions: Position[] = data.positions.map((pos: any) => ({
+          const mapped: Position[] = data.positions.map((pos: any) => ({
             ticker: pos.ticker,
             navn: pos.ticker,
             vekt: pos.vekt || 0,
             aksjon: 'HOLD',
             antall: pos.antall || 0,
-            avgPrice: pos.avgPrice,
-            currentPrice: pos.currentPrice,
-            pnl: pos.pnl || 0,
-            pnlPercent: pos.pnlPercent || 0,
           }));
-          setPortfolio(mappedPositions);
+          setPortfolio(mapped);
         }
       }
     } catch {}
@@ -275,21 +218,12 @@ export default function Dashboard() {
     try {
       const res = await fetch('/api/apex/connect-saxo', { method: 'GET', credentials: 'include' });
       const data = await res.json();
-      
       if (data.connected) {
         setIsConnected(true);
         if (data.accountInfo) {
-          setAccountInfo({
-            accountId: data.accountInfo.accountId,
-            balance: data.accountInfo.balance,
-            currency: data.accountInfo.currency || 'NOK',
-          });
+          setAccountInfo({ accountId: data.accountInfo.accountId, balance: data.accountInfo.balance, currency: data.accountInfo.currency || 'NOK' });
         } else {
-          setAccountInfo({
-            accountId: data.accountKey || 'SIM',
-            balance: 1000000,
-            currency: 'NOK',
-          });
+          setAccountInfo({ accountId: data.accountKey || 'SIM', balance: 1000000, currency: 'NOK' });
         }
         fetchPerformance();
         fetchPositions();
@@ -304,79 +238,50 @@ export default function Dashboard() {
   };
 
   const stopTrading = useCallback(() => {
-    if (intervalRef.current) {
-      clearInterval(intervalRef.current);
-      intervalRef.current = null;
-    }
+    if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
     setIsTrading(false);
   }, []);
 
   const runScan = useCallback(async () => {
     if (isRunningRef.current) return;
     isRunningRef.current = true;
-    
     const startTime = Date.now();
-    const toastId = addToast('🔍 Scannende marked...', 'loading');
-    
+    const toastId = toast.loading('Scannende marked...');
     try {
-      addDebugLog({
-        type: 'request',
-        endpoint: '/api/apex/autonomous',
-        message: `Scan #${scanCount + 1} started (${tradingMode.toUpperCase()} mode)`,
-      });
-      
+      addDebugLog({ type: 'request', endpoint: '/api/apex/autonomous', message: `Scan #${scanCount + 1} (${tradingMode.toUpperCase()})` });
       const res = await fetch('/api/apex/autonomous', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({ mode: tradingMode }),
       });
-      
       const rawText = await res.text();
       setLastRawResponse(rawText.slice(0, 2000));
-      
       let data;
       try {
         data = JSON.parse(rawText);
       } catch (e) {
-        addDebugLog({
-          type: 'error',
-          endpoint: '/api/apex/autonomous',
-          message: `JSON Parse Error: ${e}`,
-          rawBody: rawText.slice(0, 500),
-        });
-        removeToast(toastId);
-        addToast('⚠️ Server returnerte ugyldig JSON', 'error');
+        addDebugLog({ type: 'error', endpoint: '/api/apex/autonomous', message: `JSON Parse Error: ${e}`, rawBody: rawText.slice(0, 500) });
+        toast.dismiss(toastId);
+        toast.error('Server returnerte ugyldig JSON');
         return;
       }
-      
       const duration = Date.now() - startTime;
-      
-      addDebugLog({
-        type: 'response',
-        endpoint: '/api/apex/autonomous',
-        message: `Scan completed in ${duration}ms - ${data.executedTrades?.length || 0} trades`,
-        status: res.status,
-      });
-      
+      addDebugLog({ type: 'response', endpoint: '/api/apex/autonomous', message: `Scan ferdig på ${duration}ms — ${data.executedTrades?.length || 0} handler`, status: res.status });
       if (!res.ok) {
-        removeToast(toastId);
+        toast.dismiss(toastId);
         if (res.status === 401) {
           setError('Saxo-tilkobling utløpt. Vennligst koble til på nytt.');
-          if (intervalRef.current) {
-            clearInterval(intervalRef.current);
-            intervalRef.current = null;
-          }
+          if (intervalRef.current) { clearInterval(intervalRef.current); intervalRef.current = null; }
           setIsTrading(false);
           setIsConnected(false);
-          addToast('❌ Saxo-tilkobling utløpt', 'error');
+          toast.error('Saxo-tilkobling utløpt');
         } else {
           setError(data.error || 'Feil ved scan');
-          addToast(`❌ ${data.error || 'Feil ved scan'}`, 'error');
+          toast.error(data.error || 'Feil ved scan');
         }
         return;
       }
-      
       setError(null);
       setScanCount(prev => prev + 1);
       setTotalBought(prev => prev + (data.stats?.totalBought || 0));
@@ -385,81 +290,46 @@ export default function Dashboard() {
       setSignals(data.signals || []);
       setLastTrades(data.executedTrades || []);
       setLastUpdate(new Date().toLocaleTimeString('no-NO'));
-      
-      if (data.portfolio) {
-        setPortfolio(data.portfolio);
-      }
-      
+      if (data.portfolio) setPortfolio(data.portfolio);
       const successful = (data.executedTrades || []).filter((t: Trade) => t.status === 'OK');
+      toast.dismiss(toastId);
       if (successful.length > 0) {
         setTradeHistory(prev => [...successful, ...prev].slice(0, 100));
-        removeToast(toastId);
-        addToast(`✅ Scan fullført - ${successful.length} handler utført`, 'success');
+        toast.success(`${successful.length} handler utført`);
       } else {
-        removeToast(toastId);
-        addToast(`✅ Scan fullført - ingen handler for nå`, 'info', 2000);
+        toast.info('Scan fullført — ingen handler', { duration: 2000 });
       }
-      
     } catch (e) {
-      addDebugLog({
-        type: 'error',
-        endpoint: '/api/apex/autonomous',
-        message: `Network error: ${e}`,
-      });
-      removeToast(toastId);
+      addDebugLog({ type: 'error', endpoint: '/api/apex/autonomous', message: `Nettverksfeil: ${e}` });
+      toast.dismiss(toastId);
       setError('Nettverksfeil');
-      addToast(`❌ Nettverksfeil: ${e}`, 'error');
+      toast.error(`Nettverksfeil: ${e}`);
     } finally {
       isRunningRef.current = false;
     }
-  }, [tradingMode, scanCount, addToast, removeToast]);
+  }, [tradingMode, scanCount]);
 
   const startTrading = useCallback(() => {
     if (intervalRef.current || !isConnected) return;
-    
     setIsTrading(true);
     setError(null);
-    
-    addDebugLog({
-      type: 'info',
-      endpoint: 'startTrading',
-      message: `Trading engine started in ${tradingMode.toUpperCase()} mode`,
-    });
-    
-    addToast(`✅ Trading engine startet (${tradingMode.toUpperCase()} mode)`, 'success', 2000);
-    
+    addDebugLog({ type: 'info', endpoint: 'startTrading', message: `Engine startet i ${tradingMode.toUpperCase()} modus` });
+    toast.success(`Trading engine startet (${tradingMode.toUpperCase()})`, { duration: 2000 });
     runScan();
     intervalRef.current = setInterval(runScan, 2000);
-  }, [runScan, isConnected, tradingMode, addToast]);
+  }, [runScan, isConnected, tradingMode]);
 
   const handleManualTick = async () => {
-    addDebugLog({
-      type: 'info',
-      endpoint: 'manualTick',
-      message: 'Manual tick triggered',
-    });
-    addToast('🔍 Manuell scan startet...', 'loading');
+    addDebugLog({ type: 'info', endpoint: 'manualTick', message: 'Manuell scan utløst' });
     await runScan();
   };
 
-  // Auto-start trading when connected
   useEffect(() => {
     if (isConnected && !isLoading && !isTrading && !intervalRef.current) {
-      const timer = setTimeout(() => {
-        startTrading();
-      }, 1000);
+      const timer = setTimeout(() => { startTrading(); }, 1000);
       return () => clearTimeout(timer);
     }
   }, [isConnected, isLoading, isTrading, startTrading]);
-
-  useEffect(() => {
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current);
-      if (performanceIntervalRef.current) clearInterval(performanceIntervalRef.current);
-      if (clockIntervalRef.current) clearInterval(clockIntervalRef.current);
-      if (purgeIntervalRef.current) clearInterval(purgeIntervalRef.current);
-    };
-  }, []);
 
   const handleDisconnect = () => {
     stopTrading();
@@ -473,121 +343,84 @@ export default function Dashboard() {
   };
 
   const handleModeToggle = () => {
-    if (tradingMode === 'sim') {
-      setShowLiveWarning(true);
-    } else {
+    if (tradingMode === 'sim') { setShowLiveWarning(true); }
+    else {
       setTradingMode('sim');
-      addDebugLog({
-        type: 'info',
-        endpoint: 'modeToggle',
-        message: 'Switched to SIM mode',
-      });
+      addDebugLog({ type: 'info', endpoint: 'modeToggle', message: 'Byttet til SIM modus' });
     }
   };
 
   const confirmLiveMode = () => {
     setTradingMode('live');
     setShowLiveWarning(false);
-    addDebugLog({
-      type: 'info',
-      endpoint: 'modeToggle',
-      message: 'WARNING: Switched to LIVE mode',
-    });
+    addDebugLog({ type: 'info', endpoint: 'modeToggle', message: 'ADVARSEL: Byttet til LIVE modus' });
   };
 
   const handleWithdrawProfits = async () => {
     if (isWithdrawing) return;
-    
     const currentProfit = performanceData?.current?.pnl || 0;
     if (currentProfit <= 0) {
-      setWithdrawResult({
-        success: false,
-        message: 'Ingen avkastning å hente ut. Kontoverdien er under eller lik startkapitalen.',
-      });
-      addToast('⚠️ Ingen avkastning å ta ut ennå', 'info');
+      setWithdrawResult({ success: false, message: 'Ingen avkastning å hente ut.' });
+      toast.info('Ingen avkastning å ta ut ennå');
       return;
     }
-    
     const confirmed = window.confirm(
       `Er du sikker på at du vil hente ut ${currentProfit.toLocaleString('no-NO', { maximumFractionDigits: 0 })} kr i avkastning?\n\nDette vil selge nok posisjoner til å ta ut profitten, og trading vil fortsette med startkapitalen på 1 000 000 kr.`
     );
-    
     if (!confirmed) return;
-    
     setIsWithdrawing(true);
     setWithdrawResult(null);
-    const toastId = addToast('💰 Tar ut avkastning...', 'loading');
-    
+    const toastId = toast.loading('Tar ut avkastning...');
     try {
-      const res = await fetch('/api/apex/withdraw-profits', {
-        method: 'POST',
-        credentials: 'include',
-      });
-      
+      const res = await fetch('/api/apex/withdraw-profits', { method: 'POST', credentials: 'include' });
       const data = await res.json();
-      
+      toast.dismiss(toastId);
       if (data.success) {
-        removeToast(toastId);
-        setWithdrawResult({
-          success: true,
-          message: data.message,
-          totalSold: data.totalSold,
-        });
-        addToast(`✅ Uttak vellykket - ${data.totalSold.toLocaleString('no-NO')} kr solgt`, 'success');
+        setWithdrawResult({ success: true, message: data.message, totalSold: data.totalSold });
+        toast.success(`Uttak vellykket — ${data.totalSold.toLocaleString('no-NO')} kr solgt`);
         fetchPerformance();
       } else {
-        removeToast(toastId);
-        setWithdrawResult({
-          success: false,
-          message: data.message || data.error || 'Kunne ikke hente ut avkastning',
-        });
-        addToast(`❌ ${data.message || data.error || 'Feil ved uttak'}`, 'error');
+        setWithdrawResult({ success: false, message: data.message || data.error || 'Kunne ikke hente ut avkastning' });
+        toast.error(data.message || data.error || 'Feil ved uttak');
       }
-    } catch (e) {
-      removeToast(toastId);
-      setWithdrawResult({
-        success: false,
-        message: 'Nettverksfeil ved uttak av avkastning',
-      });
-      addToast('❌ Nettverksfeil ved uttak', 'error');
+    } catch {
+      toast.dismiss(toastId);
+      setWithdrawResult({ success: false, message: 'Nettverksfeil ved uttak av avkastning' });
+      toast.error('Nettverksfeil ved uttak');
     } finally {
       setIsWithdrawing(false);
     }
   };
 
-  // Loading state
+  // ── LOADING ──────────────────────────────────────────────────────────────
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center">
-          <div className="w-12 h-12 border-4 border-neon-cyan border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-muted-foreground">Sjekker tilkobling...</p>
+      <div style={{ background: 'var(--aq-bg)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div style={{ width: 72, height: 72, borderRadius: '50%', border: '1px solid rgba(0,245,255,0.25)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px', boxShadow: '0 0 40px rgba(0,245,255,0.1)' }}>
+            <div style={{ width: 40, height: 40, borderRadius: '50%', background: 'radial-gradient(circle at 40% 40%, rgba(0,245,255,0.5), rgba(192,38,211,0.3))', animation: 'orb-pulse 2s ease-in-out infinite' }} />
+          </div>
+          <p style={{ color: 'var(--aq-muted)', fontFamily: 'var(--font-jetbrains)', fontSize: '0.7rem', letterSpacing: '0.15em' }}>TILKOBLER TIL SAXO...</p>
         </div>
       </div>
     );
   }
 
-  // Not connected
+  // ── NOT CONNECTED ────────────────────────────────────────────────────────
   if (!isConnected) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center p-4">
-        <div className="max-w-md w-full glass-card rounded-lg p-8 text-center">
-          <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
-            <svg className="w-8 h-8 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+      <div style={{ background: 'var(--aq-bg)', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+        <div className="glass-hi" style={{ borderRadius: 20, padding: 40, textAlign: 'center', maxWidth: 420, width: '100%' }}>
+          <div style={{ width: 60, height: 60, borderRadius: '50%', background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 20px' }}>
+            <svg width="26" height="26" fill="none" viewBox="0 0 24 24" stroke="rgba(239,68,68,0.8)" strokeWidth="1.5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
             </svg>
           </div>
-          <h2 className="text-xl font-semibold mb-2">Ikke tilkoblet</h2>
-          <p className="text-muted-foreground mb-6">
+          <h2 className="gradient-text" style={{ fontSize: '1.4rem', fontWeight: 800, marginBottom: 12 }}>Ikke tilkoblet</h2>
+          <p style={{ color: 'var(--aq-muted)', marginBottom: 28, lineHeight: 1.6, fontSize: '0.9rem' }}>
             Du må koble til din Saxo-konto for å bruke Apex Quantum.
           </p>
-          <Link
-            href="/saxo-simulation"
-            className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-neon-cyan text-black rounded-lg font-medium hover:bg-neon-cyan/90 transition-colors"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-            </svg>
+          <Link href="/saxo-simulation" className="btn btn-primary" style={{ display: 'inline-block' }}>
             Koble til Saxo
           </Link>
         </div>
@@ -595,628 +428,454 @@ export default function Dashboard() {
     );
   }
 
-  // Performance calculations
+  // ── MAIN DASHBOARD ───────────────────────────────────────────────────────
   const pnl = performanceData?.current?.pnl || 0;
   const pnlPercent = performanceData?.current?.pnlPercent || 0;
   const totalValue = performanceData?.current?.totalValue || accountInfo?.balance || 1000000;
   const chartData = performanceData?.chartData || [];
   const isPositive = pnl >= 0;
-
   const successfulTrades = lastTrades.filter(t => t.status === 'OK');
   const failedTrades = lastTrades.filter(t => t.status === 'FEIL');
+  const confidencePct = Math.min(100, Math.max(20, (scanCount % 20) * 5 + 40));
+  const exposurePct = portfolio.length > 0 ? Math.min(95, portfolio.length * 6.5) : 0;
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
-      {/* Live Mode Warning Modal */}
+    <div style={{ background: 'var(--aq-bg)', minHeight: '100vh', color: 'var(--aq-text)' }}>
+      <style>{`
+        .dash-grid { display: grid; grid-template-columns: 1fr 316px; gap: 20px; align-items: start; }
+        @media (max-width: 1100px) { .dash-grid { grid-template-columns: 1fr; } .dash-rail { order: -1; } }
+        .stat-footer { display: grid; grid-template-columns: repeat(6,1fr); gap: 12px; }
+        @media (max-width: 800px) { .stat-footer { grid-template-columns: repeat(3,1fr); } }
+        .dbar-right { display: flex; align-items: center; gap: 10px; }
+        @media (max-width: 640px) { .dbar-right { gap: 6px; } }
+      `}</style>
+
+      {/* ── LIVE MODE MODAL ── */}
       {showLiveWarning && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
-          <div className="max-w-md w-full mx-4 glass-card rounded-lg p-6 border-2 border-red-500">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center">
-                <svg className="w-6 h-6 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'rgba(0,0,0,0.85)', backdropFilter: 'blur(8px)' }}>
+          <div className="glass" style={{ borderRadius: 20, padding: 32, maxWidth: 420, width: '100%', margin: '0 16px', border: '2px solid rgba(239,68,68,0.45)' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 20 }}>
+              <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'rgba(239,68,68,0.12)', border: '1px solid rgba(239,68,68,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <svg width="20" height="20" fill="none" viewBox="0 0 24 24" stroke="#ef4444" strokeWidth="2">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
               <div>
-                <h3 className="text-xl font-bold text-red-400">ADVARSEL: LIVE TRADING</h3>
-                <p className="text-sm text-muted-foreground">Reelle penger vil bli brukt</p>
+                <h3 style={{ fontSize: '1rem', fontWeight: 700, color: '#ef4444', marginBottom: 2 }}>ADVARSEL: LIVE TRADING</h3>
+                <p style={{ color: 'var(--aq-muted)', fontSize: '0.78rem' }}>Reelle penger vil bli brukt</p>
               </div>
             </div>
-            
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6">
-              <p className="text-sm text-red-300 mb-2">
-                Du er i ferd med å bytte til LIVE modus. Dette betyr:
-              </p>
-              <ul className="text-sm text-red-200 space-y-1 list-disc list-inside">
-                <li>Alle handler vil utfores med ekte penger</li>
+            <div style={{ background: 'rgba(239,68,68,0.06)', border: '1px solid rgba(239,68,68,0.2)', borderRadius: 10, padding: '14px 18px', marginBottom: 22 }}>
+              <p style={{ color: '#fca5a5', fontSize: '0.82rem', marginBottom: 8 }}>Du er i ferd med å bytte til LIVE modus:</p>
+              <ul style={{ color: '#fecaca', fontSize: '0.78rem', lineHeight: 1.9, paddingLeft: 18 }}>
+                <li>Alle handler utføres med ekte penger</li>
                 <li>Tap er reelle og ugjenkallelige</li>
                 <li>Apex Quantum gir ingen garantier</li>
               </ul>
             </div>
-            
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowLiveWarning(false)}
-                className="flex-1 px-4 py-2.5 bg-muted hover:bg-muted/80 rounded-lg font-medium transition-colors"
-              >
-                Avbryt
-              </button>
-              <button
-                onClick={confirmLiveMode}
-                className="flex-1 px-4 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition-colors"
-              >
-                Bekreft LIVE Modus
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setShowLiveWarning(false)} className="btn btn-ghost" style={{ flex: 1 }}>Avbryt</button>
+              <button onClick={confirmLiveMode} style={{ flex: 1, background: '#dc2626', border: 'none', borderRadius: 10, color: '#fff', fontWeight: 700, padding: '11px 0', cursor: 'pointer', fontSize: '0.85rem', transition: 'background 0.2s' }}>
+                Bekreft LIVE
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Header */}
-      <header className="border-b border-border glass-card">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <span className="text-2xl font-bold tracking-tight">
-              <span className="neon-text-cyan">A</span>Q
-            </span>
-            <span className="font-semibold">Apex Quantum</span>
-            <span className="text-xs px-2 py-0.5 bg-neon-cyan/20 text-neon-cyan rounded-full font-mono">v7</span>
+      {/* ── DBAR ── */}
+      <header className="dbar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <Link href="/" style={{ display: 'flex', alignItems: 'center', gap: 8, textDecoration: 'none' }}>
+            <AQLogo />
+            <span style={{ fontWeight: 800, fontSize: '0.9rem', letterSpacing: '-0.02em', color: 'var(--aq-text)' }}>APEX QUANTUM</span>
           </Link>
-          
-          <div className="flex items-center gap-4">
-            {/* CET Clock */}
-            <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 rounded-lg text-sm font-mono">
-              <span className="text-muted-foreground">CET:</span>
-              <span className="text-neon-cyan">{cetTime}</span>
-            </div>
-            
-            {/* SIM/LIVE Toggle */}
-            <button
-              onClick={handleModeToggle}
-              className={`flex items-center gap-2 px-4 py-2 rounded-lg font-semibold text-sm transition-all ${
-                tradingMode === 'live'
-                  ? 'bg-red-500/20 text-red-400 border border-red-500/50 animate-pulse'
-                  : 'bg-blue-500/20 text-blue-400 border border-blue-500/50'
-              }`}
-            >
-              <span className={`w-2 h-2 rounded-full ${tradingMode === 'live' ? 'bg-red-400' : 'bg-blue-400'}`} />
-              {tradingMode === 'live' ? 'LIVE' : 'SIM'}
-            </button>
-            
-            {/* Connection Status */}
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-sm ${
-              tradingMode === 'live' 
-                ? 'bg-red-500/20 text-red-400'
-                : 'bg-blue-500/20 text-blue-400'
-            }`}>
-              <span className={`w-2 h-2 rounded-full ${tradingMode === 'live' ? 'bg-red-400' : 'bg-blue-400'}`} />
-              Koblet til Saxo {tradingMode.toUpperCase()}
-            </div>
-            
-            <button
-              onClick={handleDisconnect}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-            >
-              Koble fra
+          <span style={{ color: 'rgba(255,255,255,0.15)', margin: '0 2px' }}>·</span>
+          <span style={{ color: 'var(--aq-muted)', fontSize: '0.68rem', fontFamily: 'var(--font-jetbrains)', letterSpacing: '0.1em' }}>COCKPIT · OVERSIKT</span>
+        </div>
+
+        <div className="dbar-right">
+          <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '0.72rem', color: 'var(--aq-cyan)', background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.14)', borderRadius: 6, padding: '4px 10px' }}>
+            {cetTime}
+          </div>
+
+          <div className="mode-toggle">
+            <button onClick={() => tradingMode !== 'sim' && handleModeToggle()} className={`mode-opt${tradingMode === 'sim' ? ' is-active' : ''}`}>SIM</button>
+            <button onClick={() => tradingMode !== 'live' && handleModeToggle()} className={`mode-opt${tradingMode === 'live' ? ' is-active' : ''}`} style={tradingMode === 'live' ? { color: '#ef4444' } : {}}>
+              {tradingMode === 'live' && <span className="mode-dot-live" />}LIVE
             </button>
           </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 6, padding: '4px 10px', fontSize: '0.68rem', color: 'var(--aq-muted)', fontFamily: 'var(--font-jetbrains)' }}>
+            <span style={{ width: 5, height: 5, borderRadius: '50%', background: tradingMode === 'live' ? '#ef4444' : 'var(--aq-cyan)', boxShadow: `0 0 5px ${tradingMode === 'live' ? '#ef4444' : 'var(--aq-cyan)'}`, animation: 'blink 1.4s infinite' }} />
+            {accountInfo?.accountId || 'SIM'}
+          </div>
+
+          <button onClick={handleDisconnect} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 6, color: 'var(--aq-muted)', fontSize: '0.68rem', padding: '4px 10px', cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', letterSpacing: '0.06em', transition: 'all 0.2s' }}>
+            KOBLE FRA
+          </button>
         </div>
       </header>
 
-      {/* Live Mode Warning Banner */}
+      {/* Live banner */}
       {tradingMode === 'live' && (
-        <div className="bg-red-500/20 border-b border-red-500/30">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
-            <div className="flex items-center justify-center gap-2 text-red-400 text-sm font-medium">
-              <svg className="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-              LIVE TRADING AKTIV - EKTE PENGER BRUKES
-              <svg className="w-4 h-4 animate-pulse" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-            </div>
-          </div>
+        <div style={{ background: 'rgba(220,38,38,0.1)', borderBottom: '1px solid rgba(239,68,68,0.2)', padding: '7px 24px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#ef4444', animation: 'blink 0.8s infinite' }} />
+          <span style={{ color: '#ef4444', fontSize: '0.7rem', fontWeight: 700, fontFamily: 'var(--font-jetbrains)', letterSpacing: '0.12em' }}>LIVE TRADING AKTIV — EKTE PENGER BRUKES</span>
+          <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#ef4444', animation: 'blink 0.8s infinite' }} />
         </div>
       )}
 
-      {/* Status Banner */}
-      <div className="bg-accent/10 border-b border-accent/20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3">
-          <div className="flex items-center justify-center gap-4 flex-wrap text-sm">
-            <span className={`font-medium ${tradingMode === 'live' ? 'text-red-400' : 'text-cyan-400'}`}>
-              {tradingMode === 'live' ? 'LIVE TRADING' : 'PAPER TRADING'}
-            </span>
-            <span className="text-muted-foreground">|</span>
-            <span className="text-muted-foreground">Markeder:</span>
-            <span className="px-2 py-0.5 bg-blue-500/20 text-blue-400 rounded text-xs">US</span>
-            <span className="px-2 py-0.5 bg-emerald-500/20 text-emerald-400 rounded text-xs">OSLO</span>
-            <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs">XETRA</span>
-            <span className="px-2 py-0.5 bg-red-500/20 text-red-400 rounded text-xs">HK/CN</span>
-            <span className="text-muted-foreground">|</span>
-            <span>Konto: <span className="font-medium">{accountInfo?.accountId}</span></span>
-            <span className="text-muted-foreground">|</span>
-            <span>Saldo: <span className={`font-medium ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-              {totalValue.toLocaleString()} kr
-            </span></span>
+      {/* ── MAIN GRID ── */}
+      <div style={{ maxWidth: 1580, margin: '0 auto', padding: '22px 22px 40px' }}>
+        <div className="dash-grid">
+
+          {/* ── LEFT COLUMN ── */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+
+            {/* Hero chart */}
+            <div className="glass-hi" style={{ borderRadius: 20, padding: 26 }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
+                <div>
+                  <div style={{ color: 'var(--aq-muted)', fontSize: '0.62rem', fontFamily: 'var(--font-jetbrains)', letterSpacing: '0.14em', marginBottom: 6 }}>KOMPOUNDERT AVKASTNING</div>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 12 }}>
+                    <span className={isPositive ? 'gradient-text' : ''} style={{ fontSize: '2.2rem', fontWeight: 800, letterSpacing: '-0.03em', color: isPositive ? undefined : '#ef4444' }}>
+                      {isPositive ? '+' : '-'}{Math.abs(pnl).toLocaleString('no-NO', { maximumFractionDigits: 0 })} kr
+                    </span>
+                    <span style={{ fontSize: '1rem', fontWeight: 600, color: isPositive ? 'var(--aq-cyan)' : '#ef4444' }}>
+                      {isPositive ? '+' : ''}{pnlPercent.toFixed(2)}%
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', gap: 16, marginTop: 6 }}>
+                    <span style={{ fontSize: '0.73rem', color: 'var(--aq-muted)' }}>
+                      Total: <span style={{ color: 'var(--aq-text)', fontWeight: 600 }}>{totalValue.toLocaleString('no-NO', { maximumFractionDigits: 0 })} kr</span>
+                    </span>
+                    <span style={{ fontSize: '0.73rem', color: 'var(--aq-muted)' }}>
+                      Konto: <span style={{ color: 'var(--aq-text)', fontFamily: 'var(--font-jetbrains)', fontSize: '0.68rem' }}>{accountInfo?.accountId}</span>
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: 3, background: 'rgba(255,255,255,0.03)', borderRadius: 9, padding: 3 }}>
+                  {(['1h', '24h', '7d'] as const).map(r => (
+                    <button key={r} onClick={() => setChartTimeRange(r)} style={{ padding: '5px 12px', borderRadius: 6, border: 'none', fontSize: '0.72rem', fontWeight: 600, fontFamily: 'var(--font-jetbrains)', cursor: 'pointer', transition: 'all 0.15s', background: chartTimeRange === r ? 'rgba(0,245,255,0.13)' : 'transparent', color: chartTimeRange === r ? 'var(--aq-cyan)' : 'var(--aq-muted)', boxShadow: chartTimeRange === r ? '0 0 10px rgba(0,245,255,0.08)' : 'none' }}>
+                      {r === '1h' ? '1T' : r === '24h' ? '24T' : '7D'}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ height: 220, width: '100%' }}>
+                {chartData.length > 1 ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor={isPositive ? '#00F5FF' : '#ef4444'} stopOpacity={0.22} />
+                          <stop offset="95%" stopColor={isPositive ? '#00F5FF' : '#ef4444'} stopOpacity={0} />
+                        </linearGradient>
+                      </defs>
+                      <XAxis dataKey="time" stroke="rgba(255,255,255,0.08)" fontSize={9} tickLine={false} axisLine={false} tick={{ fill: 'rgba(255,255,255,0.3)', fontFamily: 'JetBrains Mono' }} />
+                      <YAxis stroke="rgba(255,255,255,0.08)" fontSize={9} tickLine={false} axisLine={false} tick={{ fill: 'rgba(255,255,255,0.3)', fontFamily: 'JetBrains Mono' }} tickFormatter={(v) => `${(v / 1000).toFixed(0)}k`} domain={['dataMin - 1000', 'dataMax + 1000']} />
+                      <Tooltip contentStyle={{ background: 'rgba(8,8,14,0.96)', border: '1px solid rgba(0,245,255,0.18)', borderRadius: 10, padding: '10px 14px', backdropFilter: 'blur(20px)' }} labelStyle={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.68rem', marginBottom: 4 }} formatter={(value: any) => [`${Number(value).toLocaleString('no-NO')} kr`, 'Verdi']} />
+                      <ReferenceLine y={1000000} stroke="rgba(255,255,255,0.08)" strokeDasharray="4 4" />
+                      <Area type="monotone" dataKey="value" stroke={isPositive ? '#00F5FF' : '#ef4444'} strokeWidth={2} fill="url(#chartGrad)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div style={{ height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', color: 'var(--aq-muted)' }}>
+                    <svg width="32" height="32" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="1" style={{ opacity: 0.35, marginBottom: 10 }}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
+                    </svg>
+                    <p style={{ fontSize: '0.78rem' }}>Start trading for å se avkastningsgrafen</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="stat-footer" style={{ marginTop: 18, paddingTop: 18, borderTop: '1px solid rgba(255,255,255,0.06)' }}>
+                {[
+                  { label: 'STARTVERDI', value: performanceData ? `${(performanceData.current.initialValue / 1000).toFixed(0)}k kr` : '1 000k kr' },
+                  { label: 'NÅVÆRENDE', value: `${(totalValue / 1000).toFixed(1)}k kr`, cyan: true },
+                  { label: 'TOPP', value: performanceData ? `${(performanceData.session.peak / 1000).toFixed(1)}k kr` : '—' },
+                  { label: 'MAX DD', value: performanceData ? `-${performanceData.session.maxDrawdown.toFixed(2)}%` : '—', red: true },
+                  { label: 'SCANS', value: String(scanCount) },
+                  { label: 'SISTE SCAN', value: lastUpdate || '—' },
+                ].map(({ label, value, cyan, red }) => (
+                  <div key={label}>
+                    <div style={{ fontSize: '0.58rem', color: 'var(--aq-muted)', fontFamily: 'var(--font-jetbrains)', letterSpacing: '0.1em', marginBottom: 4 }}>{label}</div>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 600, color: red ? '#ef4444' : cyan ? 'var(--aq-cyan)' : 'var(--aq-text)' }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Error / withdraw result banners */}
+            {error && (
+              <div style={{ background: 'rgba(239,68,68,0.07)', border: '1px solid rgba(239,68,68,0.22)', borderRadius: 12, padding: '11px 16px', color: '#fca5a5', fontSize: '0.83rem' }}>
+                {error}
+              </div>
+            )}
+            {withdrawResult && (
+              <div style={{ background: withdrawResult.success ? 'rgba(16,185,129,0.07)' : 'rgba(239,68,68,0.07)', border: `1px solid ${withdrawResult.success ? 'rgba(16,185,129,0.22)' : 'rgba(239,68,68,0.22)'}`, borderRadius: 12, padding: '11px 16px', color: withdrawResult.success ? '#6ee7b7' : '#fca5a5', fontSize: '0.83rem' }}>
+                {withdrawResult.message}
+                {withdrawResult.totalSold && <span style={{ marginLeft: 8, fontWeight: 600 }}>— {withdrawResult.totalSold.toLocaleString('no-NO', { maximumFractionDigits: 0 })} kr solgt</span>}
+              </div>
+            )}
+
+            {/* Portfolio table */}
+            {portfolio.length > 0 && (
+              <div className="glass" style={{ borderRadius: 18, padding: 22 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <h3 style={{ fontWeight: 700, fontSize: '0.92rem' }}>Portefølje</h3>
+                  <span style={{ background: 'rgba(0,245,255,0.07)', border: '1px solid rgba(0,245,255,0.14)', borderRadius: 5, padding: '2px 8px', fontSize: '0.65rem', color: 'var(--aq-cyan)', fontFamily: 'var(--font-jetbrains)' }}>
+                    {portfolio.length} POSISJONER
+                  </span>
+                </div>
+                <table className="dtable" style={{ width: '100%' }}>
+                  <thead>
+                    <tr>
+                      <th>Aksje</th>
+                      <th>Symbol</th>
+                      <th style={{ textAlign: 'right' }}>Vekt</th>
+                      <th style={{ textAlign: 'right' }}>Signal</th>
+                      <th style={{ textAlign: 'right' }}>Antall</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {portfolio.map((pos) => (
+                      <tr key={pos.ticker}>
+                        <td><span style={{ fontWeight: 600 }}>{pos.ticker}</span></td>
+                        <td style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '0.72rem', color: 'var(--aq-muted)' }}>{pos.saxoSymbol || '—'}</td>
+                        <td style={{ textAlign: 'right', fontWeight: 600 }}>{pos.vekt}%</td>
+                        <td style={{ textAlign: 'right' }}>
+                          <span className="sig-tag" style={{
+                            background: pos.aksjon === 'BUY' ? 'rgba(16,185,129,0.13)' : pos.aksjon === 'SELL' ? 'rgba(239,68,68,0.13)' : 'rgba(255,255,255,0.05)',
+                            color: pos.aksjon === 'BUY' ? '#34d399' : pos.aksjon === 'SELL' ? '#f87171' : 'var(--aq-muted)',
+                            border: `1px solid ${pos.aksjon === 'BUY' ? 'rgba(16,185,129,0.25)' : pos.aksjon === 'SELL' ? 'rgba(239,68,68,0.25)' : 'rgba(255,255,255,0.07)'}`,
+                          }}>
+                            {pos.aksjon}
+                          </span>
+                        </td>
+                        <td style={{ textAlign: 'right', fontFamily: 'var(--font-jetbrains)', fontSize: '0.78rem' }}>{pos.antall}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* Trade history */}
+            {tradeHistory.length > 0 && (
+              <div className="glass" style={{ borderRadius: 18, padding: 22 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+                  <h3 style={{ fontWeight: 700, fontSize: '0.92rem' }}>Handelshistorikk</h3>
+                  <span style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 5, padding: '2px 8px', fontSize: '0.65rem', color: 'var(--aq-muted)', fontFamily: 'var(--font-jetbrains)' }}>
+                    {tradeHistory.length}
+                  </span>
+                </div>
+                <div style={{ maxHeight: 220, overflowY: 'auto' }}>
+                  {tradeHistory.map((trade, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,0.04)', fontSize: '0.8rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <span style={{ width: 40, fontSize: '0.68rem', fontWeight: 700, color: trade.action === 'BUY' ? '#34d399' : '#f87171', fontFamily: 'var(--font-jetbrains)' }}>{trade.action}</span>
+                        <span style={{ fontWeight: 500 }}>{trade.amount}× {trade.saxoSymbol || trade.ticker}</span>
+                        <span style={{ color: 'var(--aq-muted)', fontSize: '0.73rem' }}>@ {trade.price.toFixed(2)}</span>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontWeight: 600 }}>{trade.value.toFixed(0)} kr</div>
+                        {trade.orderId && <div style={{ color: 'var(--aq-muted)', fontSize: '0.62rem', fontFamily: 'var(--font-jetbrains)' }}>{trade.orderId.slice(0, 12)}</div>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Debug panel */}
+            <div className="glass" style={{ borderRadius: 14, padding: '14px 18px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--aq-muted)', fontFamily: 'var(--font-jetbrains)' }}>DEBUG</span>
+                  <span style={{ background: 'rgba(0,245,255,0.06)', border: '1px solid rgba(0,245,255,0.12)', borderRadius: 4, padding: '1px 6px', fontSize: '0.6rem', color: 'var(--aq-cyan)', fontFamily: 'var(--font-jetbrains)' }}>
+                    {purgeCount} purges · {debugLogs.length} entries
+                  </span>
+                </div>
+                <button onClick={() => setShowDebugPanel(!showDebugPanel)} style={{ background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 5, color: 'var(--aq-muted)', fontSize: '0.68rem', padding: '3px 8px', cursor: 'pointer', fontFamily: 'var(--font-jetbrains)' }}>
+                  {showDebugPanel ? 'SKJUL' : 'VIS'}
+                </button>
+              </div>
+              {showDebugPanel && (
+                <div style={{ marginTop: 14 }}>
+                  {lastRawResponse && (
+                    <div style={{ marginBottom: 10 }}>
+                      <div style={{ fontSize: '0.6rem', color: 'var(--aq-muted)', marginBottom: 5, fontFamily: 'var(--font-jetbrains)' }}>SISTE SAXO RESPONS:</div>
+                      <pre style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 7, padding: 10, fontSize: '0.68rem', fontFamily: 'var(--font-jetbrains)', overflowX: 'auto', maxHeight: 110, color: '#6ee7b7' }}>{lastRawResponse}</pre>
+                    </div>
+                  )}
+                  <div style={{ background: 'rgba(0,0,0,0.4)', borderRadius: 7, padding: 10, maxHeight: 180, overflowY: 'auto' }}>
+                    {debugLogs.length > 0 ? debugLogs.map((entry, i) => (
+                      <div key={i} style={{ fontSize: '0.62rem', fontFamily: 'var(--font-jetbrains)', marginBottom: 3, color: entry.type === 'error' ? '#f87171' : entry.type === 'response' ? '#6ee7b7' : entry.type === 'request' ? '#93c5fd' : 'var(--aq-muted)' }}>
+                        <span style={{ color: 'var(--aq-muted)', marginRight: 5 }}>[{new Date(entry.timestamp).toLocaleTimeString('no-NO')}]</span>
+                        [{entry.type.toUpperCase()}] {entry.endpoint}: {entry.message}
+                      </div>
+                    )) : <p style={{ color: 'var(--aq-muted)', fontSize: '0.68rem' }}>Ingen debug logs ennå</p>}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── RIGHT RAIL ── */}
+          <div className="dash-rail" style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+
+            {/* Agent status */}
+            <div className="glass-hi" style={{ borderRadius: 20, padding: 22 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 22 }}>
+                <div className="agent-orb" style={{ marginBottom: 14 }}>
+                  <div className="ao-core" />
+                  <div className="ao-ring" />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{ width: 5, height: 5, borderRadius: '50%', background: isTrading ? 'var(--aq-cyan)' : 'rgba(255,255,255,0.15)', animation: isTrading ? 'blink 1.2s infinite' : 'none' }} />
+                  <span style={{ fontSize: '0.65rem', fontWeight: 700, fontFamily: 'var(--font-jetbrains)', letterSpacing: '0.12em', color: isTrading ? 'var(--aq-cyan)' : 'var(--aq-muted)' }}>
+                    {isTrading ? 'AGENT AKTIV' : 'AGENT STOPPET'}
+                  </span>
+                </div>
+              </div>
+
+              {/* Metric bars */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 11, marginBottom: 18 }}>
+                {[
+                  { label: 'KONFIDENS', pct: confidencePct, color: 'var(--aq-cyan)' },
+                  { label: 'EKSPONERING', pct: exposurePct, color: 'var(--aq-magenta)' },
+                  { label: 'RISIKO', pct: tradingMode === 'live' ? 82 : 28, color: tradingMode === 'live' ? '#ef4444' : '#60a5fa' },
+                ].map(({ label, pct, color }) => (
+                  <div key={label}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+                      <span style={{ fontSize: '0.58rem', color: 'var(--aq-muted)', fontFamily: 'var(--font-jetbrains)', letterSpacing: '0.1em' }}>{label}</span>
+                      <span style={{ fontSize: '0.58rem', color, fontFamily: 'var(--font-jetbrains)' }}>{Math.round(pct)}%</span>
+                    </div>
+                    <div style={{ height: 3, background: 'rgba(255,255,255,0.05)', borderRadius: 2, overflow: 'hidden' }}>
+                      <div style={{ height: '100%', width: `${pct}%`, background: color, borderRadius: 2, transition: 'width 0.6s ease' }} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Mini stats */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7, marginBottom: 16 }}>
+                {[
+                  { label: 'SCANS', value: scanCount },
+                  { label: 'KJØPT', value: `${(totalBought / 1000).toFixed(0)}k` },
+                  { label: 'SOLGT', value: `${(totalSold / 1000).toFixed(0)}k` },
+                  { label: 'LÅST', value: `${(lockedProfitsTotal / 1000).toFixed(0)}k` },
+                ].map(({ label, value }) => (
+                  <div key={label} style={{ background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8, padding: '7px 10px' }}>
+                    <div style={{ fontSize: '0.54rem', color: 'var(--aq-muted)', fontFamily: 'var(--font-jetbrains)', letterSpacing: '0.1em', marginBottom: 2 }}>{label}</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700 }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Controls */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 7 }}>
+                {!isTrading ? (
+                  <button onClick={startTrading} className="btn btn-primary" style={{ width: '100%', fontSize: '0.75rem', letterSpacing: '0.06em' }}>
+                    START AUTONOM TRADING
+                  </button>
+                ) : (
+                  <button onClick={stopTrading} style={{ width: '100%', padding: '10px 0', background: 'rgba(239,68,68,0.09)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: 10, color: '#f87171', fontWeight: 700, fontSize: '0.75rem', cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', letterSpacing: '0.06em', transition: 'all 0.2s' }}>
+                    STOPP TRADING
+                  </button>
+                )}
+                <button onClick={handleManualTick} disabled={!isConnected} className="btn btn-ghost btn-sm" style={{ width: '100%', fontSize: '0.72rem' }}>
+                  MANUELL SCAN
+                </button>
+              </div>
+
+              {/* NØDSTOPP */}
+              <div style={{ marginTop: 14, paddingTop: 14, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <button className="kill-btn" style={{ width: '100%' }} onClick={() => { stopTrading(); toast.error('NØDSTOPP aktivert — all trading stoppet'); }}>
+                  <span className="kill-dot" />
+                  NØDSTOPP
+                </button>
+              </div>
+            </div>
+
+            {/* Signals */}
+            <div className="glass" style={{ borderRadius: 16, padding: 18 }}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Aktive Signaler</span>
+                <span style={{ background: signals.length > 0 ? 'rgba(0,245,255,0.07)' : 'rgba(255,255,255,0.04)', border: `1px solid ${signals.length > 0 ? 'rgba(0,245,255,0.18)' : 'rgba(255,255,255,0.07)'}`, borderRadius: 5, padding: '2px 7px', fontSize: '0.62rem', color: signals.length > 0 ? 'var(--aq-cyan)' : 'var(--aq-muted)', fontFamily: 'var(--font-jetbrains)' }}>
+                  {signals.length}
+                </span>
+              </div>
+              {signals.length > 0 ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 5, maxHeight: 200, overflowY: 'auto' }}>
+                  {signals.map((signal, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '7px 9px', background: signal.action === 'BUY' ? 'rgba(16,185,129,0.05)' : 'rgba(239,68,68,0.05)', border: `1px solid ${signal.action === 'BUY' ? 'rgba(16,185,129,0.18)' : 'rgba(239,68,68,0.18)'}`, borderRadius: 7 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <span className="sig-tag" style={{ background: signal.action === 'BUY' ? 'rgba(16,185,129,0.18)' : 'rgba(239,68,68,0.18)', color: signal.action === 'BUY' ? '#34d399' : '#f87171', border: 'none' }}>
+                          {signal.action}
+                        </span>
+                        <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>{signal.amount}× {signal.saxoSymbol || signal.ticker}</span>
+                      </div>
+                      <span style={{ fontSize: '0.62rem', color: 'var(--aq-muted)', maxWidth: 72, textAlign: 'right', lineHeight: 1.3 }}>{signal.reason}</span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p style={{ color: 'var(--aq-muted)', fontSize: '0.78rem' }}>Ingen aktive signaler</p>
+              )}
+
+              {successfulTrades.length > 0 && (
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                  <div style={{ fontSize: '0.6rem', color: 'var(--aq-muted)', fontFamily: 'var(--font-jetbrains)', letterSpacing: '0.1em', marginBottom: 7 }}>SISTE UTFØRTE</div>
+                  {successfulTrades.slice(0, 4).map((trade, i) => (
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '4px 0', fontSize: '0.75rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ color: trade.action === 'BUY' ? '#34d399' : '#f87171', fontWeight: 700, fontSize: '0.62rem', fontFamily: 'var(--font-jetbrains)' }}>{trade.action === 'BUY' ? '+' : '-'}{trade.amount}</span>
+                        <span style={{ fontWeight: 500 }}>{trade.saxoSymbol || trade.ticker}</span>
+                      </div>
+                      <span style={{ color: 'var(--aq-muted)', fontSize: '0.68rem' }}>{trade.value.toFixed(0)} kr</span>
+                    </div>
+                  ))}
+                  {failedTrades.length > 0 && (
+                    <div style={{ marginTop: 5, fontSize: '0.62rem', color: '#f87171', fontFamily: 'var(--font-jetbrains)' }}>{failedTrades.length} feilet</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Withdraw profits */}
+            <div className="glass" style={{ borderRadius: 16, padding: 18 }}>
+              <div style={{ marginBottom: 12 }}>
+                <span style={{ fontWeight: 700, fontSize: '0.85rem' }}>Ta ut avkastning</span>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '9px 12px', background: 'rgba(255,255,255,0.03)', border: '1px solid rgba(255,255,255,0.05)', borderRadius: 8 }}>
+                  <span style={{ fontSize: '0.73rem', color: 'var(--aq-muted)' }}>Tilgjengelig</span>
+                  <span style={{ fontSize: '0.85rem', fontWeight: 700, color: pnl > 0 ? '#34d399' : 'var(--aq-muted)' }}>
+                    {pnl > 0 ? `+${pnl.toLocaleString('no-NO', { maximumFractionDigits: 0 })} kr` : '—'}
+                  </span>
+                </div>
+                <button
+                  onClick={handleWithdrawProfits}
+                  disabled={isWithdrawing || pnl <= 0}
+                  style={{ width: '100%', padding: '10px 0', background: pnl > 0 ? 'rgba(245,196,67,0.1)' : 'rgba(255,255,255,0.02)', border: `1px solid ${pnl > 0 ? 'rgba(245,196,67,0.28)' : 'rgba(255,255,255,0.05)'}`, borderRadius: 10, color: pnl > 0 ? '#F5C443' : 'var(--aq-muted)', fontWeight: 700, fontSize: '0.75rem', cursor: pnl > 0 ? 'pointer' : 'not-allowed', fontFamily: 'var(--font-jetbrains)', letterSpacing: '0.06em', transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7 }}
+                >
+                  {isWithdrawing ? (
+                    <>
+                      <span style={{ width: 12, height: 12, border: '2px solid currentColor', borderTopColor: 'transparent', borderRadius: '50%', animation: 'ring-spin 0.6s linear infinite', display: 'inline-block' }} />
+                      HENTER UT...
+                    </>
+                  ) : 'TA UT AVKASTNING'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       </div>
-
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        
-        {/* Performance Chart Section */}
-        <div className="glass-card rounded-lg p-6 mb-6 neon-cyan-glow">
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-xl font-semibold mb-1">Avkastning &amp; Performance</h2>
-              <div className="flex items-baseline gap-3">
-                <span className={`text-3xl font-bold ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {isPositive ? '+' : '-'}{Math.abs(pnl).toLocaleString()} kr
-                </span>
-                <span className={`text-lg font-medium ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
-                  ({isPositive ? '+' : ''}{pnlPercent.toFixed(2)}%)
-                </span>
-              </div>
-            </div>
-            
-            {/* Time Range Toggle */}
-            <div className="flex gap-1 bg-muted/30 rounded-lg p-1">
-              {(['1h', '24h', '7d'] as const).map((range) => (
-                <button
-                  key={range}
-                  onClick={() => setChartTimeRange(range)}
-                  className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-                    chartTimeRange === range
-                      ? 'bg-neon-cyan text-black'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {range === '1h' ? '1 time' : range === '24h' ? '24 timer' : '7 dager'}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {/* Chart */}
-          <div className="h-64 w-full">
-            {chartData.length > 1 ? (
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor={isPositive ? '#10b981' : '#ef4444'} stopOpacity={0.3}/>
-                      <stop offset="95%" stopColor={isPositive ? '#10b981' : '#ef4444'} stopOpacity={0}/>
-                    </linearGradient>
-                  </defs>
-                  <XAxis 
-                    dataKey="time" 
-                    stroke="#71717a" 
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                  />
-                  <YAxis 
-                    stroke="#71717a" 
-                    fontSize={11}
-                    tickLine={false}
-                    axisLine={false}
-                    tickFormatter={(value) => `${(value / 1000).toFixed(0)}k kr`}
-                    domain={['dataMin - 1000', 'dataMax + 1000']}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#18181b',
-                      border: '1px solid #27272a',
-                      borderRadius: '8px',
-                      padding: '12px',
-                    }}
-                    labelStyle={{ color: '#a1a1aa', marginBottom: '4px' }}
-                    formatter={(value, name) => {
-                      if (name === 'value' && typeof value === 'number') {
-                        return [`${value.toLocaleString()} kr`, 'Total Verdi'];
-                      }
-                      return [String(value ?? ''), String(name)];
-                    }}
-                  />
-                  <ReferenceLine y={1000000} stroke="#3f3f46" strokeDasharray="3 3" />
-                  <Area
-                    type="monotone"
-                    dataKey="value"
-                    stroke={isPositive ? '#10b981' : '#ef4444'}
-                    strokeWidth={2}
-                    fillOpacity={1}
-                    fill="url(#colorValue)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="h-full flex items-center justify-center text-muted-foreground">
-                <div className="text-center">
-                  <div className="w-12 h-12 border-2 border-dashed border-muted-foreground/30 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a1 1 0 01-1 1H5a1 1 0 01-1-1V4z" />
-                    </svg>
-                  </div>
-                  <p className="text-sm">Start trading for å se avkastningsgrafen</p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Performance Stats */}
-          {performanceData && (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6 pt-6 border-t border-border">
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Startverdi</div>
-                <div className="font-semibold">{performanceData.current.initialValue.toLocaleString()} kr</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Novarende</div>
-                <div className="font-semibold">{performanceData.current.totalValue.toLocaleString()} kr</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Topp</div>
-                <div className="font-semibold">{performanceData.session.peak.toLocaleString()} kr</div>
-              </div>
-              <div>
-                <div className="text-xs text-muted-foreground mb-1">Max Drawdown</div>
-                <div className="font-semibold text-red-400">-{performanceData.session.maxDrawdown.toFixed(2)}%</div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Trading Engine Controls */}
-        <div className="glass-card rounded-lg p-6 mb-6">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-3">
-              <h2 className="text-xl font-semibold">Aktiv Trading Engine</h2>
-              <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
-                isTrading 
-                  ? 'bg-emerald-500/20 text-emerald-400' 
-                  : 'bg-muted text-muted-foreground'
-              }`}>
-                <span className={`w-2 h-2 rounded-full ${isTrading ? 'bg-emerald-400 animate-pulse' : 'bg-muted-foreground'}`} />
-                {isTrading ? 'AKTIV' : 'STOPPET'}
-              </span>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              {/* Manual Tick Button */}
-              <button
-                onClick={handleManualTick}
-                disabled={!isConnected}
-                className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-semibold transition-colors disabled:opacity-50"
-              >
-                Manual Tick
-              </button>
-              
-              {!isTrading ? (
-                <button
-                  onClick={startTrading}
-                  className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-sm font-semibold transition-colors"
-                >
-                  Start Autonom Trading
-                </button>
-              ) : (
-                <button
-                  onClick={stopTrading}
-                  className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-lg text-sm font-semibold transition-colors"
-                >
-                  Stopp Trading
-                </button>
-              )}
-              
-              {/* Withdraw Profits Button */}
-              <button
-                onClick={handleWithdrawProfits}
-                disabled={isWithdrawing || (performanceData?.current?.pnl || 0) <= 0}
-                className={`px-6 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
-                  (performanceData?.current?.pnl || 0) > 0
-                    ? 'bg-amber-600 hover:bg-amber-700 text-white'
-                    : 'bg-muted text-muted-foreground cursor-not-allowed'
-                }`}
-              >
-                {isWithdrawing ? (
-                  <span className="flex items-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    Henter ut...
-                  </span>
-                ) : (
-                  `Hent ut avkastning${(performanceData?.current?.pnl || 0) > 0 ? ` (${(performanceData?.current?.pnl || 0).toLocaleString('no-NO', { maximumFractionDigits: 0 })} kr)` : ''}`
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Withdraw Result Message */}
-          {withdrawResult && (
-            <div className={`mb-4 p-3 rounded-md text-sm ${
-              withdrawResult.success 
-                ? 'bg-emerald-500/10 border border-emerald-500/30 text-emerald-400' 
-                : 'bg-red-500/10 border border-red-500/30 text-red-400'
-            }`}>
-              {withdrawResult.message}
-              {withdrawResult.totalSold && (
-                <span className="ml-2 font-semibold">
-                  Solgt for {withdrawResult.totalSold.toLocaleString('no-NO', { maximumFractionDigits: 0 })} kr
-                </span>
-              )}
-            </div>
-          )}
-
-          {error && (
-            <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-md text-red-400 text-sm">
-              {error}
-            </div>
-          )}
-
-          {/* Stats Grid */}
-          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-            <div className="bg-muted/30 rounded-lg p-4">
-              <div className="text-xs text-muted-foreground mb-1">Scans</div>
-              <div className="text-2xl font-bold">{scanCount}</div>
-            </div>
-            <div className="bg-muted/30 rounded-lg p-4">
-              <div className="text-xs text-muted-foreground mb-1">Total Kjopt</div>
-              <div className="text-2xl font-bold text-emerald-400">{totalBought.toLocaleString()} kr</div>
-            </div>
-            <div className="bg-muted/30 rounded-lg p-4">
-              <div className="text-xs text-muted-foreground mb-1">Total Solgt</div>
-              <div className="text-2xl font-bold text-red-400">{totalSold.toLocaleString()} kr</div>
-            </div>
-            <div className="bg-muted/30 rounded-lg p-4">
-              <div className="text-xs text-muted-foreground mb-1">Netto</div>
-              <div className={`text-2xl font-bold ${totalSold - totalBought >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                {(totalSold - totalBought).toLocaleString()} kr
-              </div>
-            </div>
-            <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
-              <div className="text-xs text-amber-400 mb-1">Last Profitt</div>
-              <div className="text-2xl font-bold text-amber-400">{lockedProfitsTotal.toLocaleString()} kr</div>
-            </div>
-            <div className="bg-muted/30 rounded-lg p-4">
-              <div className="text-xs text-muted-foreground mb-1">Siste Scan</div>
-              <div className="text-lg font-medium">{lastUpdate || '-'}</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Two Column Layout */}
-        <div className="grid md:grid-cols-2 gap-6">
-          
-          {/* Active Signals */}
-          <div className="glass-card rounded-lg p-6">
-            <h3 className="font-semibold mb-4">Aktive Signaler ({signals.length})</h3>
-            {signals.length > 0 ? (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {signals.map((signal, i) => (
-                  <div
-                    key={i}
-                    className={`flex items-center justify-between p-3 rounded-lg ${
-                      signal.action === 'BUY' 
-                        ? 'bg-emerald-500/10 border border-emerald-500/30' 
-                        : 'bg-red-500/10 border border-red-500/30'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className={`px-2 py-1 rounded text-xs font-bold ${
-                        signal.action === 'BUY' ? 'bg-emerald-500/30 text-emerald-400' : 'bg-red-500/30 text-red-400'
-                      }`}>
-                        {signal.action}
-                      </span>
-                      <span className="font-medium">{signal.amount}x {signal.saxoSymbol || signal.ticker}</span>
-                    </div>
-                    <span className="text-xs text-muted-foreground">{signal.reason}</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm">Ingen aktive signaler</p>
-            )}
-          </div>
-
-          {/* Last Executed */}
-          <div className="glass-card rounded-lg p-6">
-            <h3 className="font-semibold mb-4">Siste Handler</h3>
-            {successfulTrades.length > 0 ? (
-              <div className="space-y-2 max-h-64 overflow-y-auto">
-                {successfulTrades.map((trade, i) => (
-                  <div key={i} className="flex items-center justify-between p-2 bg-muted/30 rounded">
-                    <div className="flex items-center gap-2">
-                      <span className={trade.action === 'BUY' ? 'text-emerald-400' : 'text-red-400'}>
-                        {trade.action === 'BUY' ? '+' : '-'}{trade.amount}
-                      </span>
-                      <span className="font-medium">{trade.saxoSymbol || trade.ticker}</span>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm">{trade.value.toFixed(0)} kr</div>
-                      <div className="text-xs text-muted-foreground font-mono">{trade.orderId?.slice(0, 10)}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-muted-foreground text-sm">Ingen handler ennå</p>
-            )}
-            
-            {failedTrades.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-border">
-                <p className="text-xs text-red-400">
-                  {failedTrades.length} feilet: {failedTrades.map(t => t.saxoSymbol || t.ticker).join(', ')}
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Debug Info Panel */}
-        <div className="mt-6 glass-card rounded-lg p-6">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
-              <h3 className="font-semibold">Debug Info</h3>
-              <span className="px-2 py-0.5 bg-neon-cyan/20 text-neon-cyan rounded text-xs font-mono">
-                Self-cleaning: {purgeCount} purges
-              </span>
-              {lastPurgeTime && (
-                <span className="text-xs text-muted-foreground">
-                  Last purge: {lastPurgeTime}
-                </span>
-              )}
-            </div>
-            <button
-              onClick={() => setShowDebugPanel(!showDebugPanel)}
-              className="px-3 py-1.5 bg-muted hover:bg-muted/80 rounded text-sm transition-colors"
-            >
-              {showDebugPanel ? 'Skjul' : 'Vis'} Detaljer
-            </button>
-          </div>
-          
-          {/* Quick Status */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-            <div className="bg-muted/30 rounded-lg p-3">
-              <div className="text-xs text-muted-foreground mb-1">Token Status</div>
-              <div className={`text-sm font-medium ${isConnected ? 'text-emerald-400' : 'text-red-400'}`}>
-                {isConnected ? 'Gyldig' : 'Ugyldig'}
-              </div>
-            </div>
-            <div className="bg-muted/30 rounded-lg p-3">
-              <div className="text-xs text-muted-foreground mb-1">Modus</div>
-              <div className={`text-sm font-medium ${tradingMode === 'live' ? 'text-red-400' : 'text-blue-400'}`}>
-                {tradingMode.toUpperCase()}
-              </div>
-            </div>
-            <div className="bg-muted/30 rounded-lg p-3">
-              <div className="text-xs text-muted-foreground mb-1">Debug Log</div>
-              <div className="text-sm font-medium">{debugLogs.length} entries</div>
-            </div>
-            <div className="bg-muted/30 rounded-lg p-3">
-              <div className="text-xs text-muted-foreground mb-1">Engine</div>
-              <div className={`text-sm font-medium ${isTrading ? 'text-emerald-400' : 'text-muted-foreground'}`}>
-                {isTrading ? 'Running' : 'Stopped'}
-              </div>
-            </div>
-          </div>
-          
-          {showDebugPanel && (
-            <>
-              {/* Last Raw Response */}
-              {lastRawResponse && (
-                <div className="mb-4">
-                  <div className="text-xs text-muted-foreground mb-2">Last Raw Saxo Response:</div>
-                  <pre className="bg-black/50 rounded-lg p-4 text-xs font-mono overflow-x-auto max-h-32 text-emerald-300">
-                    {lastRawResponse}
-                  </pre>
-                </div>
-              )}
-              
-              {/* Debug Log */}
-              <div>
-                <div className="text-xs text-muted-foreground mb-2">Debug Log (newest first):</div>
-                <div className="bg-black/50 rounded-lg p-4 max-h-64 overflow-y-auto">
-                  {debugLogs.length > 0 ? (
-                    <div className="space-y-2 font-mono text-xs">
-                      {debugLogs.map((entry, i) => (
-                        <div key={i} className={`${
-                          entry.type === 'error' ? 'text-red-400' :
-                          entry.type === 'response' ? 'text-emerald-400' :
-                          entry.type === 'request' ? 'text-blue-400' :
-                          'text-muted-foreground'
-                        }`}>
-                          <span className="text-muted-foreground">[{new Date(entry.timestamp).toLocaleTimeString('no-NO')}]</span>
-                          {' '}<span className="uppercase">[{entry.type}]</span>
-                          {' '}{entry.endpoint}: {entry.message}
-                          {entry.rawBody && (
-                            <div className="ml-4 mt-1 text-muted-foreground truncate">
-                              {entry.rawBody.slice(0, 100)}...
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="text-muted-foreground text-xs">Ingen debug logs ennå</p>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
-        </div>
-
-        {/* Portfolio */}
-        {portfolio.length > 0 && (
-          <div className="mt-6 glass-card rounded-lg p-6">
-            <h3 className="font-semibold mb-4">Portefolje Rapport (v7 Blueprint)</h3>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border">
-                    <th className="text-left py-2 px-3 font-medium text-muted-foreground">Aksje</th>
-                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">Saxo Symbol</th>
-                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">Allokering</th>
-                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">Signal</th>
-                    <th className="text-right py-2 px-3 font-medium text-muted-foreground">Antall</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {portfolio.map((pos) => (
-                    <tr key={pos.ticker} className="border-b border-border/50 cyber-table-row">
-                      <td className="py-3 px-3">
-                        <div className="font-medium">{pos.ticker}</div>
-                        <div className="text-xs text-muted-foreground">{pos.navn}</div>
-                      </td>
-                      <td className="text-right py-3 px-3 font-mono text-xs text-muted-foreground">
-                        {pos.saxoSymbol}
-                      </td>
-                      <td className="text-right py-3 px-3 font-medium">{pos.vekt}%</td>
-                      <td className="text-right py-3 px-3">
-                        <span className={`px-2 py-0.5 rounded text-xs ${
-                          pos.aksjon === 'BUY' ? 'bg-emerald-500/20 text-emerald-400' :
-                          pos.aksjon === 'SELL' ? 'bg-red-500/20 text-red-400' :
-                          'bg-muted text-muted-foreground'
-                        }`}>
-                          {pos.aksjon}
-                        </span>
-                      </td>
-                      <td className="text-right py-3 px-3 font-mono">{pos.antall}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Trade History */}
-        {tradeHistory.length > 0 && (
-          <div className="mt-6 glass-card rounded-lg p-6">
-            <h3 className="font-semibold mb-4">Handelshistorikk ({tradeHistory.length})</h3>
-            <div className="max-h-64 overflow-y-auto space-y-1">
-              {tradeHistory.map((trade, i) => (
-                <div key={i} className="flex items-center justify-between py-2 px-3 bg-muted/20 rounded text-sm cyber-table-row">
-                  <div className="flex items-center gap-3">
-                    <span className={`w-16 text-xs font-medium ${trade.action === 'BUY' ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {trade.action}
-                    </span>
-                    <span>{trade.amount}x {trade.saxoSymbol || trade.ticker}</span>
-                    <span className="text-muted-foreground">@ ${trade.price.toFixed(2)}</span>
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <span className="font-medium">${trade.value.toFixed(0)}</span>
-                    <span className="text-xs text-muted-foreground font-mono">{trade.orderId?.slice(0, 10)}</span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-      </main>
-      
-      {/* Toast Notifications */}
-      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );
 }
