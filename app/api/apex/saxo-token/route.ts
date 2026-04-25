@@ -1,116 +1,128 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-// Saxo SIM OAuth2 endpoints
-const SAXO_TOKEN_URL = 'https://sim.logonvalidation.net/token';
-const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
+import { auth } from '@clerk/nextjs/server';
+import { cookies } from 'next/headers';
+import { saveUserSaxoCreds } from '@/lib/user-saxo';
+import { getSaxoBase } from '@/lib/saxo';
 
 const CLIENT_ID = process.env.SAXO_CLIENT_ID;
 const CLIENT_SECRET = process.env.SAXO_CLIENT_SECRET;
 const REDIRECT_URI = process.env.SAXO_REDIRECT_URI || 'https://apex-quantum.com/callback';
 
+function getSaxoTokenUrl() {
+  const env = process.env.SAXO_ENV || 'sim';
+  return env === 'live'
+    ? 'https://live.logonvalidation.net/token'
+    : 'https://sim.logonvalidation.net/token';
+}
+
 export async function POST(request: NextRequest) {
   try {
     if (!CLIENT_ID || !CLIENT_SECRET) {
-      console.error('Missing SAXO_CLIENT_ID or SAXO_CLIENT_SECRET env vars');
-      return NextResponse.json(
-        { error: 'Serverkonfigurasjon mangler. Kontakt support.' },
-        { status: 500 }
-      );
+      return NextResponse.json({ error: 'Serverkonfigurasjon mangler. Kontakt support.' }, { status: 500 });
     }
 
+    const { userId } = await auth();
     const { code } = await request.json();
 
     if (!code) {
-      return NextResponse.json(
-        { error: 'Autorisasjonskode mangler' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Autorisasjonskode mangler' }, { status: 400 });
     }
 
-    // Exchange authorization code for access token
-    const tokenResponse = await fetch(SAXO_TOKEN_URL, {
+    // Exchange OAuth code for tokens
+    const tokenRes = await fetch(getSaxoTokenUrl(), {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({
         grant_type: 'authorization_code',
-        code: code,
+        code,
         client_id: CLIENT_ID,
         client_secret: CLIENT_SECRET,
         redirect_uri: REDIRECT_URI,
       }).toString(),
     });
 
-    if (!tokenResponse.ok) {
-      const errorText = await tokenResponse.text();
-      console.error('Saxo token error:', errorText);
-      return NextResponse.json(
-        { error: 'Kunne ikke autentisere med Saxo. Prøv igjen.' },
-        { status: 401 }
-      );
+    if (!tokenRes.ok) {
+      console.error('[saxo-token] Token exchange failed:', await tokenRes.text());
+      return NextResponse.json({ error: 'Kunne ikke autentisere med Saxo. Prøv igjen.' }, { status: 401 });
     }
 
-    const tokenData = await tokenResponse.json();
-    const accessToken = tokenData.access_token;
+    const tokenData = await tokenRes.json();
+    const accessToken: string = tokenData.access_token;
+    const refreshToken: string | undefined = tokenData.refresh_token;
+    const expiresIn: number = tokenData.expires_in || 3600;
+    const expiresAt = new Date(Date.now() + expiresIn * 1000);
 
-    // Get account information
-    const accountsResponse = await fetch(`${SAXO_API_BASE}/port/v1/accounts/me`, {
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-      },
+    // Fetch account info from Saxo
+    const SAXO_API_BASE = getSaxoBase();
+    const accountsRes = await fetch(`${SAXO_API_BASE}/port/v1/accounts/me`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
-    if (!accountsResponse.ok) {
-      console.error('Failed to fetch accounts:', await accountsResponse.text());
-      return NextResponse.json(
-        { error: 'Kunne ikke hente kontoinformasjon' },
-        { status: 500 }
-      );
+    if (!accountsRes.ok) {
+      return NextResponse.json({ error: 'Kunne ikke hente kontoinformasjon' }, { status: 500 });
     }
 
-    const accountsData = await accountsResponse.json();
+    const accountsData = await accountsRes.json();
     const account = accountsData.Data?.[0] || accountsData;
+    const accountKey: string = account.AccountKey || 'me';
+    const clientKey: string = account.ClientKey || 'me';
+    const accountId: string = account.AccountId || accountKey;
 
-    // Get account balance
-    const balanceResponse = await fetch(
-      `${SAXO_API_BASE}/port/v1/balances?ClientKey=${account.ClientKey || 'me'}&AccountKey=${account.AccountKey || 'me'}`,
-      {
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-        },
-      }
+    // Fetch balance
+    const balRes = await fetch(
+      `${SAXO_API_BASE}/port/v1/balances?AccountKey=${accountKey}&ClientKey=${clientKey}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
     );
-
-    let balance = 100000; // Default for simulation
-    let currency = 'USD';
-
-    if (balanceResponse.ok) {
-      const balanceData = await balanceResponse.json();
-      balance = balanceData.CashBalance || balanceData.TotalValue || 100000;
-      currency = balanceData.Currency || 'USD';
+    let balance = 1000000;
+    let currency = 'NOK';
+    if (balRes.ok) {
+      const balData = await balRes.json();
+      balance = balData.TotalValue || balData.CashBalance || 1000000;
+      currency = balData.Currency || 'NOK';
     }
 
-    // Store the token securely (in production, use a database)
-    // For now, we'll return success with account info
-    // TODO: Store accessToken and refreshToken securely
+    // --- PERSIST TO DATABASE (per user) ---
+    if (userId) {
+      await saveUserSaxoCreds(userId, {
+        accessToken,
+        refreshToken,
+        accountKey,
+        clientKey,
+        accountId,
+        environment: process.env.SAXO_ENV || 'sim',
+        expiresAt,
+        currentBalance: balance,
+      });
+      console.log(`[saxo-token] Saved credentials to DB for user ${userId}`);
+    } else {
+      console.warn('[saxo-token] No Clerk userId — storing in cookies only (unauthenticated session)');
+    }
+
+    // Also set HttpOnly cookies so the same browser session works immediately
+    const cookieStore = await cookies();
+    const cookieOpts = {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax' as const,
+      maxAge: expiresIn,
+      path: '/',
+    };
+    cookieStore.set('apex_saxo_token', accessToken, cookieOpts);
+    cookieStore.set('apex_saxo_account_key', accountKey, cookieOpts);
+    cookieStore.set('apex_saxo_client_key', clientKey, cookieOpts);
 
     return NextResponse.json({
       success: true,
-      accessToken: accessToken,
-      accountId: account.AccountId || 'TRIAL_22114134',
-      accountKey: account.AccountKey || account.AccountId || 'me',
-      clientKey: account.ClientKey || 'me',
-      balance: balance,
-      currency: currency,
-      message: 'Tilkobling vellykket! Apex Quantum er nå koblet til din Saxo Simulation-konto.',
+      accessToken,
+      accountId,
+      accountKey,
+      clientKey,
+      balance,
+      currency,
+      message: 'Tilkobling vellykket! Apex Quantum er koblet til din Saxo-konto.',
     });
-
   } catch (error) {
-    console.error('Token exchange error:', error);
-    return NextResponse.json(
-      { error: 'En uventet feil oppstod. Prøv igjen.' },
-      { status: 500 }
-    );
+    console.error('[saxo-token] Error:', error);
+    return NextResponse.json({ error: 'En uventet feil oppstod. Prøv igjen.' }, { status: 500 });
   }
 }

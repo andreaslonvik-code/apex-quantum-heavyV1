@@ -4,7 +4,7 @@
 // Day-trading: 10-12% daily target with aggressive scalping
 
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { getRequestCreds } from '@/lib/get-request-creds';
 import {
   safeSaxoFetch,
   findInstrument,
@@ -462,21 +462,16 @@ export async function POST(request: NextRequest) {
   // Start auto-purge (self-cleaning)
   startAutoPurge(CONFIG.PURGE_INTERVAL_MS);
   
-  // Get credentials
-  const cookieStore = await cookies();
-  const accessToken = cookieStore.get('apex_saxo_token')?.value;
-  const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
-  
-  if (!accessToken || !accountKey) {
+  // Get credentials (DB-first, cookie fallback — user-scoped)
+  const creds = await getRequestCreds();
+  if (!creds) {
     console.log(`[APEX] ERROR: Missing credentials`);
     return NextResponse.json(
-      { error: 'Ikke tilkoblet Saxo Bank. Vennligst koble til forst.' },
+      { error: 'Ikke tilkoblet Saxo Bank. Vennligst koble til først.' },
       { status: 401 }
     );
   }
-  
-  // clientKey is now guaranteed to be string since accountKey is verified above
-  const clientKey = cookieStore.get('apex_saxo_client_key')?.value || accountKey;
+  const { accessToken, accountKey, clientKey } = creds;
   
   try {
     const startTime = Date.now();

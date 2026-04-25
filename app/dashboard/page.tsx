@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import { useUser, UserButton } from '@clerk/nextjs';
 import {
   AreaChart,
   Area,
@@ -96,6 +97,7 @@ function AQLogo() {
 
 export default function Dashboard() {
   const router = useRouter();
+  const { user } = useUser();
 
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -514,6 +516,24 @@ export default function Dashboard() {
           <button onClick={handleDisconnect} style={{ background: 'transparent', border: '1px solid rgba(255,255,255,0.07)', borderRadius: 6, color: 'var(--aq-muted)', fontSize: '0.68rem', padding: '4px 10px', cursor: 'pointer', fontFamily: 'var(--font-jetbrains)', letterSpacing: '0.06em', transition: 'all 0.2s' }}>
             KOBLE FRA
           </button>
+          {user && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <div style={{ textAlign: 'right', display: 'none' }}>
+                <div style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--aq-text)', lineHeight: 1.2 }}>
+                  {user.firstName || user.username || 'Bruker'}
+                </div>
+                <div style={{ fontSize: '0.58rem', color: 'var(--aq-muted)', fontFamily: 'var(--font-jetbrains)' }}>OPERATOR</div>
+              </div>
+              <UserButton
+                appearance={{
+                  elements: {
+                    avatarBox: { width: 28, height: 28 },
+                  },
+                }}
+                afterSignOutUrl="/"
+              />
+            </div>
+          )}
         </div>
       </header>
 

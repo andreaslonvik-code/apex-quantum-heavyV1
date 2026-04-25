@@ -1,10 +1,9 @@
 // APEX QUANTUM - Withdraw Profits API
 // Sells enough positions to extract profit and continue trading with starting capital
 import { NextRequest, NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { getRequestCreds } from '@/lib/get-request-creds';
 import { getSaxoBase } from '@/lib/saxo';
 
-const BASE_TRADING_CAPITAL = 1000000; // 1 million NOK starting capital
 
 interface Position {
   PositionId: string;
@@ -125,28 +124,22 @@ async function sellPosition(
 
 export async function POST(request: NextRequest) {
   console.log(`[APEX] ====== WITHDRAW PROFITS INITIATED ======`);
-  
-  const cookieStore = await cookies();
-  const accessToken = cookieStore.get('apex_saxo_token')?.value;
-  const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
-  const clientKey = cookieStore.get('apex_saxo_client_key')?.value;
 
-  if (!accessToken || !accountKey) {
-    return NextResponse.json(
-      { error: 'Ikke tilkoblet Saxo Bank' },
-      { status: 401 }
-    );
+  const creds = await getRequestCreds();
+  if (!creds) {
+    return NextResponse.json({ error: 'Ikke tilkoblet Saxo Bank' }, { status: 401 });
   }
+  const { accessToken, accountKey, clientKey, startBalance: BASE_TRADING_CAPITAL } = creds;
 
   try {
     // Get current account value
     const accountValue = await getAccountValue(accessToken, accountKey);
     const profit = accountValue.totalValue - BASE_TRADING_CAPITAL;
-    
+
     console.log(`[APEX] Total value: ${accountValue.totalValue.toLocaleString()} kr`);
     console.log(`[APEX] Starting capital: ${BASE_TRADING_CAPITAL.toLocaleString()} kr`);
     console.log(`[APEX] Profit to withdraw: ${profit.toLocaleString()} kr`);
-    
+
     if (profit <= 0) {
       return NextResponse.json({
         success: false,
@@ -245,23 +238,21 @@ export async function POST(request: NextRequest) {
 }
 
 export async function GET() {
-  const cookieStore = await cookies();
-  const accessToken = cookieStore.get('apex_saxo_token')?.value;
-  const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
-
-  if (!accessToken || !accountKey) {
+  const creds = await getRequestCreds();
+  if (!creds) {
     return NextResponse.json({ error: 'Ikke tilkoblet' }, { status: 401 });
   }
+  const { accessToken, accountKey, startBalance } = creds;
 
   try {
     const accountValue = await getAccountValue(accessToken, accountKey);
-    const profit = accountValue.totalValue - BASE_TRADING_CAPITAL;
-    
+    const profit = accountValue.totalValue - startBalance;
+
     return NextResponse.json({
       totalValue: accountValue.totalValue,
-      startingCapital: BASE_TRADING_CAPITAL,
+      startingCapital: startBalance,
       profit: profit,
-      profitPercent: (profit / BASE_TRADING_CAPITAL) * 100,
+      profitPercent: (profit / startBalance) * 100,
       canWithdraw: profit > 0,
     });
   } catch (error) {

@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-
-const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
+import { getRequestCreds } from '@/lib/get-request-creds';
+import { getSaxoBase } from '@/lib/saxo';
 
 // In-memory performance history (in production, use a database)
 // This will reset on deploy, but gives real-time tracking during session
@@ -13,20 +12,14 @@ const performanceHistory: Map<string, Array<{
   pnlPercent: number;
 }>> = new Map();
 
-// Get starting balance from .env or default to 1M NOK
-const START_BALANCE = Number(process.env.START_BALANCE) || 1000000;
-const INITIAL_VALUE = START_BALANCE;
-
 export async function GET() {
   try {
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get('apex_saxo_token')?.value;
-    const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
-    const clientKey = cookieStore.get('apex_saxo_client_key')?.value || accountKey;
-
-    if (!accessToken || !accountKey) {
+    const creds = await getRequestCreds();
+    if (!creds) {
       return NextResponse.json({ error: 'Not connected' }, { status: 401 });
     }
+    const { accessToken, accountKey, clientKey, startBalance: INITIAL_VALUE } = creds;
+    const SAXO_API_BASE = getSaxoBase();
 
     // Get total account value from Saxo (this is the full account value including positions)
     let totalValue = INITIAL_VALUE;

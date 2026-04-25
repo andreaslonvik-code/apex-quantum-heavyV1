@@ -3,6 +3,7 @@ import { Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { LegalDisclaimers } from "@/components/legal-disclaimers";
+import { ClerkProvider } from "@clerk/nextjs";
 
 const inter = Inter({
   variable: "--font-inter",
@@ -41,37 +42,39 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html
-      lang="no"
-      className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
-      suppressHydrationWarning
-    >
-      <head>
-        <meta name="color-scheme" content="dark" />
-        <link rel="preconnect" href="https://api.fontshare.com" />
-        <link
-          href="https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className="min-h-full flex flex-col overflow-x-hidden" style={{ background: 'var(--aq-bg)', color: 'var(--aq-text)' }}>
-        <div className="scanline" aria-hidden="true" />
-        <LegalDisclaimers />
-        {children}
-        <Toaster
-          position="top-right"
-          theme="dark"
-          toastOptions={{
-            style: {
-              background: "rgba(10,10,16,0.95)",
-              border: "1px solid rgba(0,245,255,0.18)",
-              color: "#fff",
-              fontSize: "0.875rem",
-              backdropFilter: "blur(20px)",
-            },
-          }}
-        />
-      </body>
-    </html>
+    <ClerkProvider>
+      <html
+        lang="no"
+        className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+        suppressHydrationWarning
+      >
+        <head>
+          <meta name="color-scheme" content="dark" />
+          <link rel="preconnect" href="https://api.fontshare.com" />
+          <link
+            href="https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700&display=swap"
+            rel="stylesheet"
+          />
+        </head>
+        <body className="min-h-full flex flex-col overflow-x-hidden" style={{ background: 'var(--aq-bg)', color: 'var(--aq-text)' }}>
+          <div className="scanline" aria-hidden="true" />
+          <LegalDisclaimers />
+          {children}
+          <Toaster
+            position="top-right"
+            theme="dark"
+            toastOptions={{
+              style: {
+                background: "rgba(10,10,16,0.95)",
+                border: "1px solid rgba(0,245,255,0.18)",
+                color: "#fff",
+                fontSize: "0.875rem",
+                backdropFilter: "blur(20px)",
+              },
+            }}
+          />
+        </body>
+      </html>
+    </ClerkProvider>
   );
 }

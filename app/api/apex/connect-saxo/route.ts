@@ -1,190 +1,165 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { cookies } from 'next/headers';
+import { getUserSaxoCreds, saveUserSaxoCreds } from '@/lib/user-saxo';
+import { getSaxoBase } from '@/lib/saxo';
 
-// Saxo Bank SIM API endpoints
-const SAXO_SIM_API_URL = 'https://gateway.saxobank.com/sim/openapi';
-
-interface SaxoAccountResponse {
-  Data: Array<{
-    AccountId: string;
-    AccountKey: string;
-    ClientKey: string;
-    AccountType: string;
-    Currency: string;
-  }>;
+function getApiBase() {
+  return getSaxoBase();
 }
 
-interface SaxoBalanceResponse {
-  CashBalance: number;
-  Currency: string;
-  TotalValue: number;
+async function fetchAccountInfo(accessToken: string) {
+  const res = await fetch(`${getApiBase()}/port/v1/accounts/me`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  return data.Data?.[0] || data;
 }
 
+async function fetchBalance(accessToken: string, accountKey: string, clientKey: string) {
+  const res = await fetch(
+    `${getApiBase()}/port/v1/balances?AccountKey=${accountKey}&ClientKey=${clientKey}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } }
+  );
+  if (!res.ok) return { balance: 1000000, currency: 'NOK' };
+  const data = await res.json();
+  return {
+    balance: data.TotalValue || data.CashBalance || 1000000,
+    currency: data.Currency || 'NOK',
+  };
+}
+
+// POST — store tokens after OAuth + validate them
 export async function POST(request: NextRequest) {
   try {
+    const { userId } = await auth();
     const body = await request.json();
     const { accessToken } = body;
 
-    // Validate input
     if (!accessToken) {
-      return NextResponse.json(
-        { error: 'Access token er påkrevd' },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: 'Access token er påkrevd' }, { status: 400 });
     }
 
-    // Step 1: Get account information using the access token
-    const accountsResponse = await fetch(`${SAXO_SIM_API_URL}/port/v1/accounts/me`, {
-      method: 'GET',
-      headers: {
-        'Authorization': `Bearer ${accessToken}`,
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!accountsResponse.ok) {
-      const errorText = await accountsResponse.text();
-      console.error('Saxo accounts error:', errorText);
+    const account = await fetchAccountInfo(accessToken);
+    if (!account) {
       return NextResponse.json(
         { error: 'Kunne ikke hente kontoinformasjon fra Saxo. Sjekk at tilkoblingen er gyldig.' },
         { status: 401 }
       );
     }
 
-    const accountsData: SaxoAccountResponse = await accountsResponse.json();
-    
-    if (!accountsData.Data || accountsData.Data.length === 0) {
-      return NextResponse.json(
-        { error: 'Ingen kontoer funnet på denne Saxo-kontoen' },
-        { status: 404 }
-      );
+    const accountKey: string = account.AccountKey || 'me';
+    const clientKey: string = account.ClientKey || accountKey;
+    const accountId: string = account.AccountId || accountKey;
+    const { balance, currency } = await fetchBalance(accessToken, accountKey, clientKey);
+
+    // Persist to database per user
+    if (userId) {
+      await saveUserSaxoCreds(userId, {
+        accessToken,
+        accountKey,
+        clientKey,
+        accountId,
+        environment: process.env.SAXO_ENV || 'sim',
+        currentBalance: balance,
+      });
     }
 
-    const primaryAccount = accountsData.Data[0];
-
-    // Step 2: Get balance for the primary account
-    const balanceResponse = await fetch(
-      `${SAXO_SIM_API_URL}/port/v1/balances?AccountKey=${primaryAccount.AccountKey}&ClientKey=${primaryAccount.ClientKey}`,
-      {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${accessToken}`,
-          'Content-Type': 'application/json',
-        },
-      }
-    );
-
-    let balance = 1000000;
-    let currency = 'NOK';
-
-    if (balanceResponse.ok) {
-      const balanceData: SaxoBalanceResponse = await balanceResponse.json();
-      // Use TotalValue which is the complete account value (Kontoverdi in SaxoTrader)
-      balance = balanceData.TotalValue || balanceData.CashBalance || 1000000;
-      currency = balanceData.Currency || primaryAccount.Currency || 'NOK';
-      console.log(`[APEX] Balance data: TotalValue=${balanceData.TotalValue}, CashBalance=${balanceData.CashBalance}`);
-    }
-
-    // Store access token in secure HTTP-only cookie
+    // Also set HttpOnly cookies for same-device session
     const cookieStore = await cookies();
-    
-    console.log(`[APEX] Storing cookies - AccountKey: ${primaryAccount.AccountKey}, ClientKey: ${primaryAccount.ClientKey}`);
-    
-    cookieStore.set('apex_saxo_token', accessToken, {
+    const opts = {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax', // Allow cross-site for OAuth redirects
-      maxAge: 60 * 60 * 24, // 24 hours
-      path: '/',
-    });
-
-    // Store account key for trading
-    cookieStore.set('apex_saxo_account_key', primaryAccount.AccountKey, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
+      sameSite: 'lax' as const,
       maxAge: 60 * 60 * 24,
       path: '/',
-    });
-
-    cookieStore.set('apex_saxo_client_key', primaryAccount.ClientKey, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24,
-      path: '/',
-    });
+    };
+    cookieStore.set('apex_saxo_token', accessToken, opts);
+    cookieStore.set('apex_saxo_account_key', accountKey, opts);
+    cookieStore.set('apex_saxo_client_key', clientKey, opts);
 
     return NextResponse.json({
       success: true,
       message: 'Tilkobling vellykket',
       accountInfo: {
-        accountId: primaryAccount.AccountId,
-        accountKey: primaryAccount.AccountKey,
+        accountId,
+        accountKey,
         balance,
         currency,
-        simulationMode: true,
+        simulationMode: process.env.SAXO_ENV !== 'live',
       },
     });
-
   } catch (error) {
-    console.error('Connect Saxo error:', error);
-    return NextResponse.json(
-      { error: 'En uventet feil oppstod. Vennligst prøv igjen.' },
-      { status: 500 }
-    );
+    console.error('[connect-saxo POST]', error);
+    return NextResponse.json({ error: 'En uventet feil oppstod. Vennligst prøv igjen.' }, { status: 500 });
   }
 }
 
-// GET endpoint to check connection status
+// GET — check connection status: DB first, cookie fallback
 export async function GET() {
   try {
+    const { userId } = await auth();
+
+    // 1. DB lookup (works across devices, survives cookie loss)
+    if (userId) {
+      const creds = await getUserSaxoCreds(userId);
+      if (creds) {
+        const res = await fetch(`${getApiBase()}/port/v1/accounts/me`, {
+          headers: { Authorization: `Bearer ${creds.accessToken}` },
+        });
+        if (res.ok) {
+          const accountsData = await res.json();
+          const account = accountsData.Data?.[0] || accountsData;
+          const { balance, currency } = await fetchBalance(creds.accessToken, creds.accountKey, creds.clientKey);
+
+          // Refresh cookies for this browser session
+          const cookieStore = await cookies();
+          const opts = { httpOnly: true, secure: process.env.NODE_ENV === 'production', sameSite: 'lax' as const, maxAge: 86400, path: '/' };
+          cookieStore.set('apex_saxo_token', creds.accessToken, opts);
+          cookieStore.set('apex_saxo_account_key', creds.accountKey, opts);
+          cookieStore.set('apex_saxo_client_key', creds.clientKey, opts);
+
+          return NextResponse.json({
+            connected: true,
+            accountKey: creds.accountKey,
+            accountInfo: {
+              accountId: account.AccountId || creds.accountId,
+              accountKey: creds.accountKey,
+              balance,
+              currency,
+            },
+          });
+        }
+        // Token expired — fall through to cookie check
+      }
+    }
+
+    // 2. Cookie fallback (same device, may not have Clerk yet)
     const cookieStore = await cookies();
-    const token = cookieStore.get('apex_saxo_token');
-    const accountKey = cookieStore.get('apex_saxo_account_key');
-    const clientKey = cookieStore.get('apex_saxo_client_key');
+    const token = cookieStore.get('apex_saxo_token')?.value;
+    const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
+    const clientKey = cookieStore.get('apex_saxo_client_key')?.value;
 
     if (!token || !accountKey) {
       return NextResponse.json({ connected: false });
     }
 
-    // Verify token is still valid by making a simple API call
-    const response = await fetch(`${SAXO_SIM_API_URL}/port/v1/accounts/me`, {
-      headers: { 'Authorization': `Bearer ${token.value}` },
+    const res = await fetch(`${getApiBase()}/port/v1/accounts/me`, {
+      headers: { Authorization: `Bearer ${token}` },
     });
+    if (!res.ok) return NextResponse.json({ connected: false });
 
-    if (!response.ok) {
-      // Token expired or invalid - clear cookies
-      return NextResponse.json({ connected: false });
-    }
-
-    const accountsData = await response.json();
+    const accountsData = await res.json();
     const account = accountsData.Data?.[0] || accountsData;
+    const { balance, currency } = await fetchBalance(token, accountKey, clientKey || accountKey);
 
-    // Get balance
-    let balance = 100000;
-    let currency = 'USD';
-
-    try {
-      const balanceResponse = await fetch(
-        `${SAXO_SIM_API_URL}/port/v1/balances?AccountKey=${accountKey.value}&ClientKey=${clientKey?.value || 'me'}`,
-        { headers: { 'Authorization': `Bearer ${token.value}` } }
-      );
-      if (balanceResponse.ok) {
-        const balanceData = await balanceResponse.json();
-        balance = balanceData.TotalValue || balanceData.CashBalance || 100000;
-        currency = balanceData.Currency || 'USD';
-      }
-    } catch {
-      // Use defaults
-    }
-
-    return NextResponse.json({ 
+    return NextResponse.json({
       connected: true,
-      accountKey: accountKey.value,
+      accountKey,
       accountInfo: {
-        accountId: account.AccountId || account.AccountKey || accountKey.value,
-        accountKey: accountKey.value,
+        accountId: account.AccountId || accountKey,
+        accountKey,
         balance,
         currency,
       },

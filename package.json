@@ -22,9 +22,12 @@
   "dependencies": {
     "@ai-sdk/react": "^3.0.143",
     "@ai-sdk/xai": "^3.0.74",
+    "@clerk/nextjs": "^6.12.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-scroll-area": "^1.2.10",
     "@radix-ui/react-tabs": "^1.1.13",
+    "@supabase/ssr": "^0.10.2",
+    "@supabase/supabase-js": "^2.104.1",
     "ai": "^6.0.141",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

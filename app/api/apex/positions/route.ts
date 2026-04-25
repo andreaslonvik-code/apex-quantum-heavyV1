@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
-
-const SAXO_API_BASE = 'https://gateway.saxobank.com/sim/openapi';
+import { getRequestCreds } from '@/lib/get-request-creds';
+import { getSaxoBase } from '@/lib/saxo';
 
 interface SaxoPositionRaw {
   DisplayAndFormat?: { Symbol?: string; Description?: string };
@@ -15,14 +14,12 @@ interface SaxoPositionRaw {
 
 export async function GET() {
   try {
-    const cookieStore = await cookies();
-    const accessToken = cookieStore.get('apex_saxo_token')?.value;
-    const clientKey = cookieStore.get('apex_saxo_client_key')?.value;
-    const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
-
-    if (!accessToken || !clientKey) {
+    const creds = await getRequestCreds();
+    if (!creds) {
       return NextResponse.json({ error: 'Not connected' }, { status: 401 });
     }
+    const { accessToken, clientKey } = creds;
+    const SAXO_API_BASE = getSaxoBase();
 
     // MANDATORY: Fetch positions directly from Saxo API
     // GET /port/v1/positions - Returns all open positions
