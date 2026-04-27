@@ -1,6 +1,7 @@
 // ============================================================
-// APEX QUANTUM v6.1 - GROK-4-HEAVY ANALYSIS ENDPOINT
-// AI-powered trading signal generation and streaming analysis
+// APEX QUANTUM v6.2 — GROK-4-HEAVY ANALYSIS ENDPOINT
+// AI-powered trading signal generation and streaming analysis.
+// Engine identity sourced from lib/apex-core.ts.
 // ============================================================
 
 import { NextRequest, NextResponse } from 'next/server';

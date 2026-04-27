@@ -30,7 +30,7 @@ export const ErrorCodes = {
   SESSION_EXPIRED: 'SESSION_EXPIRED',
 
   // API/Integration errors
-  SAXO_API_ERROR: 'SAXO_API_ERROR',
+  ALPACA_API_ERROR: 'ALPACA_API_ERROR',
   GROK_API_ERROR: 'GROK_API_ERROR',
   EXTERNAL_API_ERROR: 'EXTERNAL_API_ERROR',
 
@@ -114,7 +114,7 @@ export class ErrorHandler {
       [ErrorCodes.INVALID_INPUT]: 'Invalid input provided',
       [ErrorCodes.INVALID_TOKEN]: 'Invalid authentication token',
       [ErrorCodes.UNAUTHORIZED]: 'You are not authorized to perform this action',
-      [ErrorCodes.SAXO_API_ERROR]: 'Failed to connect to trading platform',
+      [ErrorCodes.ALPACA_API_ERROR]: 'Failed to connect to trading platform',
       [ErrorCodes.GROK_API_ERROR]: 'AI model unavailable, please try again',
       [ErrorCodes.INSUFFICIENT_BALANCE]: 'Insufficient account balance for this trade',
       [ErrorCodes.TRADE_LIMIT_EXCEEDED]: 'Trade limit exceeded, cannot place order',

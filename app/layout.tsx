@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   title: "APEX QUANTUM · Autonomous Trading Intelligence",
   description:
     "Self-directing AI trading system. Scans nine million signals a second, evolves its own strategies in real time, and compounds capital 24/7 — without you lifting a finger.",
-  keywords: ["autonomous trading", "AI", "algorithmic trading", "quantitative finance", "Saxo Bank"],
+  keywords: ["autonomous trading", "AI", "algorithmic trading", "quantitative finance", "Alpaca"],
   icons: { icon: "/favicon.ico" },
   openGraph: {
     title: "APEX QUANTUM · Autonomous Trading Intelligence",

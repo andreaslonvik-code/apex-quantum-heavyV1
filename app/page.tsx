@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
+import { SignedIn, SignedOut, SignOutButton } from '@clerk/nextjs';
 
 // ── Logo mark ──────────────────────────────────────────────────────────────
 function AQLogo({ size = 32 }: { size?: number }) {
@@ -133,11 +134,11 @@ export default function LandingPage() {
 
           {/* Links */}
           <nav style={{ display: 'flex', gap: 32, alignItems: 'center' }} className="hidden md:flex">
-            {['#intelligence', '#modules', '#performance', '#security', '#pricing'].map((href, i) => (
+            {['#intelligence', '#capabilities', '#core', '#performance', '#security', '#pricing'].map((href, i) => (
               <a key={i} href={href} style={{ color: 'var(--aq-muted)', textDecoration: 'none', fontSize: '0.875rem', transition: 'color 0.2s' }}
                 onMouseEnter={e => (e.currentTarget.style.color = 'var(--aq-text)')}
                 onMouseLeave={e => (e.currentTarget.style.color = 'var(--aq-muted)')}>
-                {['Intelligence', 'Modules', 'Performance', 'Security', 'Pricing'][i]}
+                {['Intelligence', 'Capabilities', 'Core', 'Performance', 'Security', 'Pricing'][i]}
               </a>
             ))}
           </nav>
@@ -145,10 +146,17 @@ export default function LandingPage() {
           {/* CTA */}
           <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
             <Link href="/dashboard" className="btn btn-ghost btn-sm">Dashboard</Link>
-            <a href="#pricing" className="btn btn-primary btn-sm">
-              Get access
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            </a>
+            <SignedIn>
+              <SignOutButton redirectUrl="/">
+                <button type="button" className="btn btn-ghost btn-sm">Logg ut</button>
+              </SignOutButton>
+            </SignedIn>
+            <SignedOut>
+              <a href="#pricing" className="btn btn-primary btn-sm">
+                Get access
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              </a>
+            </SignedOut>
           </div>
         </div>
       </header>
@@ -164,7 +172,7 @@ export default function LandingPage() {
               <div>
                 <div className="tag tag-live" style={{ marginBottom: 28 }}>
                   <span className="dot" />
-                  v7.1 · Autonomous Live Intelligence
+                  v6.2 · Global 24/7 Extreme Growth Edition
                 </div>
 
                 <h1 style={{ fontSize: 'clamp(2.8rem,5vw,4.2rem)', fontWeight: 700, lineHeight: 1.1, marginBottom: 24, letterSpacing: '-0.02em' }}>
@@ -190,9 +198,10 @@ export default function LandingPage() {
                 {/* Stats */}
                 <div style={{ display: 'flex', gap: 32, flexWrap: 'wrap' }}>
                   {[
-                    { label: 'YTD compounded', val: '+187,34%' },
-                    { label: 'Signals / sec',   val: '9,2 M' },
-                    { label: 'Max drawdown',    val: '–4,7%' },
+                    { label: 'YTD compounded',    val: '+187,34%' },
+                    { label: 'Asymmetric score',  val: '9,5 / 10' },
+                    { label: 'Signals / sec',     val: '9,2 M' },
+                    { label: 'Max drawdown',      val: '–4,7%' },
                   ].map(s => (
                     <div key={s.label}>
                       <div style={{ fontSize: '0.7rem', color: 'var(--aq-muted)', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: 4, fontFamily: 'var(--font-jetbrains)' }}>{s.label}</div>
@@ -325,7 +334,7 @@ export default function LandingPage() {
               <div className="glass" style={{ padding: 0, overflow: 'hidden' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', borderBottom: '1px solid var(--aq-border)' }}>
                   <span className="tag tag-live"><span className="dot" />AGENT · THINKING</span>
-                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '0.6rem', color: 'var(--aq-muted)' }}>core.apex/v7.1</span>
+                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '0.6rem', color: 'var(--aq-muted)' }}>core.apex/v6.2</span>
                 </div>
                 <div ref={terminalRef} style={{ padding: '16px 18px', height: 340, overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 10 }}>
                   {TERMINAL_LINES.slice(0, visibleLines).map((line, i) => (
@@ -371,7 +380,7 @@ export default function LandingPage() {
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     textAlign: 'center',
                   }}>
-                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>APEX<br/>v7.1</span>
+                    <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '0.55rem', fontWeight: 700, color: '#fff', lineHeight: 1.3 }}>APEX<br/>v6.2</span>
                   </div>
                   {/* Orbit labels */}
                   {[
@@ -410,6 +419,55 @@ export default function LandingPage() {
                   ))}
                 </div>
               </div>
+            </div>
+          </div>
+        </section>
+
+        {/* ── v6.2 CAPABILITY UPLIFT ─────────────────── */}
+        <section id="capabilities" style={{ padding: '40px 24px 120px', borderTop: '1px solid var(--aq-border)' }}>
+          <div style={{ maxWidth: 1280, margin: '0 auto' }}>
+            <div style={{ textAlign: 'center', marginBottom: 56, paddingTop: 60 }}>
+              <div className="tag" style={{ marginBottom: 20, display: 'inline-flex' }}>
+                <span className="dot-pulse" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--aq-cyan)', animation: 'blink 1.6s infinite' }} />
+                v6.2 · CAPABILITY UPLIFT
+              </div>
+              <h2 style={{ fontSize: 'clamp(1.8rem,3.5vw,2.8rem)', fontWeight: 700, letterSpacing: '-0.02em', marginBottom: 12 }}>
+                Twelve new engines.{' '}
+                <span className="gradient-text">One asymmetric edge.</span>
+              </h2>
+              <p style={{ color: 'var(--aq-muted)', maxWidth: 600, margin: '0 auto', lineHeight: 1.7 }}>
+                v6.2 lifts the global asymmetric-upside score to <span style={{ color: 'var(--aq-cyan)', fontFamily: 'var(--font-jetbrains)' }}>9,5 / 10</span> — measured against every benchmarked AI trader on the Alpha Arena leaderboard.
+                Each engine below describes a capability surface, not an algorithm.
+              </p>
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+              {[
+                { name: 'Meta-Cognition Layer',          role: 'Self-rates confidence, regime fit and counter-hypotheses before any capital is committed.' },
+                { name: 'Self-Evolution Engine',         role: 'Mutates and promotes strategy variants every 24 hours under adaptive fitness scoring.' },
+                { name: 'Purge Module',                  role: 'Hard-clears stale state, cached signals and overhang every cycle — no decision drift.' },
+                { name: 'Recursive Summarization',       role: 'Compresses live context into compounding embeddings so 24/7 reasoning stays bounded.' },
+                { name: 'Crisis Relocation Engine',      role: 'Rotates exposure into pre-vetted hedge baskets the instant a regime-shift signal fires.' },
+                { name: 'Global Best-Portfolio Rule',    role: 'Continuously enforces that current holdings stay on the asymmetric-upside frontier.' },
+                { name: 'Adaptive Kelly Optimisation',   role: 'Sizes positions against rolling edge and live volatility — no static allocation rules.' },
+                { name: 'Real-Time Tool Integration',    role: 'Live data, futures, news and on-chain feeds pulled fresh per scan. No template carry-over.' },
+                { name: 'Profit-Taking Engine',          role: 'Locks gains in tranches, tuned per asset volatility regime.' },
+                { name: 'Dynamic Trailing-Stop',         role: 'Stop ratchets toward break-even as unrealised P/L grows; re-arms on re-entry.' },
+                { name: 'Dynamic Rebalancing',           role: 'Drifts the live book back toward target weights without forced churn.' },
+                { name: 'Adaptive Growth Engine',        role: 'Re-tunes risk budget and compounding cadence to match the live volatility regime.' },
+              ].map((c, i) => (
+                <div key={c.name} className="glass" style={{ padding: 20, position: 'relative' }}>
+                  <div style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '0.58rem', color: 'var(--aq-muted)', letterSpacing: '0.1em', marginBottom: 8 }}>
+                    {String(i + 1).padStart(2, '0')} · ENGINE
+                  </div>
+                  <div style={{ fontWeight: 600, fontSize: '0.95rem', marginBottom: 10, color: 'var(--aq-text)' }}>
+                    {c.name}
+                  </div>
+                  <div style={{ fontSize: '0.82rem', color: 'var(--aq-muted)', lineHeight: 1.55 }}>
+                    {c.role}
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
         </section>
@@ -464,6 +522,71 @@ export default function LandingPage() {
                   {p.label}
                 </div>
               ))}
+            </div>
+          </div>
+        </section>
+
+        {/* ── PROPRIETARY CORE (gatekeep) ──────────────── */}
+        <section id="core" style={{ padding: '80px 24px 120px', borderTop: '1px solid var(--aq-border)', background: 'rgba(255,255,255,0.015)' }}>
+          <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 56, alignItems: 'center' }} className="core-grid">
+              <div>
+                <div className="tag" style={{ marginBottom: 20, display: 'inline-flex' }}>
+                  <span className="dot-pulse" style={{ width: 6, height: 6, borderRadius: '50%', background: '#F5C443', animation: 'blink 1.6s infinite' }} />
+                  THE PROPRIETARY CORE
+                </div>
+                <h2 style={{ fontSize: 'clamp(1.8rem,3.5vw,2.6rem)', fontWeight: 700, lineHeight: 1.15, marginBottom: 20, letterSpacing: '-0.02em' }}>
+                  We show you{' '}
+                  <span className="gradient-text-gold">what it does.</span><br/>
+                  Not the recipe.
+                </h2>
+                <p style={{ color: 'var(--aq-muted)', lineHeight: 1.7, marginBottom: 24 }}>
+                  Apex Quantum's edge is the choreography between the engines above — how confidence is rated, how positions are sized, how regime-shifts are detected, which signals are weighted and why. That choreography is the IP.
+                </p>
+                <p style={{ color: 'var(--aq-muted)', lineHeight: 1.7 }}>
+                  You see the capability surface, the audited track record, and the live telemetry on your own dashboard. The model weights, prompt graphs, threshold matrices and self-evolution scoring stay inside the core. Operators trade the results, not the recipe.
+                </p>
+              </div>
+
+              <div className="glass glass-hi" style={{ padding: 0, overflow: 'hidden' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 18px', borderBottom: '1px solid var(--aq-border)' }}>
+                  <span className="tag">DISCLOSURE BOUNDARY</span>
+                  <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '0.6rem', color: 'var(--aq-muted)' }}>core.apex/v6.2</span>
+                </div>
+                <div style={{ padding: '4px 0' }}>
+                  {[
+                    { k: 'Capability surface',         shown: true,  note: 'Twelve engines, named and described.' },
+                    { k: 'Live telemetry',             shown: true,  note: 'Streaming on your dashboard 24/7.' },
+                    { k: 'Audited performance',        shown: true,  note: 'Independently attested every month.' },
+                    { k: 'Model weights & prompts',    shown: false, note: 'Stay inside the core. Always.' },
+                    { k: 'Threshold matrices',         shown: false, note: 'Calibrated continuously, never published.' },
+                    { k: 'Self-evolution scoring',     shown: false, note: 'Internal fitness function, not exposed.' },
+                    { k: 'Crisis playbook composition', shown: false, note: 'Hedge baskets are pre-vetted, not disclosed.' },
+                  ].map((row) => (
+                    <div key={row.k} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 18px', borderBottom: '1px solid var(--aq-border)' }}>
+                      <div style={{
+                        width: 18, height: 18, borderRadius: 5, flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: row.shown ? 'rgba(16,185,129,0.15)' : 'rgba(245,196,67,0.12)',
+                        border: `1px solid ${row.shown ? 'rgba(16,185,129,0.4)' : 'rgba(245,196,67,0.35)'}`,
+                      }}>
+                        {row.shown ? (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M5 13l4 4L19 7" stroke="#10b981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        ) : (
+                          <svg width="10" height="10" viewBox="0 0 24 24" fill="none"><path d="M5 12h14" stroke="#F5C443" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                        )}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--aq-text)' }}>{row.k}</div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--aq-muted)', marginTop: 2 }}>{row.note}</div>
+                      </div>
+                      <span style={{ fontFamily: 'var(--font-jetbrains)', fontSize: '0.6rem', letterSpacing: '0.08em', color: row.shown ? '#10b981' : '#F5C443' }}>
+                        {row.shown ? 'PUBLIC' : 'SEALED'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </section>
@@ -672,7 +795,7 @@ export default function LandingPage() {
 
               {/* CTA */}
               <div style={{ padding: '28px 36px', display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', borderTop: '1px solid var(--aq-border)' }}>
-                <Link href="/saxo-simulation" className="btn btn-primary" style={{ fontSize: '1rem', padding: '14px 28px' }}>
+                <Link href="/connect-alpaca" className="btn btn-primary" style={{ fontSize: '1rem', padding: '14px 28px' }}>
                   Aktiver live trading
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 </Link>
@@ -693,7 +816,7 @@ export default function LandingPage() {
               The market doesn't sleep.<br/>
               <span className="gradient-text">Neither should your edge.</span>
             </h2>
-            <Link href="/saxo-simulation" className="btn btn-primary" style={{ fontSize: '1.05rem', padding: '15px 32px' }}>
+            <Link href="/connect-alpaca" className="btn btn-primary" style={{ fontSize: '1.05rem', padding: '15px 32px' }}>
               Kom i gang nå
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
             </Link>
@@ -736,7 +859,7 @@ export default function LandingPage() {
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 20, borderTop: '1px solid var(--aq-border)', fontFamily: 'var(--font-jetbrains)', fontSize: '0.65rem', color: 'var(--aq-muted)', flexWrap: 'wrap', gap: 8 }}>
               <span>© 2026 APEX QUANTUM AS · ORG 934 218 441</span>
-              <span>v7.1 · BUILD 20260424.01</span>
+              <span>v6.2 · BUILD 20260427.01</span>
             </div>
           </div>
         </footer>
@@ -746,7 +869,7 @@ export default function LandingPage() {
       {/* Responsive grid overrides */}
       <style>{`
         @media (max-width: 900px) {
-          .hero-grid, .intel-grid, .perf-grid, .sec-grid { grid-template-columns: 1fr !important; }
+          .hero-grid, .intel-grid, .perf-grid, .sec-grid, .core-grid { grid-template-columns: 1fr !important; }
           .voice-grid { grid-template-columns: 1fr !important; }
         }
         @media (max-width: 640px) {

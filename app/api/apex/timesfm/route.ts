@@ -1,5 +1,4 @@
-// APEX QUANTUM — TimesFM-inspired hybrid scoring engine.
-// Replaces the old Saxo-backed price fetcher with Alpaca historical bars.
+// APEX QUANTUM — TimesFM-inspired hybrid scoring engine, fed by Alpaca historical bars.
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestCreds } from '@/lib/get-request-creds';
 import { getDataBase, type AlpacaCreds } from '@/lib/alpaca';

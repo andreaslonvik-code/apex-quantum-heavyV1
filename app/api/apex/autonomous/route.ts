@@ -1,5 +1,7 @@
-// APEX QUANTUM v8 — Autonomous Trading Engine (Alpaca)
-// Per-user keys, US equities only, aggressive day-trading scalper.
+// APEX QUANTUM v6.2 — Autonomous Trading Engine (Alpaca)
+// Per-user keys, US equities only. Capability surface, growth targets and
+// risk directives come from lib/apex-core.ts; ticker weights and concrete
+// thresholds stay local to this file (proprietary).
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestCreds } from '@/lib/get-request-creds';
 import {
@@ -13,7 +15,7 @@ import {
   type AlpacaPosition,
 } from '@/lib/alpaca';
 
-// ============ APEX QUANTUM v8 BLUEPRINT (US equities only) ============
+// ============ APEX QUANTUM v6.2 BLUEPRINT (US equities only) ============
 const APEX_BLUEPRINT: Record<string, {
   name: string;
   targetWeight: number;
