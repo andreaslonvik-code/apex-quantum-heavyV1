@@ -860,7 +860,7 @@ export default function Dashboard() {
                           backdropFilter: 'blur(20px)',
                         }}
                         labelStyle={{ color: 'rgba(255,255,255,0.4)', fontSize: '0.68rem', marginBottom: 4 }}
-                        formatter={(value: number | string) => [fmtUsd(Number(value)), 'Verdi']}
+                        formatter={(value) => [fmtUsd(Number(value)), 'Verdi']}
                       />
                       <ReferenceLine
                         y={performanceData?.current?.initialValue || 0}
