@@ -92,6 +92,28 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     console.error('[alpaca-connect POST] error:', err);
+    const msg = err instanceof Error ? err.message : String(err);
+
+    if (msg.includes('ENCRYPTION_KEY')) {
+      return NextResponse.json(
+        {
+          error:
+            'Server-konfigurasjon mangler: ENCRYPTION_KEY er ikke satt. Kontakt support.',
+          code: 'CONFIG_ENCRYPTION_KEY_MISSING',
+        },
+        { status: 500 }
+      );
+    }
+    if (msg.includes('SUPABASE_SERVICE_ROLE_KEY') || msg.includes('NEXT_PUBLIC_SUPABASE')) {
+      return NextResponse.json(
+        {
+          error:
+            'Server-konfigurasjon mangler: Supabase-nøkler er ikke satt. Kontakt support.',
+          code: 'CONFIG_SUPABASE_MISSING',
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json(
       { error: 'En uventet feil oppstod. Prøv igjen.' },
       { status: 500 }
