@@ -1,70 +1,48 @@
 import { NextResponse } from 'next/server';
 import { getRequestCreds } from '@/lib/get-request-creds';
-import { getSaxoBase } from '@/lib/saxo';
-
-interface Position {
-  ticker: string;
-  amount: number;
-  marketValue: number;
-  currentPrice: number;
-  assetType: string;
-}
+import { getPositions } from '@/lib/alpaca';
 
 export async function GET() {
   try {
-    const creds = await getRequestCreds();
-    if (!creds) {
-      return NextResponse.json({
-        error: 'Ikke tilkoblet Saxo',
-        positions: [],
-      }, { status: 401 });
+    const userCreds = await getRequestCreds();
+    if (!userCreds) {
+      return NextResponse.json(
+        { error: 'Ikke tilkoblet Alpaca', positions: [] },
+        { status: 401 }
+      );
     }
-    const { accessToken, clientKey, environment } = creds;
-    const SAXO_API_BASE = getSaxoBase(environment);
 
-    // Get positions from Saxo
-    const response = await fetch(
-      `${SAXO_API_BASE}/port/v1/positions?ClientKey=${clientKey}`,
-      { headers: { 'Authorization': `Bearer ${accessToken}` } }
-    );
+    const result = await getPositions({
+      apiKey: userCreds.apiKey,
+      apiSecret: userCreds.apiSecret,
+      env: userCreds.environment,
+    });
 
-    if (!response.ok) {
-      console.log('[APEX] Ingen posisjoner eller feil ved henting');
+    if (!result.success) {
       return NextResponse.json({
         positions: [],
-        message: 'Ingen eksisterende posisjoner',
+        message: result.error || 'Ingen eksisterende posisjoner',
       });
     }
 
-    const data = await response.json();
-    const positions: Position[] = [];
-
-    for (const pos of data.Data || []) {
-      const ticker = pos.DisplayAndFormat?.Symbol?.split(':')[0] || 
-                     pos.PositionBase?.Uic?.toString() || '';
-      
-      positions.push({
-        ticker: ticker.toUpperCase(),
-        amount: pos.PositionBase?.Amount || 0,
-        marketValue: pos.PositionView?.MarketValue || 0,
-        currentPrice: pos.PositionView?.CurrentPrice || 0,
-        assetType: pos.PositionBase?.AssetType || 'Stock',
-      });
-    }
-
-    console.log(`[APEX] Hentet ${positions.length} posisjoner fra Saxo`);
+    const positions = result.data.map((p) => ({
+      ticker: p.symbol.toUpperCase(),
+      amount: parseFloat(p.qty) || 0,
+      marketValue: parseFloat(p.market_value) || 0,
+      currentPrice: parseFloat(p.current_price) || 0,
+      assetType: p.asset_class,
+    }));
 
     return NextResponse.json({
       positions,
-      totalValue: positions.reduce((sum, p) => sum + p.marketValue, 0),
+      totalValue: positions.reduce((s, p) => s + Math.abs(p.marketValue), 0),
       positionCount: positions.length,
     });
-
-  } catch (error) {
-    console.error('[APEX] Feil ved henting av posisjoner:', error);
-    return NextResponse.json({
-      error: 'Feil ved henting av posisjoner',
-      positions: [],
-    }, { status: 500 });
+  } catch (err) {
+    console.error('[get-positions] Error:', err);
+    return NextResponse.json(
+      { error: 'Feil ved henting av posisjoner', positions: [] },
+      { status: 500 }
+    );
   }
 }

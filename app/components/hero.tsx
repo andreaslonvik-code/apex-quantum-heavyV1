@@ -7,40 +7,40 @@ interface HeroProps {
 export function Hero({ language }: HeroProps) {
   const content = {
     no: {
-      badge: '🤖 Autonom AI-trading på Oslo Børs',
-      title: 'Apex Quantum v7',
-      titleAccent: 'Din AI-trader på Oslo Børs',
+      badge: '🤖 Autonom AI-trading på Alpaca',
+      title: 'Apex Quantum v8',
+      titleAccent: 'Din AI-trader på US-aksjemarkedet',
       description:
-        'Apex Quantum analyserer markedsdynamikk og utfører aksjehandel fullt automatisk. Handler kun på Oslo Børs (XOSL), NASDAQ og XETRA med strategier optimalisert for norske og internasjonale aksjer. Koble til Saxo-kontoen din og la Grok-4-Heavy AI bygge et lønnsomt portfolio.',
+        'Apex Quantum analyserer markedsdynamikk og utfører aksjehandel fullt automatisk på dine vegne via Alpaca. Handler US equities (NASDAQ, NYSE, ARCA, AMEX) med Grok-4-Heavy AI. Lim inn dine egne Alpaca API-nøkler — vi lagrer dem kryptert (AES-256-GCM) og handler kun på din konto.',
       features: [
-        '📊 Analyserer norske og internasjonale aksjer',
-        '🇳🇴 Fokus på Oslo Børs (XOSL)',
+        '📊 Analyserer US equities (NASDAQ, NYSE, ARCA, AMEX)',
+        '🔐 Krypterte API-nøkler (AES-256-GCM)',
         '⚡ Handler hvert 2. sekund automatisk',
-        '🛡️ Sikkerhet: Rate-limiting, AML & KYC',
+        '🛡️ Per-bruker isolasjon — Clerk auth',
         '📈 Porteføljegraf & live P&L',
         '💰 Ta ut avkastning på ett klikk',
       ],
-      cta: 'Koble til Saxo',
+      cta: 'Koble til Alpaca',
       ctaSecondary: 'Les mer',
       price: 'Fra 499 kr/mnd',
     },
     en: {
-      badge: '🤖 Autonomous AI Trading on Oslo Stock Exchange',
-      title: 'Apex Quantum v7',
-      titleAccent: 'Your AI Trader on Oslo Børs',
+      badge: '🤖 Autonomous AI Trading on Alpaca',
+      title: 'Apex Quantum v8',
+      titleAccent: 'Your AI Trader on US Equities',
       description:
-        'Apex Quantum analyzes market dynamics and executes equity trading fully automatically. Trades only Norwegian and international stocks on Oslo Børs (XOSL), NASDAQ, and XETRA with AI strategies optimized for Nordic and global markets. Connect your Saxo account and let Grok-4-Heavy AI build a profitable portfolio.',
+        'Apex Quantum analyzes market dynamics and executes equity trading fully automatically via Alpaca. Trades US equities (NASDAQ, NYSE, ARCA, AMEX) with Grok-4-Heavy AI. Paste your own Alpaca API keys — we store them encrypted (AES-256-GCM) and trade only on your account.',
       features: [
-        '📊 Analyzes Norwegian and international stocks',
-        '🇳🇴 Focus on Oslo Stock Exchange (XOSL)',
+        '📊 Analyzes US equities (NASDAQ, NYSE, ARCA, AMEX)',
+        '🔐 Encrypted API keys (AES-256-GCM)',
         '⚡ Trades every 2 seconds automatically',
-        '🛡️ Security: Rate-limiting, AML & KYC',
-        '📈 Portfolio chart &live P&L',
+        '🛡️ Per-user isolation — Clerk auth',
+        '📈 Portfolio chart & live P&L',
         '💰 Withdraw profits with one click',
       ],
-      cta: 'Connect Saxo',
+      cta: 'Connect Alpaca',
       ctaSecondary: 'Learn More',
-      price: 'From 499 NOK/month',
+      price: 'From $49/month',
     },
   };
 
@@ -49,7 +49,6 @@ export function Hero({ language }: HeroProps) {
   return (
     <section className="pt-32 pb-20 px-6">
       <div className="max-w-5xl mx-auto">
-        {/* Badge */}
         <div className="flex justify-center">
           <div className="inline-flex items-center gap-2 bg-neon-cyan/10 border border-neon-cyan/30 rounded-full px-4 py-2 mb-8">
             <span className="w-2 h-2 rounded-full bg-neon-cyan animate-pulse" />
@@ -57,7 +56,6 @@ export function Hero({ language }: HeroProps) {
           </div>
         </div>
 
-        {/* Main Headline */}
         <div className="text-center mb-12">
           <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold tracking-tight leading-[1.1] text-balance mb-4">
             {t.title}
@@ -67,12 +65,10 @@ export function Hero({ language }: HeroProps) {
           </h2>
         </div>
 
-        {/* Description */}
         <p className="text-lg md:text-xl text-muted-foreground max-w-3xl mx-auto text-pretty leading-relaxed text-center mb-12">
           {t.description}
         </p>
 
-        {/* Features Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-12 max-w-3xl mx-auto">
           {t.features.map((feature, idx) => (
             <div key={idx} className="flex items-start gap-3 p-3 rounded-lg bg-muted/30 border border-border/50">
@@ -82,7 +78,6 @@ export function Hero({ language }: HeroProps) {
           ))}
         </div>
 
-        {/* CTA Buttons */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-8">
           <button
             onClick={() => {
@@ -91,13 +86,7 @@ export function Hero({ language }: HeroProps) {
             className="bg-neon-cyan hover:bg-neon-cyan/90 text-black font-bold px-10 py-4 rounded-xl transition-all flex items-center gap-3 text-lg w-full sm:w-auto justify-center neon-cyan-glow"
           >
             {t.cta}
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              className="w-5 h-5"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
+            <svg viewBox="0 0 24 24" fill="none" className="w-5 h-5" stroke="currentColor" strokeWidth="2">
               <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
           </button>
@@ -111,13 +100,12 @@ export function Hero({ language }: HeroProps) {
           </button>
         </div>
 
-        {/* Price and Trust */}
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 text-sm text-muted-foreground">
           <span>{t.price}</span>
           <span className="hidden sm:inline">•</span>
           <span>30 dagers risikofri prøveperiode</span>
           <span className="hidden sm:inline">•</span>
-          <span>💳 Sikker Saxo-integrasjon</span>
+          <span>🔐 Krypterte Alpaca-nøkler</span>
         </div>
       </div>
     </section>

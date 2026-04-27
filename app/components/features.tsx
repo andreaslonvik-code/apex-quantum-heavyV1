@@ -10,12 +10,12 @@ export function Features({ language }: FeaturesProps) {
   const content = {
     no: {
       sectionTitle: 'Kraftige Funksjoner',
-      sectionSubtitle: 'Alt du trenger for automatisk aksjehandel',
+      sectionSubtitle: 'Alt du trenger for autonom aksjehandel via Alpaca',
       features: [
         {
           icon: 'chart',
-          title: '🇳🇴 Oslo Børs Handler',
-          description: 'Apex Quantum handler norske og internasjonale aksjer på Oslo Børs (XOSL), NASDAQ og XETRA.',
+          title: '🇺🇸 US Equities',
+          description: 'Apex Quantum handler aksjer på NASDAQ, NYSE, ARCA og AMEX gjennom Alpaca Trading API.',
         },
         {
           icon: 'stock',
@@ -30,12 +30,12 @@ export function Features({ language }: FeaturesProps) {
         {
           icon: 'speed',
           title: '⚡ Automatisk Handling',
-          description: 'Handler hver 2. sekund med optimaliserte selskapsstrategi og risikostyring.',
+          description: 'Handler hvert 2. sekund med optimaliserte strategier og risikostyring.',
         },
         {
           icon: 'graph',
           title: '📈 Porteføljegraf',
-          description: 'Se porteføljeverdi over tid, avkastning i % og NOK, live P&L per posisjon.',
+          description: 'Se porteføljeverdi over tid, avkastning i % og USD, live P&L per posisjon.',
         },
         {
           icon: 'withdraw',
@@ -46,12 +46,12 @@ export function Features({ language }: FeaturesProps) {
     },
     en: {
       sectionTitle: 'Powerful Features',
-      sectionSubtitle: 'Everything you need for autonomous equity trading',
+      sectionSubtitle: 'Everything you need for autonomous equity trading via Alpaca',
       features: [
         {
           icon: 'chart',
-          title: '🇳🇴 Oslo Stock Exchange',
-          description: 'Apex Quantum trades Norwegian and international stocks on Oslo (XOSL), NASDAQ, and XETRA.',
+          title: '🇺🇸 US Equities',
+          description: 'Apex Quantum trades stocks on NASDAQ, NYSE, ARCA, and AMEX through the Alpaca Trading API.',
         },
         {
           icon: 'stock',
@@ -71,7 +71,7 @@ export function Features({ language }: FeaturesProps) {
         {
           icon: 'graph',
           title: '📈 Portfolio Chart',
-          description: 'See portfolio value over time, returns in % and NOK, live P&L per position.',
+          description: 'See portfolio value over time, returns in % and USD, live P&L per position.',
         },
         {
           icon: 'withdraw',
@@ -136,21 +136,20 @@ export function Features({ language }: FeaturesProps) {
               key={index}
               className="glass-card border border-border rounded-xl p-6 hover:border-neon-cyan/30 transition-all hover:neon-cyan-glow-subtle"
             >
-              <div className="text-3xl mb-4">{feature.icon.split(' ')[0]}</div>
+              <div className="text-3xl mb-4">{icons[feature.icon]}</div>
               <h3 className="font-semibold text-lg mb-2">{feature.title}</h3>
               <p className="text-muted-foreground text-sm leading-relaxed">{feature.description}</p>
             </div>
           ))}
         </div>
 
-        {/* Additional info section */}
         <div className="mt-16 grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="glass-card rounded-xl p-8 border border-border">
             <h3 className="text-2xl font-bold mb-4">🛡️ Sikkert og Sertifisert</h3>
             <ul className="space-y-3 text-muted-foreground">
               <li className="flex items-start gap-3">
                 <span className="text-neon-cyan mt-1">✓</span>
-                <span>Integrasjon med Saxo Bank via OAuth 2.0</span>
+                <span>Per-bruker Alpaca API-nøkler kryptert med AES-256-GCM</span>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-neon-cyan mt-1">✓</span>
@@ -176,15 +175,15 @@ export function Features({ language }: FeaturesProps) {
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-neon-cyan mt-1">✓</span>
-                <span>Handelslogg og performance-metrikkern</span>
+                <span>Handelslogg og performance-metrikker</span>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-neon-cyan mt-1">✓</span>
-                <span>Velg mellom Sim og Live trading</span>
+                <span>Paper Trading eller Live — du velger via Alpaca-konto</span>
               </li>
               <li className="flex items-start gap-3">
                 <span className="text-neon-cyan mt-1">✓</span>
-                <span>Av-koblings mulighet når som helst</span>
+                <span>Avkoblingsmulighet når som helst</span>
               </li>
             </ul>
           </div>

@@ -1,493 +1,282 @@
 // inngest/functions/apex-quantum-tick.ts
-// APEX QUANTUM v7 - 30-second Autonomous Trading Loop with Day-Trading Logic
-// Runs 24/7 even when browser is closed
-
+// APEX QUANTUM v8 — multi-user Alpaca trading tick.
+// Runs every minute, fans out to every connected user, executes 2 ticks ~30s apart.
 import { inngest } from '@/lib/inngest';
 import {
-  findInstrument,
-  getPrice,
   placeOrder,
-  getBalance,
+  getAccount,
+  getClock,
   getPositions,
-  startAutoPurge,
+  getLatestPrice,
   clearDebugLog,
-  isLiveMode,
-  type SaxoPosition,
-  type SaxoEnv,
-} from '@/lib/saxo';
-import { getAllConnectedUsers } from '@/lib/user-saxo';
-import { ensureFreshToken } from '@/lib/saxo-refresh';
+  type AlpacaCreds,
+  type AlpacaPosition,
+} from '@/lib/alpaca';
+import { getAllConnectedUsers } from '@/lib/user-alpaca';
 
-// ============ APEX QUANTUM v7 BLUEPRINT ============
-// Multi-exchange support: US, Oslo, Germany, China/HK
-const APEX_BLUEPRINT: Record<string, {
-  navn: string;
-  targetVekt: number;
-  volatilitet: number;
-  saxoSymbol: string;
-  assetType: string;
-  exchange: 'XNAS' | 'XNYS' | 'XOSL' | 'XETR' | 'XHKG' | 'XSHG';
-  market: 'US' | 'OSLO' | 'GERMANY' | 'CHINA';
-}> = {
-  // US Markets (40% allocation)
-  MU:   { navn: 'Micron Technology',    targetVekt: 25, volatilitet: 3, saxoSymbol: 'MU:xnas',   assetType: 'Stock', exchange: 'XNAS', market: 'US' },
-  CEG:  { navn: 'Constellation Energy', targetVekt: 10, volatilitet: 2, saxoSymbol: 'CEG:xnas',  assetType: 'Stock', exchange: 'XNAS', market: 'US' },
-  VRT:  { navn: 'Vertiv Holdings',      targetVekt: 10, volatilitet: 2, saxoSymbol: 'VRT:xnys',  assetType: 'Stock', exchange: 'XNYS', market: 'US' },
-  RKLB: { navn: 'Rocket Lab',           targetVekt: 8,  volatilitet: 4, saxoSymbol: 'RKLB:xnas', assetType: 'Stock', exchange: 'XNAS', market: 'US' },
-  LMND: { navn: 'Lemonade Inc',         targetVekt: 7,  volatilitet: 4, saxoSymbol: 'LMND:xnys', assetType: 'Stock', exchange: 'XNYS', market: 'US' },
-
-  // Oslo Bors (20% allocation)
-  // Note: These require specific UICs from Saxo - using placeholders
-  // NEL:  { navn: 'NEL ASA',              targetVekt: 10, volatilitet: 4, saxoSymbol: 'NEL:xosl',  assetType: 'Stock', exchange: 'XOSL', market: 'OSLO' },
-  // EQNR: { navn: 'Equinor',              targetVekt: 10, volatilitet: 2, saxoSymbol: 'EQNR:xosl', assetType: 'Stock', exchange: 'XOSL', market: 'OSLO' },
-
-  // Germany/XETRA (20% allocation)
-  // SAP:  { navn: 'SAP SE',               targetVekt: 10, volatilitet: 2, saxoSymbol: 'SAP:xetr',  assetType: 'Stock', exchange: 'XETR', market: 'GERMANY' },
-  // SIE:  { navn: 'Siemens AG',           targetVekt: 10, volatilitet: 2, saxoSymbol: 'SIE:xetr',  assetType: 'Stock', exchange: 'XETR', market: 'GERMANY' },
-
-  // China/HK (20% allocation)
-  // BABA: { navn: 'Alibaba Group',        targetVekt: 10, volatilitet: 4, saxoSymbol: 'BABA:xhkg', assetType: 'Stock', exchange: 'XHKG', market: 'CHINA' },
-  // BIDU: { navn: 'Baidu Inc',            targetVekt: 10, volatilitet: 4, saxoSymbol: 'BIDU:xnas', assetType: 'Stock', exchange: 'XNAS', market: 'CHINA' },
-
-  // Additional high-volatility US stocks
-  ABSI: { navn: 'Absci Corporation',    targetVekt: 5,  volatilitet: 5, saxoSymbol: 'ABSI:xnas', assetType: 'Stock', exchange: 'XNAS', market: 'US' },
+const APEX_BLUEPRINT: Record<string, { name: string; targetWeight: number; volatility: number }> = {
+  MU:   { name: 'Micron Technology',    targetWeight: 25, volatility: 3 },
+  CEG:  { name: 'Constellation Energy', targetWeight: 10, volatility: 2 },
+  VRT:  { name: 'Vertiv Holdings',      targetWeight: 10, volatility: 2 },
+  RKLB: { name: 'Rocket Lab',           targetWeight: 8,  volatility: 4 },
+  LMND: { name: 'Lemonade Inc',         targetWeight: 7,  volatility: 4 },
+  ABSI: { name: 'Absci Corporation',    targetWeight: 5,  volatility: 5 },
 };
 
-// ============ AGGRESSIVE DAY-TRADING CONFIG ============
-// Target: 10-12% DAILY return through ultra-aggressive scalping
 const CONFIG = {
-  // Thresholds
-  DIP_THRESHOLD: 0.0005,        // Buy on 0.05% dip
-  PEAK_THRESHOLD: 0.0008,       // Sell on 0.08% rise
-  RSI_OVERSOLD: 45,             // Buy when RSI below
-  RSI_OVERBOUGHT: 55,           // Sell when RSI above
-  PROFIT_TAKE_THRESHOLD: 0.005, // Take profit at 0.5% gain
-  STOP_LOSS_THRESHOLD: -0.02,   // Stop loss at -2%
-  
-  // Position sizing
-  POSITION_SIZE_PERCENT: 0.15,  // 15% of capital per trade
-  MAX_TRADES_PER_TICK: 12,      // Max trades per 30s tick
-  
-  // Timing
-  TICK_INTERVAL_SECONDS: 30,    // Trading tick every 30s
-  META_COGNITION_INTERVAL: 30,  // Meta-cognition every 30s
-  PURGE_INTERVAL_SECONDS: 10,   // Auto-purge every 10s
-  
-  // Capital
-  BASE_TRADING_CAPITAL: 1000000, // 1M NOK base
+  DIP_THRESHOLD: 0.0005,
+  PEAK_THRESHOLD: 0.0008,
+  RSI_OVERSOLD: 45,
+  RSI_OVERBOUGHT: 55,
+  PROFIT_TAKE_THRESHOLD: 0.005,
+  STOP_LOSS_THRESHOLD: -0.02,
+  POSITION_SIZE_PERCENT: 0.15,
+  MAX_TRADES_PER_TICK: 12,
 };
 
-// ============ MARKET HOURS (CET) ============
-interface MarketStatus {
-  usOpen: boolean;
-  osloOpen: boolean;
-  germanyOpen: boolean;
-  chinaOpen: boolean;
-  activeMarkets: string[];
-  cetTime: string;
-}
-
-function getMarketStatus(): MarketStatus {
-  const now = new Date();
-  const cetTime = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Oslo' }));
-  const hours = cetTime.getHours();
-  const minutes = cetTime.getMinutes();
-  const dayOfWeek = cetTime.getDay();
-  const timeInMinutes = hours * 60 + minutes;
-  
-  // Weekend check
-  const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-  
-  // Market hours (CET)
-  // US: 15:30 - 22:00 CET (NASDAQ/NYSE)
-  // Oslo: 09:00 - 16:25 CET
-  // Germany: 09:00 - 17:30 CET (XETRA)
-  // China/HK: 02:30 - 09:00 CET (HK market)
-  
-  const usOpen = !isWeekend && timeInMinutes >= 930 && timeInMinutes < 1320;
-  const osloOpen = !isWeekend && timeInMinutes >= 540 && timeInMinutes < 985;
-  const germanyOpen = !isWeekend && timeInMinutes >= 540 && timeInMinutes < 1050;
-  const chinaOpen = !isWeekend && timeInMinutes >= 150 && timeInMinutes < 540;
-  
-  const activeMarkets: string[] = [];
-  if (usOpen) activeMarkets.push('US');
-  if (osloOpen) activeMarkets.push('OSLO');
-  if (germanyOpen) activeMarkets.push('GERMANY');
-  if (chinaOpen) activeMarkets.push('CHINA');
-  
-  return {
-    usOpen,
-    osloOpen,
-    germanyOpen,
-    chinaOpen,
-    activeMarkets,
-    cetTime: `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')} CET`,
-  };
-}
-
-// ============ MOMENTUM TRACKING ============
-interface PricePoint {
-  price: number;
-  timestamp: number;
-}
-
+interface PricePoint { price: number; timestamp: number }
 const priceHistory: Map<string, PricePoint[]> = new Map();
 
 function calculateRSI(prices: PricePoint[]): number {
   if (prices.length < 5) return 50;
-  
   const recent = prices.slice(-15);
   let gains = 0, losses = 0, count = 0;
-  
   for (let i = 1; i < recent.length; i++) {
     const change = recent[i].price - recent[i - 1].price;
     if (change > 0) gains += change;
     else losses += Math.abs(change);
     count++;
   }
-  
   if (count === 0) return 50;
   const avgGain = gains / count;
   const avgLoss = losses / count;
-  
   if (avgLoss === 0) return 100;
-  const rs = avgGain / avgLoss;
-  return 100 - (100 / (1 + rs));
+  return 100 - (100 / (1 + avgGain / avgLoss));
 }
 
-function analyzeMomentum(ticker: string, currentPrice: number): {
-  rsi: number;
-  localHigh: number;
-  localLow: number;
-  trend: 'UP' | 'DOWN' | 'NEUTRAL';
-} {
+function analyzeMomentum(ticker: string, currentPrice: number) {
   const history = priceHistory.get(ticker) || [];
   const now = Date.now();
-  
   history.push({ price: currentPrice, timestamp: now });
-  
-  // Keep only last 15 minutes of data
   const fifteenMinAgo = now - 15 * 60 * 1000;
-  const recentHistory = history.filter(p => p.timestamp > fifteenMinAgo);
-  priceHistory.set(ticker, recentHistory);
-  
-  if (recentHistory.length < 3) {
-    return { rsi: 50, localHigh: currentPrice, localLow: currentPrice, trend: 'NEUTRAL' };
+  const recent = history.filter((p) => p.timestamp > fifteenMinAgo);
+  priceHistory.set(ticker, recent);
+  if (recent.length < 3) {
+    return { rsi: 50, localHigh: currentPrice, localLow: currentPrice };
   }
-  
   const fiveMinAgo = now - 5 * 60 * 1000;
-  const fiveMinPrices = recentHistory.filter(p => p.timestamp > fiveMinAgo);
-  
-  const localHigh = Math.max(...fiveMinPrices.map(p => p.price));
-  const localLow = Math.min(...fiveMinPrices.map(p => p.price));
-  const rsi = calculateRSI(recentHistory);
-  
-  const avgRecent = fiveMinPrices.slice(-3).reduce((s, p) => s + p.price, 0) / 3;
-  const avgOlder = fiveMinPrices.slice(0, 3).reduce((s, p) => s + p.price, 0) / Math.min(3, fiveMinPrices.length);
-  const trend = avgRecent > avgOlder * 1.002 ? 'UP' : avgRecent < avgOlder * 0.998 ? 'DOWN' : 'NEUTRAL';
-  
-  return { rsi, localHigh, localLow, trend };
+  const fiveMin = recent.filter((p) => p.timestamp > fiveMinAgo);
+  const localHigh = Math.max(...fiveMin.map((p) => p.price));
+  const localLow = Math.min(...fiveMin.map((p) => p.price));
+  return { rsi: calculateRSI(recent), localHigh, localLow };
 }
 
-// ============ SIGNAL GENERATION ============
 interface TradingSignal {
   ticker: string;
-  action: 'BUY' | 'SELL';
+  action: 'buy' | 'sell';
   amount: number;
-  price: number;
   reason: string;
-  market: string;
   priority: number;
 }
 
 async function generateSignals(
-  accessToken: string,
-  positions: Map<string, SaxoPosition>,
+  creds: AlpacaCreds,
+  positions: Map<string, AlpacaPosition>,
   cash: number,
   totalValue: number,
-  marketStatus: MarketStatus,
-  env: SaxoEnv
+  marketOpen: boolean
 ): Promise<TradingSignal[]> {
   const signals: TradingSignal[] = [];
-  
+  const isPaper = creds.env === 'paper';
+
   for (const [ticker, info] of Object.entries(APEX_BLUEPRINT)) {
-    // Skip if market is closed
-    const marketOpen = 
-      (info.market === 'US' && marketStatus.usOpen) ||
-      (info.market === 'OSLO' && marketStatus.osloOpen) ||
-      (info.market === 'GERMANY' && marketStatus.germanyOpen) ||
-      (info.market === 'CHINA' && marketStatus.chinaOpen);
-    
-    // In SIM mode, always allow US stocks
-    const isSimMode = !isLiveMode(env);
-    if (!marketOpen && !isSimMode) continue;
+    if (!marketOpen && !isPaper) continue;
 
-    // Find instrument
-    const instrumentResult = await findInstrument(accessToken, ticker, info.exchange.toLowerCase(), env);
-    if (!instrumentResult.success || !instrumentResult.data) continue;
-
-    const instrument = instrumentResult.data;
-
-    // Get current price
-    const priceResult = await getPrice(accessToken, instrument.uic, info.assetType, env);
-    if (!priceResult.success || !priceResult.data) continue;
-    
-    const currentPrice = priceResult.data.last;
+    const priceResult = await getLatestPrice(creds, ticker);
+    if (!priceResult.success || priceResult.data <= 0) continue;
+    const currentPrice = priceResult.data;
     const momentum = analyzeMomentum(ticker, currentPrice);
-    
-    const pos = positions.get(ticker);
-    const positionAmount = pos?.amount || 0;
-    const positionAvgPrice = pos?.avgPrice || 0;
-    
-    // Position sizing
-    const baseSize = Math.max(5, Math.floor((cash * CONFIG.POSITION_SIZE_PERCENT) / currentPrice));
-    const volatilityMultiplier = 1 + (info.volatilitet - 2) * 0.2;
-    
-    // Calculate deviation from target
-    const currentValue = pos?.marketValue || 0;
-    const targetValue = (totalValue * info.targetVekt) / 100;
-    const deviation = targetValue > 0 ? ((currentValue - targetValue) / targetValue) * 100 : -100;
-    
-    // Price movement analysis
+
+    const pos = positions.get(ticker.toUpperCase());
+    const qty = pos ? Math.abs(parseFloat(pos.qty) || 0) : 0;
+    const avg = pos ? parseFloat(pos.avg_entry_price) || 0 : 0;
+    const value = pos ? Math.abs(parseFloat(pos.market_value) || 0) : 0;
+
+    const baseSize = Math.max(1, Math.floor((cash * CONFIG.POSITION_SIZE_PERCENT) / currentPrice));
+    const volMul = 1 + (info.volatility - 2) * 0.2;
+    const targetValue = (totalValue * info.targetWeight) / 100;
+    const deviation = targetValue > 0 ? ((value - targetValue) / targetValue) * 100 : -100;
+
     const dropFromHigh = momentum.localHigh > 0 ? (momentum.localHigh - currentPrice) / momentum.localHigh : 0;
     const riseFromLow = momentum.localLow > 0 ? (currentPrice - momentum.localLow) / momentum.localLow : 0;
-    
-    // ============ BUY SIGNALS ============
-    
-    // 1. DIP buying
+
     if (dropFromHigh >= CONFIG.DIP_THRESHOLD && cash > baseSize * currentPrice) {
       const dipStrength = Math.min(4, dropFromHigh / CONFIG.DIP_THRESHOLD);
-      const orderSize = Math.floor(baseSize * dipStrength * volatilityMultiplier);
-      
       signals.push({
         ticker,
-        action: 'BUY',
-        amount: orderSize,
-        price: currentPrice,
+        action: 'buy',
+        amount: Math.floor(baseSize * dipStrength * volMul),
         reason: `DIP -${(dropFromHigh * 100).toFixed(2)}%`,
-        market: info.market,
         priority: 5,
       });
     }
-    
-    // 2. RSI oversold
     if (momentum.rsi < CONFIG.RSI_OVERSOLD && cash > baseSize * currentPrice) {
       signals.push({
         ticker,
-        action: 'BUY',
+        action: 'buy',
         amount: Math.floor(baseSize * 1.5),
-        price: currentPrice,
         reason: `RSI OVERSOLD (${momentum.rsi.toFixed(0)})`,
-        market: info.market,
         priority: 4,
       });
     }
-    
-    // 3. Build position if underweight
     if (deviation < -15 && cash > baseSize * currentPrice) {
       signals.push({
         ticker,
-        action: 'BUY',
+        action: 'buy',
         amount: Math.floor(baseSize * 2),
-        price: currentPrice,
         reason: `UNDERWEIGHT ${deviation.toFixed(0)}%`,
-        market: info.market,
         priority: 3,
       });
     }
-    
-    // 4. No position - initial build
-    if (positionAmount === 0 && cash > baseSize * currentPrice * 2) {
+    if (qty === 0 && cash > baseSize * currentPrice * 2) {
       signals.push({
         ticker,
-        action: 'BUY',
+        action: 'buy',
         amount: Math.floor(baseSize * 3),
-        price: currentPrice,
-        reason: `BUILD ${info.targetVekt}%`,
-        market: info.market,
+        reason: `BUILD ${info.targetWeight}%`,
         priority: 2,
       });
     }
-    
-    // ============ SELL SIGNALS ============
-    
-    // 1. Peak selling / profit taking
-    if (riseFromLow >= CONFIG.PEAK_THRESHOLD && positionAmount > 2) {
+
+    if (riseFromLow >= CONFIG.PEAK_THRESHOLD && qty > 2) {
       const peakStrength = Math.min(4, riseFromLow / CONFIG.PEAK_THRESHOLD);
-      const sellSize = Math.floor(Math.min(positionAmount * 0.3, baseSize * peakStrength));
-      
+      const sellSize = Math.floor(Math.min(qty * 0.3, baseSize * peakStrength));
       if (sellSize > 0) {
         signals.push({
           ticker,
-          action: 'SELL',
+          action: 'sell',
           amount: sellSize,
-          price: currentPrice,
           reason: `PEAK +${(riseFromLow * 100).toFixed(2)}%`,
-          market: info.market,
           priority: 5,
         });
       }
     }
-    
-    // 2. Profit taking
-    if (positionAmount > 0 && positionAvgPrice > 0) {
-      const profitPercent = (currentPrice - positionAvgPrice) / positionAvgPrice;
-      
-      if (profitPercent >= CONFIG.PROFIT_TAKE_THRESHOLD) {
-        const sellSize = Math.max(1, Math.floor(positionAmount * 0.4));
+    if (qty > 0 && avg > 0) {
+      const profitPct = (currentPrice - avg) / avg;
+      if (profitPct >= CONFIG.PROFIT_TAKE_THRESHOLD) {
         signals.push({
           ticker,
-          action: 'SELL',
-          amount: sellSize,
-          price: currentPrice,
-          reason: `PROFIT +${(profitPercent * 100).toFixed(2)}%`,
-          market: info.market,
+          action: 'sell',
+          amount: Math.max(1, Math.floor(qty * 0.4)),
+          reason: `PROFIT +${(profitPct * 100).toFixed(2)}%`,
           priority: 5,
         });
       }
-      
-      // Stop loss
-      if (profitPercent <= CONFIG.STOP_LOSS_THRESHOLD) {
-        const sellSize = Math.floor(positionAmount * 0.5);
+      if (profitPct <= CONFIG.STOP_LOSS_THRESHOLD) {
         signals.push({
           ticker,
-          action: 'SELL',
-          amount: sellSize,
-          price: currentPrice,
-          reason: `STOPLOSS ${(profitPercent * 100).toFixed(2)}%`,
-          market: info.market,
+          action: 'sell',
+          amount: Math.floor(qty * 0.5),
+          reason: `STOPLOSS ${(profitPct * 100).toFixed(2)}%`,
           priority: 6,
         });
       }
     }
-    
-    // 3. RSI overbought
-    if (momentum.rsi > CONFIG.RSI_OVERBOUGHT && positionAmount > 3) {
+    if (momentum.rsi > CONFIG.RSI_OVERBOUGHT && qty > 3) {
       signals.push({
         ticker,
-        action: 'SELL',
-        amount: Math.floor(positionAmount * 0.2),
-        price: currentPrice,
+        action: 'sell',
+        amount: Math.floor(qty * 0.2),
         reason: `RSI OVERBOUGHT (${momentum.rsi.toFixed(0)})`,
-        market: info.market,
         priority: 3,
       });
     }
-    
-    // 4. Overweight reduction
-    if (deviation > 25 && positionAmount > 5) {
+    if (deviation > 25 && qty > 5) {
       signals.push({
         ticker,
-        action: 'SELL',
-        amount: Math.floor(positionAmount * 0.15),
-        price: currentPrice,
+        action: 'sell',
+        amount: Math.floor(qty * 0.15),
         reason: `OVERWEIGHT +${deviation.toFixed(0)}%`,
-        market: info.market,
         priority: 2,
       });
     }
   }
-  
-  // Sort by priority and limit
+
   signals.sort((a, b) => b.priority - a.priority);
   return signals.slice(0, CONFIG.MAX_TRADES_PER_TICK);
 }
 
-// ============ INNGEST FUNCTIONS ============
+type SerializedUser = Awaited<ReturnType<typeof getAllConnectedUsers>>[number];
 
-// ============ PER-USER TICK ============
-// Run a single trading scan against ONE customer's Saxo account.
-// Refreshes their token, fetches their balance/positions, places trades.
-//
-// NOTE: Inngest serializes step output as JSON, so a user object loaded inside
-// `step.run('load-users')` arrives here with `expiresAt` as an ISO string
-// rather than a Date. We rehydrate before handing to refresh helpers.
-type SerializedUser = Omit<Awaited<ReturnType<typeof getAllConnectedUsers>>[number], 'expiresAt'> & {
-  expiresAt?: string | Date | null;
-};
-
-async function runUserTick(input: SerializedUser) {
-  const user: Awaited<ReturnType<typeof getAllConnectedUsers>>[number] = {
-    ...input,
-    expiresAt: input.expiresAt ? new Date(input.expiresAt) : null,
+async function runUserTick(user: SerializedUser) {
+  const creds: AlpacaCreds = {
+    apiKey: user.apiKey,
+    apiSecret: user.apiSecret,
+    env: user.environment,
   };
-  const fresh = await ensureFreshToken(user.clerkUserId, user);
-  if (!fresh) {
-    return { clerkUserId: user.clerkUserId, error: 'Token refresh failed — user must reconnect' };
+
+  const accountResult = await getAccount(creds);
+  if (!accountResult.success) {
+    return { clerkUserId: user.clerkUserId, error: 'Account fetch failed', details: accountResult.error };
   }
 
-  const accessToken = fresh.accessToken;
-  const env: SaxoEnv = user.environment;
-  const accountKey = user.accountKey;
-  const clientKey = user.clientKey || accountKey;
+  const account = accountResult.data;
+  const cash = parseFloat(account.cash) || 0;
+  const totalValue = parseFloat(account.equity) || parseFloat(account.portfolio_value) || user.startBalance;
 
-  const marketStatus = getMarketStatus();
+  const clockResult = await getClock(creds);
+  const marketOpen = clockResult.success ? clockResult.data.is_open : false;
 
-  const balanceResult = await getBalance(accessToken, accountKey, clientKey, env);
-  if (!balanceResult.success || !balanceResult.data) {
-    return { clerkUserId: user.clerkUserId, error: 'Balance fetch failed', details: balanceResult.error };
+  const positionsResult = await getPositions(creds);
+  const positionsMap = new Map<string, AlpacaPosition>();
+  if (positionsResult.success) {
+    for (const p of positionsResult.data) positionsMap.set(p.symbol.toUpperCase(), p);
   }
-
-  const positionsResult = await getPositions(accessToken, clientKey, env);
-  const positionsMap = new Map<string, SaxoPosition>();
-  if (positionsResult.success && positionsResult.data) {
-    for (const pos of positionsResult.data) {
-      if (pos.ticker) positionsMap.set(pos.ticker, pos);
-    }
-  }
-
-  const cash = balanceResult.data.cash;
-  const totalValue = balanceResult.data.total || user.startBalance;
-  const currentProfit = totalValue - user.startBalance;
 
   console.log(
-    `[APEX-INNGEST] user=${user.clerkUserId} env=${env} cash=${cash.toFixed(0)} total=${totalValue.toFixed(0)} P/L=${currentProfit.toFixed(0)}`
+    `[APEX-INNGEST] user=${user.clerkUserId} env=${user.environment} cash=${cash.toFixed(0)} total=${totalValue.toFixed(0)}`
   );
 
-  const signals = await generateSignals(accessToken, positionsMap, cash, totalValue, marketStatus, env);
+  const signals = await generateSignals(creds, positionsMap, cash, totalValue, marketOpen);
 
-  const executedTrades: Array<{
-    ticker: string;
-    action: string;
-    amount: number;
-    price: number;
-    value: number;
-    orderId?: string;
-    reason: string;
-  }> = [];
   let totalBought = 0;
   let totalSold = 0;
+  const executed: Array<{ ticker: string; action: string; amount: number; orderId?: string; reason: string }> = [];
+  let runningCash = cash;
 
   for (const signal of signals) {
-    const tradeValue = signal.amount * signal.price;
+    const priceResult = await getLatestPrice(creds, signal.ticker);
+    if (!priceResult.success || priceResult.data <= 0) continue;
+    const tradeValue = signal.amount * priceResult.data;
 
-    if (signal.action === 'BUY' && tradeValue > cash * 0.95) continue;
-    if (signal.action === 'SELL') {
-      const pos = positionsMap.get(signal.ticker);
-      if (!pos || pos.amount < signal.amount) continue;
+    if (signal.action === 'buy' && tradeValue > runningCash * 0.95) continue;
+    if (signal.action === 'sell') {
+      const pos = positionsMap.get(signal.ticker.toUpperCase());
+      const have = pos ? Math.abs(parseFloat(pos.qty)) : 0;
+      if (!pos || have < signal.amount) continue;
     }
 
-    const orderResult = await placeOrder(
-      accessToken,
-      {
-        ticker: signal.ticker,
-        action: signal.action,
-        quantity: signal.amount,
-        accountKey,
-      },
-      env
-    );
+    const orderRes = await placeOrder(creds, {
+      symbol: signal.ticker,
+      qty: signal.amount,
+      side: signal.action,
+      type: 'market',
+      time_in_force: 'day',
+    });
 
-    if (orderResult.success) {
-      if (signal.action === 'BUY') totalBought += tradeValue;
-      else totalSold += tradeValue;
-      executedTrades.push({
+    if (orderRes.success) {
+      if (signal.action === 'buy') {
+        totalBought += tradeValue;
+        runningCash -= tradeValue;
+      } else {
+        totalSold += tradeValue;
+        runningCash += tradeValue;
+      }
+      executed.push({
         ticker: signal.ticker,
         action: signal.action,
         amount: signal.amount,
-        price: signal.price,
-        value: tradeValue,
-        orderId: orderResult.orderId,
+        orderId: orderRes.data.id,
         reason: signal.reason,
       });
     }
@@ -495,28 +284,24 @@ async function runUserTick(input: SerializedUser) {
 
   return {
     clerkUserId: user.clerkUserId,
-    env,
-    marketStatus,
+    env: user.environment,
+    marketOpen,
     signals: signals.length,
-    executed: executedTrades.length,
+    executed: executed.length,
     totalBought,
     totalSold,
-    refreshed: fresh.refreshed,
   };
 }
 
-// Main trading tick — runs every minute, fans out to every connected user.
 export const apexQuantumTick = inngest.createFunction(
   {
     id: 'apex-quantum-tick',
-    name: 'APEX QUANTUM v7 Per-User Trading Tick',
+    name: 'APEX QUANTUM v8 Per-User Trading Tick (Alpaca)',
     retries: 3,
     triggers: [{ cron: '*/1 * * * *' }],
   },
   async ({ step }) => {
-    console.log('[APEX-INNGEST] ========== TICK START (multi-user) ==========');
-
-    startAutoPurge(CONFIG.PURGE_INTERVAL_SECONDS * 1000);
+    console.log('[APEX-INNGEST] ========== TICK START (Alpaca) ==========');
 
     const users = await step.run('load-users', async () => {
       const list = await getAllConnectedUsers();
@@ -525,10 +310,9 @@ export const apexQuantumTick = inngest.createFunction(
     });
 
     if (!users.length) {
-      return { version: 'APEX QUANTUM v7', mode: 'multi-user', users: 0 };
+      return { version: 'APEX QUANTUM v8', mode: 'multi-user', users: 0 };
     }
 
-    // Two passes per minute (~30s gap) so each user gets two ticks
     const results: unknown[] = [];
     for (let tick = 0; tick < 2; tick++) {
       const tickResults = await step.run(`tick-${tick}`, async () => {
@@ -536,16 +320,16 @@ export const apexQuantumTick = inngest.createFunction(
         const out: unknown[] = [];
         for (let i = 0; i < users.length; i += CONCURRENCY) {
           const batch = users.slice(i, i + CONCURRENCY);
-          const r = await Promise.all(batch.map((u) => runUserTick(u).catch((e) => ({
-            clerkUserId: u.clerkUserId,
-            error: String(e),
-          }))));
+          const r = await Promise.all(
+            batch.map((u) =>
+              runUserTick(u).catch((e) => ({ clerkUserId: u.clerkUserId, error: String(e) }))
+            )
+          );
           out.push(...r);
         }
         return out;
       });
       results.push(...tickResults);
-
       if (tick < 1) await step.sleep('wait-30s', '30s');
     }
 
@@ -555,18 +339,10 @@ export const apexQuantumTick = inngest.createFunction(
       return { purged: true };
     });
 
-    console.log('[APEX-INNGEST] ========== TICK COMPLETE ==========');
-
-    return {
-      version: 'APEX QUANTUM v7',
-      mode: 'multi-user',
-      users: users.length,
-      results,
-    };
+    return { version: 'APEX QUANTUM v8', mode: 'multi-user', users: users.length, results };
   }
 );
 
-// Meta-cognition function - self-analysis every 30 seconds
 export const apexMetaCognition = inngest.createFunction(
   {
     id: 'apex-meta-cognition',
@@ -575,28 +351,29 @@ export const apexMetaCognition = inngest.createFunction(
     triggers: [{ event: 'apex/meta-cognition' }],
   },
   async ({ event, step }) => {
-    const { portfolioValue, pnl, openPositions } = event.data;
-    
-    console.log('[APEX-META] Running meta-cognition analysis...');
-    
+    const { portfolioValue, pnl, openPositions } = event.data as {
+      portfolioValue: number;
+      pnl: number;
+      openPositions: number;
+    };
+
     const analysis = await step.run('analyze', async () => {
-      const pnlPercent = (pnl / CONFIG.BASE_TRADING_CAPITAL) * 100;
-      
-      // Determine strategy adjustments
+      const baseline = portfolioValue - pnl;
+      const pnlPercent = baseline > 0 ? (pnl / baseline) * 100 : 0;
+
       let strategyAdjustment = 'MAINTAIN';
       let message = '';
-      
       if (pnlPercent > 5) {
         strategyAdjustment = 'REDUCE_RISK';
-        message = 'Strong gains - consider taking profits and reducing position sizes';
+        message = 'Strong gains — consider taking profits and reducing position sizes';
       } else if (pnlPercent < -3) {
         strategyAdjustment = 'DEFENSIVE';
-        message = 'Losses detected - switching to defensive mode with tighter stops';
+        message = 'Losses detected — switching to defensive mode with tighter stops';
       } else if (pnlPercent > 2) {
         strategyAdjustment = 'AGGRESSIVE';
-        message = 'Good performance - can increase position sizes slightly';
+        message = 'Good performance — can increase position sizes slightly';
       }
-      
+
       return {
         portfolioValue,
         pnl,
@@ -607,12 +384,10 @@ export const apexMetaCognition = inngest.createFunction(
         timestamp: new Date().toISOString(),
       };
     });
-    
+
     console.log(`[APEX-META] Strategy: ${analysis.strategyAdjustment} | P/L: ${analysis.pnlPercent.toFixed(2)}%`);
-    
     return analysis;
   }
 );
 
-// Export all functions
 export const functions = [apexQuantumTick, apexMetaCognition];

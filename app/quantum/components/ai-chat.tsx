@@ -81,7 +81,7 @@ Basert pa dagens momentum og asymmetrisk scoring:
   },
   {
     trigger: "utfor",
-    response: `**ORDRE SENDT TIL SAXO** ✅
+    response: `**ORDRE SENDT TIL ALPACA** ✅
 
 Folgende handler er plassert:
 
@@ -92,7 +92,7 @@ Folgende handler er plassert:
 | ABSI | SELG | 100 | $2.98 | FYLT |
 
 **Total transaksjonskostnad:** $47.50
-**Ny portefoljeverdi:** $1,310,235 NOK
+**Ny portefoljeverdi:** $1,310,235
 
 *Reallokering komplett. Portefoljen er na optimalisert for maksimal asymmetrisk avkastning.*`
   },
@@ -108,12 +108,12 @@ const initialMessages: Message[] = [
   {
     id: "1",
     role: "assistant",
-    content: `**APEX QUANTUM AI TRADER v6.1** 🧠
+    content: `**APEX QUANTUM AI TRADER v8** 🧠
 
 Jeg er din autonome handelspartner. Jeg soker sannhet i markedene - ikke hopium.
 
 **STATUS:**
-- Portefolje: $1,296,010 NOK (+1.48% i dag)
+- Portefolje: $1,296,010 (+1.48% i dag)
 - Aktive posisjoner: 6
 - Risikoniwa: MODERAT-HOY
 

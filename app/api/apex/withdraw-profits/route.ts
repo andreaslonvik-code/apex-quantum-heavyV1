@@ -1,265 +1,159 @@
-// APEX QUANTUM - Withdraw Profits API
-// Sells enough positions to extract profit and continue trading with starting capital
-import { NextRequest, NextResponse } from 'next/server';
+// APEX QUANTUM — Withdraw Profits (Alpaca).
+// Sells enough open positions to extract profit above the user's startBalance.
+import { NextResponse } from 'next/server';
 import { getRequestCreds } from '@/lib/get-request-creds';
-import { getSaxoBase, type SaxoEnv } from '@/lib/saxo';
+import { getAccount, getPositions, placeOrder, type AlpacaCreds } from '@/lib/alpaca';
 
-
-interface Position {
-  PositionId: string;
-  PositionBase: {
-    AccountId: string;
-    Amount: number;
-    AssetType: string;
-    CanBeClosed: boolean;
-  };
-  PositionView: {
-    CurrentPrice: number;
-    MarketValue: number;
-    ProfitLossOnTrade: number;
-    Exposure: number;
-  };
-  DisplayAndFormat?: {
-    Symbol: string;
-    Description: string;
-  };
-}
-
-async function getAccountValue(accessToken: string, accountKey: string, env: SaxoEnv): Promise<{
-  totalValue: number;
-  cashBalance: number;
-  positionsValue: number;
-}> {
-  const SAXO_API_URL = getSaxoBase(env);
-  const balanceRes = await fetch(
-    `${SAXO_API_URL}/port/v1/balances?AccountKey=${accountKey}&ClientKey=${accountKey}`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
-  );
-  
-  if (!balanceRes.ok) {
-    throw new Error('Failed to fetch balance');
+export async function POST() {
+  const userCreds = await getRequestCreds();
+  if (!userCreds) {
+    return NextResponse.json({ error: 'Ikke tilkoblet Alpaca' }, { status: 401 });
   }
-  
-  const balance = await balanceRes.json();
-  
-  return {
-    totalValue: balance.TotalValue || 0,
-    cashBalance: balance.CashBalance || 0,
-    positionsValue: balance.UnrealizedPositionsValue || 0,
+
+  const creds: AlpacaCreds = {
+    apiKey: userCreds.apiKey,
+    apiSecret: userCreds.apiSecret,
+    env: userCreds.environment,
   };
-}
-
-async function getPositions(accessToken: string, clientKey: string, env: SaxoEnv): Promise<Position[]> {
-  const SAXO_API_URL = getSaxoBase(env);
-  const res = await fetch(
-    `${SAXO_API_URL}/port/v1/positions?ClientKey=${clientKey}&FieldGroups=PositionBase,PositionView,DisplayAndFormat`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
-  );
-  
-  if (!res.ok) {
-    return [];
-  }
-  
-  const data = await res.json();
-  return data.Data || [];
-}
-
-async function sellPosition(
-  accessToken: string,
-  accountKey: string,
-  position: Position,
-  amount: number,
-  env: SaxoEnv
-): Promise<{ success: boolean; orderId?: string; error?: string }> {
-  const SAXO_API_URL = getSaxoBase(env);
-  const orderData = {
-    AccountKey: accountKey,
-    Amount: amount,
-    AssetType: position.PositionBase.AssetType,
-    BuySell: 'Sell',
-    OrderType: 'Market',
-    OrderDuration: { DurationType: 'DayOrder' },
-    Uic: parseInt(position.PositionId.split('-')[0]) || 0,
-    ManualOrder: false,
-  };
-  
-  // Get UIC from position
-  const posRes = await fetch(
-    `${SAXO_API_URL}/port/v1/positions/${position.PositionId}?ClientKey=${accountKey}&FieldGroups=PositionBase,PositionView,DisplayAndFormat,ExchangeInfo`,
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
-  );
-  
-  if (posRes.ok) {
-    const posData = await posRes.json();
-    if (posData.PositionBase?.Uic) {
-      orderData.Uic = posData.PositionBase.Uic;
-    }
-  }
-  
-  const orderRes = await fetch(`${SAXO_API_URL}/trade/v2/orders`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${accessToken}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(orderData),
-  });
-  
-  if (!orderRes.ok) {
-    const errorData = await orderRes.json().catch(() => ({}));
-    return { 
-      success: false, 
-      error: errorData.ErrorInfo?.Message || `HTTP ${orderRes.status}` 
-    };
-  }
-  
-  const result = await orderRes.json();
-  return { success: true, orderId: result.OrderId };
-}
-
-export async function POST(request: NextRequest) {
-  console.log(`[APEX] ====== WITHDRAW PROFITS INITIATED ======`);
-
-  const creds = await getRequestCreds();
-  if (!creds) {
-    return NextResponse.json({ error: 'Ikke tilkoblet Saxo Bank' }, { status: 401 });
-  }
-  const { accessToken, accountKey, clientKey, environment, startBalance: BASE_TRADING_CAPITAL } = creds;
 
   try {
-    // Get current account value
-    const accountValue = await getAccountValue(accessToken, accountKey, environment);
-    const profit = accountValue.totalValue - BASE_TRADING_CAPITAL;
+    const accountRes = await getAccount(creds);
+    if (!accountRes.success) {
+      return NextResponse.json({ error: accountRes.error }, { status: 500 });
+    }
 
-    console.log(`[APEX] Total value: ${accountValue.totalValue.toLocaleString()} kr`);
-    console.log(`[APEX] Starting capital: ${BASE_TRADING_CAPITAL.toLocaleString()} kr`);
-    console.log(`[APEX] Profit to withdraw: ${profit.toLocaleString()} kr`);
+    const totalValue = parseFloat(accountRes.data.equity) || 0;
+    const baseCapital = userCreds.startBalance || totalValue;
+    const profit = totalValue - baseCapital;
 
     if (profit <= 0) {
       return NextResponse.json({
         success: false,
-        message: 'Ingen avkastning å hente ut. Kontoverdi er under eller lik startkapital.',
-        currentValue: accountValue.totalValue,
-        startingCapital: BASE_TRADING_CAPITAL,
-        profit: profit,
+        message:
+          'Ingen avkastning å hente ut. Kontoverdi er under eller lik startkapital.',
+        currentValue: totalValue,
+        startingCapital: baseCapital,
+        profit,
       });
     }
-    
-    // Get all positions
-    const positions = await getPositions(accessToken, clientKey || accountKey, environment);
-    
+
+    const positionsRes = await getPositions(creds);
+    if (!positionsRes.success) {
+      return NextResponse.json(
+        { error: 'Kunne ikke hente posisjoner', details: positionsRes.error },
+        { status: 500 }
+      );
+    }
+
+    const positions = [...positionsRes.data].sort(
+      (a, b) =>
+        Math.abs(parseFloat(b.market_value) || 0) - Math.abs(parseFloat(a.market_value) || 0)
+    );
+
     if (positions.length === 0) {
       return NextResponse.json({
         success: false,
         message: 'Ingen posisjoner å selge. Avkastningen er allerede i kontanter.',
-        currentValue: accountValue.totalValue,
-        cashBalance: accountValue.cashBalance,
-        profit: profit,
+        currentValue: totalValue,
+        cashBalance: parseFloat(accountRes.data.cash) || 0,
+        profit,
       });
     }
-    
-    // Calculate how much we need to sell to extract profit
+
     let amountToSell = profit;
-    const sellOrders: { symbol: string; amount: number; value: number; success: boolean; error?: string }[] = [];
-    
-    // Sort positions by value (largest first)
-    const sortedPositions = positions.sort((a, b) => 
-      (b.PositionView?.MarketValue || 0) - (a.PositionView?.MarketValue || 0)
-    );
-    
-    for (const position of sortedPositions) {
+    const sellOrders: Array<{
+      symbol: string;
+      amount: number;
+      value: number;
+      success: boolean;
+      error?: string;
+    }> = [];
+
+    for (const pos of positions) {
       if (amountToSell <= 0) break;
-      
-      const positionValue = position.PositionView?.MarketValue || 0;
-      const positionAmount = position.PositionBase?.Amount || 0;
-      const currentPrice = position.PositionView?.CurrentPrice || 0;
-      const symbol = position.DisplayAndFormat?.Symbol || 'Unknown';
-      
-      if (positionAmount <= 0 || currentPrice <= 0) continue;
-      
-      // Calculate how many shares to sell
+      const positionValue = Math.abs(parseFloat(pos.market_value) || 0);
+      const positionQty = Math.abs(parseFloat(pos.qty) || 0);
+      const currentPrice = parseFloat(pos.current_price) || 0;
+      if (positionQty <= 0 || currentPrice <= 0) continue;
+
       let sharesToSell: number;
-      
       if (positionValue <= amountToSell) {
-        // Sell entire position
-        sharesToSell = positionAmount;
+        sharesToSell = positionQty;
       } else {
-        // Sell partial position
         sharesToSell = Math.ceil(amountToSell / currentPrice);
-        sharesToSell = Math.min(sharesToSell, positionAmount);
+        sharesToSell = Math.min(sharesToSell, positionQty);
       }
-      
-      if (sharesToSell > 0) {
-        const sellValue = sharesToSell * currentPrice;
-        
-        console.log(`[APEX] Selling ${sharesToSell} ${symbol} @ ${currentPrice.toFixed(2)} = ${sellValue.toFixed(0)} kr`);
-        
-        const result = await sellPosition(accessToken, accountKey, position, sharesToSell, environment);
-        
-        sellOrders.push({
-          symbol,
-          amount: sharesToSell,
-          value: sellValue,
-          success: result.success,
-          error: result.error,
-        });
-        
-        if (result.success) {
-          amountToSell -= sellValue;
-        }
-      }
+
+      if (sharesToSell <= 0) continue;
+      const sellValue = sharesToSell * currentPrice;
+
+      const orderRes = await placeOrder(creds, {
+        symbol: pos.symbol,
+        qty: sharesToSell,
+        side: 'sell',
+        type: 'market',
+        time_in_force: 'day',
+      });
+
+      sellOrders.push({
+        symbol: pos.symbol,
+        amount: sharesToSell,
+        value: sellValue,
+        success: orderRes.success,
+        error: orderRes.success ? undefined : orderRes.error,
+      });
+
+      if (orderRes.success) amountToSell -= sellValue;
     }
-    
-    const successfulSells = sellOrders.filter(o => o.success);
-    const totalSold = successfulSells.reduce((sum, o) => sum + o.value, 0);
-    
+
+    const successful = sellOrders.filter((o) => o.success);
+    const totalSold = successful.reduce((s, o) => s + o.value, 0);
+
     return NextResponse.json({
       success: true,
-      message: `Hentet ut ${totalSold.toLocaleString()} kr i avkastning`,
-      profit: profit,
-      totalSold: totalSold,
+      message: `Hentet ut $${totalSold.toLocaleString('en-US', { maximumFractionDigits: 0 })} i avkastning`,
+      profit,
+      totalSold,
       remainingProfit: profit - totalSold,
       orders: sellOrders,
-      newTargetCapital: BASE_TRADING_CAPITAL,
+      newTargetCapital: baseCapital,
     });
-    
-  } catch (error) {
-    console.error('[APEX] Withdraw profits error:', error);
+  } catch (err) {
+    console.error('[withdraw-profits] error:', err);
     return NextResponse.json(
-      { error: 'Kunne ikke hente ut avkastning', details: String(error) },
+      { error: 'Kunne ikke hente ut avkastning', details: String(err) },
       { status: 500 }
     );
   }
 }
 
 export async function GET() {
-  const creds = await getRequestCreds();
-  if (!creds) {
+  const userCreds = await getRequestCreds();
+  if (!userCreds) {
     return NextResponse.json({ error: 'Ikke tilkoblet' }, { status: 401 });
   }
-  const { accessToken, accountKey, environment, startBalance } = creds;
 
   try {
-    const accountValue = await getAccountValue(accessToken, accountKey, environment);
-    const profit = accountValue.totalValue - startBalance;
+    const result = await getAccount({
+      apiKey: userCreds.apiKey,
+      apiSecret: userCreds.apiSecret,
+      env: userCreds.environment,
+    });
+    if (!result.success) {
+      return NextResponse.json({ error: result.error }, { status: 500 });
+    }
+    const totalValue = parseFloat(result.data.equity) || 0;
+    const baseCapital = userCreds.startBalance || totalValue;
+    const profit = totalValue - baseCapital;
 
     return NextResponse.json({
-      totalValue: accountValue.totalValue,
-      startingCapital: startBalance,
-      profit: profit,
-      profitPercent: (profit / startBalance) * 100,
+      totalValue,
+      startingCapital: baseCapital,
+      profit,
+      profitPercent: baseCapital > 0 ? (profit / baseCapital) * 100 : 0,
       canWithdraw: profit > 0,
     });
   } catch {
-    return NextResponse.json(
-      { error: 'Kunne ikke hente kontostatus' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Kunne ikke hente kontostatus' }, { status: 500 });
   }
 }

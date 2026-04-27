@@ -7,20 +7,23 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// Per-user Saxo Bank credentials
-// One row per Clerk user. Upserted on every successful OAuth connect.
-model SaxoToken {
-  id           String    @id @default(cuid())
-  clerkUserId  String    @unique
-  accessToken  String    @db.Text
-  refreshToken String?   @db.Text
-  accountKey   String
-  clientKey    String
-  accountId    String
-  environment  String    @default("sim") // "sim" | "live"
-  expiresAt    DateTime?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+// Per-user Alpaca Trading credentials.
+// One row per Clerk user. Inserted on /api/apex/alpaca/connect.
+//
+// API key + secret are encrypted at rest with AES-256-GCM (lib/crypto.ts).
+// Stored format per encrypted column: "ivHex:tagHex:cipherHex".
+// Decryption requires server-only ENCRYPTION_KEY env var.
+model AlpacaAccount {
+  id              String    @id @default(cuid())
+  clerkUserId     String    @unique
+  apiKeyEnc       String    @db.Text   // encrypted Alpaca API Key ID
+  apiSecretEnc    String    @db.Text   // encrypted Alpaca API Secret
+  environment     String    @default("paper") // "paper" | "live"
+  accountId       String?   // Alpaca account number, populated on connect
+  accountStatus   String?   // ACTIVE | ACCOUNT_UPDATED | etc.
+  startBalance    Decimal   @default(0) @db.Decimal(18, 2)  // baseline equity at first connect
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
   @@index([clerkUserId])
 }

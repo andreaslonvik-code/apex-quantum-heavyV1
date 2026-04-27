@@ -10,25 +10,29 @@ export function BrokerConnect({ language }: BrokerConnectProps) {
   const router = useRouter();
   const content = {
     no: {
-      title: 'Koble til Saxo Bank',
-      subtitle: 'Koble din Saxo-konto til Apex Quantum for autonom handel',
-      description: 'Apex Quantum bruker Saxo Banks offisielle OAuth-pålogging — du logger inn direkte hos Saxo og gir Apex Quantum tilgang til å handle på din konto. Vi ser aldri passordet ditt, og du kan trekke tilbake tilgangen når som helst fra Saxo-kontoen din.',
+      title: 'Koble til Alpaca',
+      subtitle: 'Lim inn dine Alpaca API-nøkler og start autonom handel',
+      description:
+        'Apex Quantum bruker Alpacas offisielle Trading API. Du kobler til ved å lime inn dine egne API-nøkler — Apex Quantum lagrer dem kryptert (AES-256-GCM) og bruker dem kun til handel på din konto. Du kan trekke tilbake tilgangen når som helst ved å slette nøkkelen i Alpaca-dashbordet.',
       stepsTitle: 'Slik gjør du det',
       steps: [
         {
           number: '1',
-          title: 'Trykk "Koble til Saxo Bank" nedenfor',
-          description: 'Du blir sendt til Saxos sikre påloggingsside.',
+          title: 'Opprett en Alpaca-konto',
+          description:
+            'Registrer deg på app.alpaca.markets. Du kan velge Paper Trading (virtuelle penger) eller Live (ekte penger).',
         },
         {
           number: '2',
-          title: 'Logg inn med din Saxo-bruker',
-          description: 'Bruk samme brukernavn og passord som du bruker på SaxoTraderGO.',
+          title: 'Generer API-nøkler',
+          description:
+            'Gå til "Your API Keys" i Alpaca-dashbordet og opprett et nytt nøkkelpar (Key ID + Secret).',
         },
         {
           number: '3',
-          title: 'Godkjenn tilgang for Apex Quantum',
-          description: 'Saxo viser deg nøyaktig hvilke rettigheter Apex Quantum får (lese portefølje, sende ordrer).',
+          title: 'Lim inn nøklene i Apex Quantum',
+          description:
+            'Velg Paper eller Live, lim inn nøklene, og trykk "Koble til". Vi validerer mot Alpaca og lagrer kryptert.',
         },
         {
           number: '4',
@@ -38,46 +42,50 @@ export function BrokerConnect({ language }: BrokerConnectProps) {
       ],
       benefitsTitle: 'Når koblingen er ferdig, vil Apex Quantum kunne:',
       benefits: [
-        'Se din portefølje i sanntid',
-        'Sende kjøps- og salgsordrer autonomt',
+        'Se din portefølje og kontantbalanse i sanntid',
+        'Sende kjøps- og salgsordrer autonomt mot Alpaca',
         'Følge din risikoprofil og drawdown-grenser',
       ],
-      connect: 'Koble til Saxo Bank',
+      connect: 'Koble til Alpaca',
     },
     en: {
-      title: 'Connect to Saxo Bank',
-      subtitle: 'Connect your Saxo account to Apex Quantum for autonomous trading',
-      description: 'Apex Quantum uses Saxo Bank\'s official OAuth login — you sign in directly at Saxo and grant Apex Quantum permission to trade on your account. We never see your password, and you can revoke access at any time from your Saxo account.',
+      title: 'Connect to Alpaca',
+      subtitle: 'Paste your Alpaca API keys and start autonomous trading',
+      description:
+        'Apex Quantum uses the official Alpaca Trading API. You connect by pasting your own API keys — Apex Quantum stores them encrypted (AES-256-GCM) and only uses them to trade on your account. You can revoke access at any time by deleting the key inside the Alpaca dashboard.',
       stepsTitle: 'How it works',
       steps: [
         {
           number: '1',
-          title: 'Click "Connect to Saxo Bank" below',
-          description: 'You\'ll be redirected to Saxo\'s secure login page.',
+          title: 'Create an Alpaca account',
+          description:
+            'Sign up at app.alpaca.markets. You can choose Paper Trading (virtual funds) or Live (real money).',
         },
         {
           number: '2',
-          title: 'Sign in with your Saxo credentials',
-          description: 'Use the same username and password you use for SaxoTraderGO.',
+          title: 'Generate API keys',
+          description:
+            'Go to "Your API Keys" inside the Alpaca dashboard and create a new key pair (Key ID + Secret).',
         },
         {
           number: '3',
-          title: 'Approve access for Apex Quantum',
-          description: 'Saxo shows you exactly which permissions Apex Quantum receives (read portfolio, place orders).',
+          title: 'Paste the keys into Apex Quantum',
+          description:
+            'Choose Paper or Live, paste the keys, and click "Connect". We validate against Alpaca and store them encrypted.',
         },
         {
           number: '4',
           title: 'Apex Quantum starts autonomous trading',
-          description: 'You\'re returned to the dashboard and the 24/7 trader begins immediately.',
+          description: "You're returned to the dashboard and the 24/7 trader begins immediately.",
         },
       ],
       benefitsTitle: 'Once connected, Apex Quantum will be able to:',
       benefits: [
-        'View your portfolio in real-time',
-        'Send buy and sell orders autonomously',
+        'View your portfolio and cash balance in real-time',
+        'Send buy and sell orders autonomously via Alpaca',
         'Follow your risk profile and drawdown limits',
       ],
-      connect: 'Connect to Saxo Bank',
+      connect: 'Connect to Alpaca',
     },
   };
 
@@ -133,7 +141,7 @@ export function BrokerConnect({ language }: BrokerConnectProps) {
         <div className="bg-card border border-border rounded-2xl p-8 text-center">
           <button
             type="button"
-            onClick={() => router.push('/saxo-simulation')}
+            onClick={() => router.push('/connect-alpaca')}
             className="w-full py-4 px-6 bg-accent text-accent-foreground font-semibold rounded-lg hover:bg-accent/90 transition-colors text-lg"
           >
             {t.connect}

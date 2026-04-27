@@ -5,7 +5,7 @@ import { AlertCircle, MessageSquare } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 /**
- * APEX QUANTUM v6.1 - Legal Disclaimers & Risk Warning
+ * APEX QUANTUM v8 — Legal Disclaimers & Risk Warning (Alpaca)
  */
 export function LegalDisclaimers() {
   const [accepted, setAccepted] = useState(false);
@@ -24,7 +24,7 @@ export function LegalDisclaimers() {
             <div>
               <h1 className="text-2xl font-bold text-white">Risk Disclaimer</h1>
               <p className="text-sm text-zinc-400 mt-1">
-                APEX QUANTUM v6.1 | Please read carefully before using
+                APEX QUANTUM v8 | Please read carefully before using
               </p>
             </div>
           </div>
@@ -66,7 +66,7 @@ export function LegalDisclaimers() {
                   </h2>
                   <ul className="text-zinc-300 space-y-1 ml-4 list-disc">
                     <li>Technology failures or connectivity issues may prevent order execution</li>
-                    <li>API failures from brokers (Saxo Bank) could delay or cancel orders</li>
+                    <li>API failures from brokers (Alpaca) could delay or cancel orders</li>
                     <li>Market gaps can cause stop-loss orders to execute at worse prices</li>
                     <li>AI algorithms may malfunction or generate incorrect signals</li>
                     <li>Regulatory changes may limit trading capabilities</li>

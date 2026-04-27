@@ -4,7 +4,7 @@ import { CheckCircle, AlertCircle } from 'lucide-react';
 
 interface Trade {
   ticker: string;
-  saxoSymbol?: string;
+  symbol?: string;
   action: 'BUY' | 'SELL';
   amount: number;
   price: number;
@@ -100,7 +100,7 @@ export function TradeLog({ trades, limit = 10, isLoading }: TradeLogProps) {
                   </span>
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  {trade.amount} × {trade.price.toFixed(2)} kr = {trade.value.toLocaleString('nb-NO', { maximumFractionDigits: 0 })} kr
+                  {trade.amount} × ${trade.price.toFixed(2)} = ${trade.value.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                 </p>
                 {trade.reason && (
                   <p className="text-xs text-muted-foreground mt-1">{trade.reason}</p>
@@ -109,7 +109,7 @@ export function TradeLog({ trades, limit = 10, isLoading }: TradeLogProps) {
             </div>
 
             <div className="text-right text-xs text-muted-foreground">
-              {trade.timestamp && new Date(trade.timestamp).toLocaleTimeString('nb-NO')}
+              {trade.timestamp && new Date(trade.timestamp).toLocaleTimeString('en-US')}
             </div>
           </div>
         ))}

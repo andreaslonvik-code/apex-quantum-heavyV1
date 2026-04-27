@@ -35,16 +35,9 @@ export function Navbar() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleConnect = async () => {
-    setIsConnecting(true);
-    // Simulate OAuth flow
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    setIsConnecting(false);
-    setIsConnected(true);
+  const handleConnect = () => {
     setShowConnectModal(false);
-    toast.success("Saxo-konto tilkoblet!", {
-      description: "Du er nå klar til å handle med APEX QUANTUM.",
-    });
+    window.location.href = "/connect-alpaca";
   };
 
   return (
@@ -77,7 +70,7 @@ export function Navbar() {
                 <span className="text-white">QUANTUM</span>
               </h1>
               <p className="text-[10px] text-zinc-500 tracking-widest uppercase">
-                v6.1 Global 24/7
+                v8 · Alpaca · 24/7
               </p>
             </div>
           </div>
@@ -123,7 +116,7 @@ export function Navbar() {
                 className="cyber-button bg-gradient-to-r from-[#00f0ff] to-[#00a0ff] hover:from-[#00d0ff] hover:to-[#0080ff] text-black font-semibold px-5 py-2 rounded-full neon-cyan-glow"
               >
                 <Zap className="w-4 h-4 mr-2" />
-                {isConnected ? "Saxo Tilkoblet" : "Koble Saxo-konto"}
+                {isConnected ? "Alpaca Tilkoblet" : "Koble Alpaca-konto"}
               </Button>
 
               <Button
@@ -143,28 +136,28 @@ export function Navbar() {
         <DialogContent className="glass-card border-[#00f0ff]/20 max-w-md">
           <DialogHeader>
             <DialogTitle className="text-xl neon-text-cyan">
-              Koble til Saxo Bank
+              Koble til Alpaca
             </DialogTitle>
             <DialogDescription className="text-zinc-400">
-              Autoriser APEX QUANTUM til å handle på dine vegne via Saxo OpenAPI.
+              Lim inn dine Alpaca API-nøkler for å la APEX QUANTUM handle på dine vegne.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 pt-4">
             <div className="p-4 rounded-lg bg-zinc-900/50 border border-zinc-800">
               <div className="flex items-center gap-3 mb-3">
-                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-blue-600 to-blue-800 flex items-center justify-center">
-                  <span className="text-white font-bold text-lg">S</span>
+                <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-amber-600 to-amber-800 flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">A</span>
                 </div>
                 <div>
-                  <h3 className="font-semibold">Saxo Bank OAuth</h3>
-                  <p className="text-xs text-zinc-500">Sikker tilkobling</p>
+                  <h3 className="font-semibold">Alpaca API Keys</h3>
+                  <p className="text-xs text-zinc-500">Krypteres med AES-256-GCM</p>
                 </div>
               </div>
               <ul className="text-sm text-zinc-400 space-y-1">
-                <li>• Les kontobalanse og posisjoner</li>
-                <li>• Utføre kjøp og salg</li>
-                <li>• Tilgang til markedsdata</li>
+                <li>• Velg Paper eller Live Trading</li>
+                <li>• Lim inn API Key ID + Secret</li>
+                <li>• Vi validerer mot Alpaca og lagrer kryptert</li>
               </ul>
             </div>
 
@@ -173,16 +166,7 @@ export function Navbar() {
               disabled={isConnecting}
               className="w-full cyber-button bg-gradient-to-r from-[#00f0ff] to-[#ff00aa] hover:opacity-90 text-white font-semibold py-3 rounded-lg"
             >
-              {isConnecting ? (
-                <motion.div
-                  animate={{ rotate: 360 }}
-                  transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
-                >
-                  <Atom className="w-5 h-5" />
-                </motion.div>
-              ) : (
-                "Autoriser tilkobling"
-              )}
+              Gå til tilkoblingssiden
             </Button>
 
             <p className="text-xs text-center text-zinc-500">

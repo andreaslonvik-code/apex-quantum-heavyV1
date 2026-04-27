@@ -4,7 +4,7 @@ import { TrendingUp, TrendingDown } from 'lucide-react';
 
 interface Position {
   ticker: string;
-  saxoSymbol?: string;
+  symbol?: string;
   navn: string;
   vekt: number;
   aksjon: string;
@@ -87,11 +87,11 @@ export function OpenPositions({ positions, isLoading }: OpenPositionsProps) {
                   <div className="text-xs text-muted-foreground">{pos.navn}</div>
                 </td>
                 <td className="text-right py-3 px-3 font-medium">{pos.antall.toLocaleString()}</td>
-                <td className="text-right py-3 px-3">{(pos.avgPrice || 0).toFixed(2)} kr</td>
+                <td className="text-right py-3 px-3">${(pos.avgPrice || 0).toFixed(2)}</td>
                 <td className="text-right py-3 px-3 font-medium">
-                  {((pos.currentPrice || pos.avgPrice || 0) * pos.antall).toLocaleString('nb-NO', {
-                    maximumFractionDigits: 0,
-                  })} kr
+                  ${((pos.currentPrice || pos.avgPrice || 0) * pos.antall).toLocaleString('en-US', {
+                    maximumFractionDigits: 2,
+                  })}
                 </td>
                 <td className={`text-right py-3 px-3 font-semibold ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
                   <div className="flex items-center justify-end gap-1">
@@ -100,7 +100,7 @@ export function OpenPositions({ positions, isLoading }: OpenPositionsProps) {
                     ) : (
                       <TrendingDown className="w-4 h-4" />
                     )}
-                    {isPositive ? '+' : ''}{pnl.toLocaleString('nb-NO', { maximumFractionDigits: 0 })} kr
+                    {isPositive ? '+' : ''}${pnl.toLocaleString('en-US', { maximumFractionDigits: 2 })}
                   </div>
                 </td>
                 <td className={`text-right py-3 px-3 font-semibold ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>

@@ -1,51 +1,42 @@
 /**
- * Resolve Saxo credentials for the current request.
- * Priority: Clerk DB record → HttpOnly cookies (same-device fallback).
- * All trading API routes call this instead of reading cookies directly.
+ * Resolve Alpaca credentials for the current request, scoped to the Clerk user.
+ * All trading API routes call this instead of reading creds directly.
+ *
+ * Alpaca uses static API keys (no OAuth refresh dance), so the only source
+ * of truth is the database record per Clerk user.
  */
 import { auth } from '@clerk/nextjs/server';
-import { cookies } from 'next/headers';
-import { getUserSaxoCreds } from './user-saxo';
+import { getUserAlpacaCreds } from './user-alpaca';
+import type { AlpacaEnv } from './alpaca';
 
 export interface RequestCreds {
-  accessToken: string;
-  accountKey: string;
-  clientKey: string;
-  accountId: string;
-  environment: 'sim' | 'live';
+  apiKey: string;
+  apiSecret: string;
+  environment: AlpacaEnv;
+  accountId: string | null;
   startBalance: number;
-  source: 'db' | 'cookie';
 }
 
+/**
+ * Returns the authenticated user's Alpaca creds, or null if not connected.
+ * Caller is responsible for returning 401 to the client when this is null.
+ */
 export async function getRequestCreds(): Promise<RequestCreds | null> {
-  // 1. Clerk-authenticated user → read from DB
   try {
     const { userId } = await auth();
-    if (userId) {
-      const creds = await getUserSaxoCreds(userId);
-      if (creds) {
-        return { ...creds, source: 'db' };
-      }
-    }
+    if (!userId) return null;
+
+    const creds = await getUserAlpacaCreds(userId);
+    if (!creds) return null;
+
+    return {
+      apiKey: creds.apiKey,
+      apiSecret: creds.apiSecret,
+      environment: creds.environment,
+      accountId: creds.accountId,
+      startBalance: creds.startBalance,
+    };
   } catch {
-    // auth() may throw in edge cases — fall through to cookies
+    return null;
   }
-
-  // 2. Cookie fallback (same device, unauthenticated or during OAuth handshake)
-  const cookieStore = await cookies();
-  const accessToken = cookieStore.get('apex_saxo_token')?.value;
-  const accountKey = cookieStore.get('apex_saxo_account_key')?.value;
-  const clientKey = cookieStore.get('apex_saxo_client_key')?.value;
-
-  if (!accessToken || !accountKey) return null;
-
-  return {
-    accessToken,
-    accountKey,
-    clientKey: clientKey || accountKey,
-    accountId: accountKey,
-    environment: (process.env.SAXO_ENV as 'sim' | 'live') || 'sim',
-    startBalance: Number(process.env.START_BALANCE) || 1000000,
-    source: 'cookie',
-  };
 }
