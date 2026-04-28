@@ -81,6 +81,21 @@ export interface AlpacaOrderRequest {
   stop_price?: number;
   client_order_id?: string;
   extended_hours?: boolean;
+  // Bracket-order support (v8): wraps a child take-profit + stop-loss around
+  // the entry. Alpaca rejects the order if these are present without
+  // order_class === 'bracket'.
+  order_class?: 'simple' | 'bracket' | 'oco' | 'oto';
+  take_profit?: { limit_price: number };
+  stop_loss?: { stop_price: number; limit_price?: number };
+}
+
+export interface AlpacaBar {
+  t: string; // RFC3339 timestamp
+  o: number;
+  h: number;
+  l: number;
+  c: number;
+  v: number;
 }
 
 export interface AlpacaOrder {
@@ -323,6 +338,22 @@ export function cancelAllOrders(creds: AlpacaCreds): Promise<AlpacaResult<unknow
   return alpacaFetch(`${getTradingBase(creds.env)}/orders`, creds, { method: 'DELETE' });
 }
 
+/**
+ * Replace (modify) an existing order. Used by the v8 ratchet trailing stop
+ * to bump a held child stop-loss up to entry+1 % once unrealised P/L ≥ 3 %.
+ */
+export function replaceOrder(
+  creds: AlpacaCreds,
+  orderId: string,
+  patch: { qty?: number; limit_price?: number; stop_price?: number; trail?: number; time_in_force?: 'day' | 'gtc' }
+): Promise<AlpacaResult<AlpacaOrder>> {
+  return alpacaFetch<AlpacaOrder>(
+    `${getTradingBase(creds.env)}/orders/${encodeURIComponent(orderId)}`,
+    creds,
+    { method: 'PATCH', body: JSON.stringify(patch) }
+  );
+}
+
 // ============ ASSETS ============
 const assetCache: Map<string, AlpacaAsset> = new Map();
 
@@ -364,6 +395,26 @@ export async function getLatestQuote(
     status: r.status,
     data: { symbol: r.data.symbol || symbol, bid, ask, mid, last: mid, timestamp: q?.t || new Date().toISOString() },
   };
+}
+
+/**
+ * Fetch historical OHLCV bars for a single symbol. Returns chronologically
+ * ordered bars (oldest first). Used by the v8 strategy to compute SMA/RSI/ATR.
+ */
+export async function getStockBars(
+  creds: AlpacaCreds,
+  symbol: string,
+  opts: { timeframe: '1Min' | '5Min' | '15Min' | '1Hour' | '1Day'; limit?: number } = { timeframe: '1Day', limit: 250 }
+): Promise<AlpacaResult<AlpacaBar[]>> {
+  const qs = new URLSearchParams();
+  qs.set('timeframe', opts.timeframe);
+  qs.set('limit', String(opts.limit ?? 250));
+  qs.set('adjustment', 'raw');
+  const url = `${getDataBase()}/stocks/${encodeURIComponent(symbol)}/bars?${qs}`;
+  const r = await alpacaFetch<{ bars?: AlpacaBar[] }>(url, creds);
+  if (!r.success) return r as AlpacaResult<AlpacaBar[]>;
+  const bars = r.data.bars ?? [];
+  return { success: true, status: r.status, data: bars };
 }
 
 /** Get latest trade for a symbol — falls back to latest quote if trade isn't available. */

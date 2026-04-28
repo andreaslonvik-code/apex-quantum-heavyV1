@@ -15,20 +15,13 @@ import { SystemStatus } from './components/system-status';
 import { KillSwitch } from './components/kill-switch';
 import { WithdrawModal, type WithdrawStatus } from './components/withdraw-modal';
 import type { Lang } from './components/i18n';
+import { WATCHLIST, TICKER_NAME } from '@/lib/blueprint';
 
-// Fixed universe of tickers the Apex blueprint follows. Held vs watch-only is
-// determined dynamically by joining with live Alpaca positions.
-const BLUEPRINT_UNIVERSE: Array<{ ticker: string; name: string }> = [
-  { ticker: 'NVDA', name: 'NVIDIA Corp' },
-  { ticker: 'MU', name: 'Micron Tech' },
-  { ticker: 'AMD', name: 'Advanced Micro' },
-  { ticker: 'TSM', name: 'Taiwan Semi' },
-  { ticker: 'AAPL', name: 'Apple Inc' },
-  { ticker: 'META', name: 'Meta Platforms' },
-  { ticker: 'GOOGL', name: 'Alphabet Inc' },
-  { ticker: 'MSFT', name: 'Microsoft' },
-  { ticker: 'AVGO', name: 'Broadcom' },
-];
+// The Apex v8 blueprint universe (100 tickers, 17 sectors). Held vs watch-only
+// is decided dynamically by joining with the user's live Alpaca positions.
+const BLUEPRINT_UNIVERSE: Array<{ ticker: string; name: string }> = WATCHLIST.map(
+  (ticker) => ({ ticker, name: TICKER_NAME[ticker] || ticker })
+);
 
 interface AccountInfo {
   accountId: string;
@@ -150,11 +143,17 @@ export default function DashboardPage() {
   const watchlistRows: WatchlistRow[] = useMemo(() => {
     const heldByTicker = new Map<string, AlpacaPositionPayload>();
     for (const p of positions) heldByTicker.set(p.ticker, p);
+    // Held tickers outside the static universe (rare — orders user placed
+    // manually, or migrated holdings) are appended so they always show.
     const universe = new Set<string>(BLUEPRINT_UNIVERSE.map((u) => u.ticker));
-    // Add any held tickers not in the static universe so user always sees their own holdings.
-    for (const p of positions) if (!universe.has(p.ticker)) BLUEPRINT_UNIVERSE.push({ ticker: p.ticker, name: p.symbol });
+    const merged = [
+      ...BLUEPRINT_UNIVERSE,
+      ...positions
+        .filter((p) => !universe.has(p.ticker))
+        .map((p) => ({ ticker: p.ticker, name: p.symbol })),
+    ];
 
-    return BLUEPRINT_UNIVERSE.map(({ ticker, name }) => {
+    return merged.map(({ ticker, name }) => {
       const held = heldByTicker.get(ticker);
       if (held) {
         const sig: Signal = held.pnl >= 0 ? 'HOLD' : 'SELL';
