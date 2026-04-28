@@ -1,5 +1,6 @@
 'use client';
 
+import { SignOutButton, UserButton } from '@clerk/nextjs';
 import { I18N, fmtMoney, moneySuffix, type Lang } from './i18n';
 
 interface Props {
@@ -8,6 +9,7 @@ interface Props {
   mode: 'sim' | 'live';
   balance: number;
   accountId: string | null;
+  /** Disconnects the Alpaca account (does NOT sign the user out of Clerk). */
   onDisconnect: () => void;
 }
 
@@ -54,9 +56,15 @@ export function Topbar({ lang, setLang, mode, balance, accountId, onDisconnect }
             {t.liveShort}
           </span>
         </div>
-        <button className="btn-ghost-sm" onClick={onDisconnect}>
+        <button className="btn-ghost-sm" onClick={onDisconnect} title={lang === 'no' ? 'Koble Alpaca-kontoen fra' : 'Disconnect Alpaca account'}>
           {t.disconnect}
         </button>
+        <SignOutButton redirectUrl="/">
+          <button type="button" className="btn-ghost-sm" title={lang === 'no' ? 'Logg ut av Apex Quantum' : 'Sign out of Apex Quantum'}>
+            {lang === 'no' ? 'Logg ut' : 'Sign out'}
+          </button>
+        </SignOutButton>
+        <UserButton appearance={{ elements: { avatarBox: { width: 30, height: 30 } } }} afterSignOutUrl="/" />
       </div>
     </header>
   );

@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { SignedIn, SignedOut, SignOutButton } from '@clerk/nextjs';
 import type { Lang } from './types';
 
 export function MHeader({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
@@ -27,12 +28,27 @@ export function MHeader({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => v
             <button className={lang === 'no' ? 'is-on' : ''} onClick={() => setLang('no')}>NO</button>
             <button className={lang === 'en' ? 'is-on' : ''} onClick={() => setLang('en')}>EN</button>
           </div>
-          <Link href="/connect-alpaca" className="btn-primary-v8 btn-sm">
-            {lang === 'no' ? 'Start nå' : 'Get Started'}
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          </Link>
+          <SignedOut>
+            <Link href="/sign-in" className="btn-ghost-v8 btn-sm">
+              {lang === 'no' ? 'Logg inn' : 'Sign in'}
+            </Link>
+            <Link href="/sign-up" className="btn-primary-v8 btn-sm">
+              {lang === 'no' ? 'Start nå' : 'Get Started'}
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            </Link>
+          </SignedOut>
+          <SignedIn>
+            <Link href="/dashboard" className="btn-ghost-v8 btn-sm">
+              Dashboard
+            </Link>
+            <SignOutButton redirectUrl="/">
+              <button type="button" className="btn-primary-v8 btn-sm">
+                {lang === 'no' ? 'Logg ut' : 'Sign out'}
+              </button>
+            </SignOutButton>
+          </SignedIn>
         </div>
       </div>
     </header>
