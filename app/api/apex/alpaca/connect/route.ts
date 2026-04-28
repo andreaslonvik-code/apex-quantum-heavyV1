@@ -41,14 +41,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate against Alpaca
+    // Validate against Alpaca. validateCreds now produces user-ready norsk
+    // messages for INVALID_CREDS and WRONG_ENV (incl. cross-env probing).
     const validation = await validateCreds({ apiKey, apiSecret, env: environment });
     if (!validation.success) {
       const userMsg =
-        validation.errorCode === 'INVALID_CREDS'
-          ? 'Alpaca avviste API-nøklene. Sjekk at de er riktig kopiert og at de hører til riktig konto.'
-          : validation.errorCode === 'WRONG_ENV'
-          ? `Disse nøklene fungerer ikke i ${environment === 'live' ? 'LIVE' : 'PAPER'}-modus. Du har sannsynligvis valgt feil miljø.`
+        validation.errorCode === 'INVALID_CREDS' || validation.errorCode === 'WRONG_ENV'
+          ? validation.error
           : `Validering feilet: ${validation.error}`;
       return NextResponse.json({ error: userMsg, code: validation.errorCode }, { status: 401 });
     }

@@ -234,14 +234,33 @@ export function getAccount(creds: AlpacaCreds): Promise<AlpacaResult<AlpacaAccou
   return alpacaFetch<AlpacaAccount>(`${getTradingBase(creds.env)}/account`, creds);
 }
 
-/** Validate API credentials by hitting /account. Returns the account if valid. */
+/** Validate API credentials by hitting /account. Returns the account if valid.
+ *  On 401, probes the opposite environment so we can tell the user whether the
+ *  keys belong to the *other* env (most common) vs are simply invalid. */
 export async function validateCreds(creds: AlpacaCreds): Promise<AlpacaResult<AlpacaAccount>> {
   const r = await getAccount(creds);
-  if (!r.success && r.status === 401) {
-    return { ...r, error: 'Invalid Alpaca API key or secret', errorCode: 'INVALID_CREDS' };
+  if (r.success) return r;
+
+  if (r.status === 401) {
+    const otherEnv: AlpacaEnv = creds.env === 'paper' ? 'live' : 'paper';
+    const probe = await getAccount({ ...creds, env: otherEnv });
+    if (probe.success) {
+      return {
+        success: false,
+        status: 401,
+        error: `Disse nøklene tilhører ${otherEnv === 'live' ? 'LIVE' : 'PAPER'}-miljøet på Alpaca, men du valgte ${creds.env === 'live' ? 'LIVE' : 'PAPER'} her. Bytt miljø-valg, eller generer nye nøkler i riktig dashboard.`,
+        errorCode: 'WRONG_ENV',
+      };
+    }
+    return {
+      ...r,
+      error:
+        'Alpaca avviste nøklene. Vanligste årsaker: (1) du brukte en Broker API-nøkkel (broker-app.alpaca.markets) i stedet for en Trading API-nøkkel (app.alpaca.markets), (2) typo i Key ID eller Secret, (3) nøkkelen er regenerert eller slettet på Alpaca.',
+      errorCode: 'INVALID_CREDS',
+    };
   }
-  if (!r.success && r.status === 403) {
-    return { ...r, error: 'Alpaca account is not authorized for this environment (paper vs live)', errorCode: 'WRONG_ENV' };
+  if (r.status === 403) {
+    return { ...r, error: 'Alpaca-kontoen er ikke autorisert for dette miljøet.', errorCode: 'WRONG_ENV' };
   }
   return r;
 }

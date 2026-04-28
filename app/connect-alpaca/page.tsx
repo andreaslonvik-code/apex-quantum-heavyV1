@@ -204,7 +204,7 @@ export default function ConnectAlpacaPage() {
                     <a
                       href={
                         isLive
-                          ? 'https://app.alpaca.markets/'
+                          ? 'https://app.alpaca.markets/dashboard/overview'
                           : 'https://app.alpaca.markets/paper/dashboard/overview'
                       }
                       target="_blank"
@@ -213,11 +213,15 @@ export default function ConnectAlpacaPage() {
                     >
                       app.alpaca.markets
                     </a>{' '}
-                    ({isLive ? 'Live' : 'Paper'} dashboard).
+                    og bytt til <strong>{isLive ? 'Live' : 'Paper'}</strong> i kontovelgeren øverst.
                   </li>
-                  <li>Gå til &quot;Your API Keys&quot; / &quot;Generate New Key&quot;.</li>
+                  <li>Scroll til &quot;API Keys&quot;-seksjonen og klikk &quot;Generate New Key&quot;.</li>
                   <li>Kopier Key ID og Secret. Secret vises kun én gang!</li>
                 </ol>
+                <p className="mt-3 pt-3 border-t border-border/60 text-xs text-amber-300/90">
+                  <strong>OBS:</strong> Bruk Trading API-nøkler fra <code>app.alpaca.markets</code>.
+                  Nøkler fra <code>broker-app.alpaca.markets</code> (Broker API) vil <em>ikke</em> fungere — det er en annen tjeneste for forretningskunder.
+                </p>
               </div>
 
               {/* Live warning */}
