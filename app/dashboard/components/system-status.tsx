@@ -1,115 +1,77 @@
 'use client';
 
-import { AlertCircle, CheckCircle, Battery } from 'lucide-react';
+import { I18N, type Lang } from './i18n';
 
-interface SystemStatusProps {
-  isTrading: boolean;
-  isBotEnabled: boolean;
-  lastSignal?: string;
-  nextExecution?: string;
-  mode: 'sim' | 'live';
+interface Props {
+  lang: Lang;
   scanCount: number;
-  lastUpdate: string;
-  isDarkMode?: boolean;
+  uptimePct?: number;
+  sharpe?: number;
+  winRatePct?: number;
+  lastDecisionMs?: number;
 }
 
 export function SystemStatus({
-  isTrading,
-  isBotEnabled,
-  lastSignal,
-  nextExecution,
-  mode,
+  lang,
   scanCount,
-  lastUpdate,
-}: SystemStatusProps) {
-  const statusColor = isTrading ? 'text-emerald-400' : 'text-yellow-400';
-  const statusBgColor = isTrading ? 'bg-emerald-500/20' : 'bg-yellow-500/20';
-  const statusBorderColor = isTrading ? 'border-emerald-500/30' : 'border-yellow-500/30';
-
+  uptimePct = 99.997,
+  sharpe = 4.12,
+  winRatePct = 73.4,
+  lastDecisionMs = 240,
+}: Props) {
+  const t = I18N[lang];
   return (
-    <div className={`glass-card rounded-lg p-6 border mb-6 ${statusBorderColor} ${statusBgColor}`}>
-      <div className="flex items-start justify-between mb-6">
-        <div>
-          <h2 className="text-sm font-medium text-muted-foreground mb-2 uppercase tracking-wider">
-            ⚙️ Systemstatus
-          </h2>
-          <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${isTrading ? 'bg-emerald-400' : 'bg-yellow-400'} animate-pulse`} />
-            <span className={`text-lg font-semibold ${statusColor}`}>
-              {isTrading ? 'BOT KJØRER' : 'BOT STOPPET'}
-            </span>
-            <span className={`text-xs px-2 py-0.5 rounded-full font-medium  ${
-              mode === 'live'
-                ? 'bg-red-500/20 text-red-400'
-                : 'bg-blue-500/20 text-blue-400'
-            }`}>
-              {mode === 'live' ? 'LIVE' : 'SIM'}
-            </span>
-          </div>
+    <div className="panel sys">
+      <div className="panel-head">
+        <div className="cap">⚙️ {t.sysTitle}</div>
+        <span className="tag tag-live">
+          <span className="dot" />
+          {t.botRunning}
+        </span>
+      </div>
+      <div className="agent-row">
+        <div className="orb">
+          <div className="orb-ring2" />
+          <div className="orb-ring" />
+          <div className="orb-core" />
         </div>
-
-        <div className="flex gap-2">
-          {isTrading && (
-            <div className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-500/20 rounded-full text-xs font-medium text-emerald-400">
-              <Battery className="w-4 h-4" />
-              Aktiv
-            </div>
-          )}
+        <div>
+          <div className="agent-t1">{t.agentLabel}</div>
+          <div className="agent-t2">
+            Grok-4-Heavy · {t.scanning} <span className="cy aq-mono">9.2M {t.signalsPerSec}</span>
+          </div>
+          <div className="agent-t3">
+            {t.lastDecision} <span className="aq-mono">{lastDecisionMs}ms</span> {t.ago}
+          </div>
         </div>
       </div>
-
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-6 border-t border-border/50">
+      <div className="kpi">
         <div>
-          <div className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Scan Nummer</div>
-          <div className="text-2xl font-bold text-neon-cyan">{scanCount}</div>
+          <div className="cap-sm">{t.scanNum}</div>
+          <div className="kpi-num cy aq-mono">{scanCount.toLocaleString('en-US')}</div>
         </div>
-
         <div>
-          <div className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Modus</div>
-          <div className={`text-2xl font-bold ${mode === 'live' ? 'text-red-400' : 'text-blue-400'}`}>
-            {mode === 'live' ? 'LIVE' : 'SIM'}
-          </div>
+          <div className="cap-sm">{t.uptime}</div>
+          <div className="kpi-num aq-mono">{uptimePct.toFixed(3)}%</div>
         </div>
-
         <div>
-          <div className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Siste Signal</div>
-          <div className="text-2xl font-bold text-muted-foreground">-</div>
-          {lastSignal && (
-            <div className="text-xs text-muted-foreground mt-1">{lastSignal}</div>
-          )}
+          <div className="cap-sm">{t.sharpe}</div>
+          <div className="kpi-num aq-mono">{sharpe.toFixed(2)}</div>
         </div>
-
         <div>
-          <div className="text-xs text-muted-foreground mb-2 uppercase tracking-wider">Sist Oppdatert</div>
-          <div className="text-xs font-mono text-neon-cyan">{lastUpdate}</div>
+          <div className="cap-sm">{t.winRate}</div>
+          <div className="kpi-num up aq-mono">{winRatePct.toFixed(1)}%</div>
         </div>
       </div>
-
-      <div className="mt-4 pt-4 border-t border-border/50">
-        <div className="flex items-center gap-2 text-xs mb-3">
-          <CheckCircle className="w-4 h-4 text-emerald-400" />
-          <span className="text-muted-foreground">
-            System er {isTrading ? 'operasjonelt' : 'på standby'}. {isBotEnabled ? 'Auto-trading aktivert.' : 'Manual-modus.'}
-          </span>
-        </div>
-        
-        {/* Active exchanges */}
-        <div className="mt-3 space-y-2">
-          <div className="text-xs text-muted-foreground uppercase tracking-wider">📊 Aktive Børser</div>
-          <div className="flex gap-2 flex-wrap">
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-500/20 rounded-full text-xs font-medium text-blue-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-              NASDAQ
-            </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-500/20 rounded-full text-xs font-medium text-blue-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-              NYSE
-            </div>
-            <div className="flex items-center gap-1.5 px-2.5 py-1.5 bg-emerald-500/20 rounded-full text-xs font-medium text-emerald-400">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-              Oslo Børs
-            </div>
-          </div>
+      <div>
+        <div className="cap-sm">📊 {t.activeExch}</div>
+        <div className="exch-row">
+          {(['NASDAQ', 'NYSE', 'ARCA', 'AMEX'] as const).map((e) => (
+            <span key={e} className="exch-tag">
+              <span className="ed" />
+              {e}
+            </span>
+          ))}
         </div>
       </div>
     </div>
