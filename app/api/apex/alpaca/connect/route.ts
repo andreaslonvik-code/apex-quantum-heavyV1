@@ -96,8 +96,7 @@ export async function POST(request: NextRequest) {
     if (msg.includes('ENCRYPTION_KEY')) {
       return NextResponse.json(
         {
-          error:
-            'Server-konfigurasjon mangler: ENCRYPTION_KEY er ikke satt. Kontakt support.',
+          error: 'Server-konfigurasjon mangler: ENCRYPTION_KEY er ikke satt eller har feil lengde (må være 64 hex-tegn).',
           code: 'CONFIG_ENCRYPTION_KEY_MISSING',
         },
         { status: 500 }
@@ -106,15 +105,46 @@ export async function POST(request: NextRequest) {
     if (msg.includes('SUPABASE_SERVICE_ROLE_KEY') || msg.includes('NEXT_PUBLIC_SUPABASE')) {
       return NextResponse.json(
         {
-          error:
-            'Server-konfigurasjon mangler: Supabase-nøkler er ikke satt. Kontakt support.',
+          error: 'Server-konfigurasjon mangler: Supabase-nøkler er ikke satt.',
           code: 'CONFIG_SUPABASE_MISSING',
         },
         { status: 500 }
       );
     }
+    // Postgres / PostgREST errors leak through here. Surface them so the operator
+    // can diagnose. The keys themselves are already encrypted before any DB call,
+    // so error messages don't contain secrets.
+    if (
+      msg.includes('relation') && msg.includes('does not exist') ||
+      msg.toLowerCase().includes('alpaca_accounts')
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            'Databasen er ikke initialisert: tabellen `alpaca_accounts` finnes ikke. Kjør `prisma/supabase-setup.sql` i Supabase SQL Editor.',
+          code: 'DB_TABLE_MISSING',
+          details: msg,
+        },
+        { status: 500 }
+      );
+    }
+    if (msg.includes('permission denied') || msg.includes('row-level security')) {
+      return NextResponse.json(
+        {
+          error:
+            'Databasen avviste skriving (RLS eller permissions). Kjør den siste versjonen av `prisma/supabase-setup.sql` som disabler RLS på `alpaca_accounts`.',
+          code: 'DB_PERMISSION_DENIED',
+          details: msg,
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json(
-      { error: 'En uventet feil oppstod. Prøv igjen.' },
+      {
+        error: `Uventet serverfeil: ${msg}`,
+        code: 'INTERNAL',
+        details: msg,
+      },
       { status: 500 }
     );
   }
