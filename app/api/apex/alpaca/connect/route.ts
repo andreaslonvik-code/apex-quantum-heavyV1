@@ -91,7 +91,22 @@ export async function POST(request: NextRequest) {
     });
   } catch (err) {
     console.error('[alpaca-connect POST] error:', err);
-    const msg = err instanceof Error ? err.message : String(err);
+    // Supabase / PostgREST throws plain objects (PostgrestError), not Error instances.
+    // Walk common shapes so we surface the real message instead of "[object Object]".
+    const errObj = err as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown };
+    const msg =
+      err instanceof Error
+        ? err.message
+        : typeof errObj?.message === 'string'
+        ? [errObj.message, errObj.details, errObj.hint].filter(Boolean).join(' | ')
+        : (() => {
+            try {
+              return JSON.stringify(err);
+            } catch {
+              return String(err);
+            }
+          })();
+    const pgCode = typeof errObj?.code === 'string' ? errObj.code : undefined;
 
     if (msg.includes('ENCRYPTION_KEY')) {
       return NextResponse.json(
@@ -115,7 +130,8 @@ export async function POST(request: NextRequest) {
     // can diagnose. The keys themselves are already encrypted before any DB call,
     // so error messages don't contain secrets.
     if (
-      msg.includes('relation') && msg.includes('does not exist') ||
+      pgCode === '42P01' ||
+      (msg.includes('relation') && msg.includes('does not exist')) ||
       msg.toLowerCase().includes('alpaca_accounts')
     ) {
       return NextResponse.json(
@@ -128,7 +144,7 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-    if (msg.includes('permission denied') || msg.includes('row-level security')) {
+    if (pgCode === '42501' || msg.includes('permission denied') || msg.includes('row-level security')) {
       return NextResponse.json(
         {
           error:
