@@ -131,8 +131,7 @@ export async function POST(request: NextRequest) {
     // so error messages don't contain secrets.
     if (
       pgCode === '42P01' ||
-      (msg.includes('relation') && msg.includes('does not exist')) ||
-      msg.toLowerCase().includes('alpaca_accounts')
+      (msg.includes('relation') && msg.includes('does not exist'))
     ) {
       return NextResponse.json(
         {
@@ -144,7 +143,7 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-    if (pgCode === '42501' || msg.includes('permission denied') || msg.includes('row-level security')) {
+    if (pgCode === '42501' || msg.includes('row-level security') || msg.includes('permission denied')) {
       return NextResponse.json(
         {
           error:

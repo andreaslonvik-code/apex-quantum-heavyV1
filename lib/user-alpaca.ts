@@ -3,9 +3,12 @@
  *
  * Keys are encrypted at rest with AES-256-GCM (lib/crypto.ts). Decryption
  * happens here in server context. Never expose decrypted keys to the client.
+ *
+ * Auth model: Clerk gates every route handler before we touch this module.
+ * We use the Supabase service-role client (bypasses RLS) because there is no
+ * Clerk → Supabase JWT bridge — the per-user authorization is enforced by
+ * the Clerk userId we scope every query with.
  */
-import { cookies } from 'next/headers';
-import { createClient } from '@/utils/supabase/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { encrypt, decrypt } from './crypto';
 import type { AlpacaEnv } from './alpaca';
@@ -43,14 +46,13 @@ function rowToCreds(row: AlpacaRow): UserAlpacaCreds {
 /** Fetch decrypted Alpaca creds for a Clerk user. Returns null if none found. */
 export async function getUserAlpacaCreds(clerkUserId: string): Promise<UserAlpacaCreds | null> {
   try {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createAdminClient();
 
     const { data, error } = await supabase
       .from('alpaca_accounts')
       .select('clerk_user_id, api_key_enc, api_secret_enc, environment, account_id, account_status, start_balance')
       .eq('clerk_user_id', clerkUserId)
-      .single();
+      .maybeSingle();
 
     if (error || !data) return null;
     return rowToCreds(data as AlpacaRow);
@@ -95,14 +97,13 @@ export async function saveUserAlpacaCreds(
     currentEquity?: number;
   }
 ) {
-  const cookieStore = await cookies();
-  const supabase = createClient(cookieStore);
+  const supabase = createAdminClient();
 
   const { data: existing } = await supabase
     .from('alpaca_accounts')
     .select('start_balance')
     .eq('clerk_user_id', clerkUserId)
-    .single();
+    .maybeSingle();
 
   const startBalance = existing?.start_balance
     ? Number(existing.start_balance)
@@ -131,8 +132,7 @@ export async function saveUserAlpacaCreds(
 /** Remove credentials for a user (called on disconnect). */
 export async function deleteUserAlpacaCreds(clerkUserId: string) {
   try {
-    const cookieStore = await cookies();
-    const supabase = createClient(cookieStore);
+    const supabase = createAdminClient();
     await supabase.from('alpaca_accounts').delete().eq('clerk_user_id', clerkUserId);
   } catch {
     // Row may not exist — silent
