@@ -75,13 +75,7 @@ const nextConfig: NextConfig = {
   // ============================================================
 
   redirects: async () => {
-    return [
-      {
-        source: '/dashboard',
-        destination: '/quantum',
-        permanent: true,
-      },
-    ];
+    return [];
   },
 
   rewrites: async () => {
