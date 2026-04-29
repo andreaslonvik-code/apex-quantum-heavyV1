@@ -254,8 +254,37 @@ export async function selectEliteWithAI(creds: AlpacaCreds): Promise<AiSelection
     rawResponse = r.object;
     console.log(`[AI-PORTFOLIO] Grok OK in ${Date.now() - tGrok}ms — ${r.object.picks.length} picks, confidence ${r.object.confidence}`);
   } catch (e) {
-    errorMessage = e instanceof Error ? e.message : String(e);
-    console.error(`[AI-PORTFOLIO] Grok call failed in ${Date.now() - tGrok}ms:`, errorMessage);
+    // Extract everything we can from AI SDK errors so the diagnosis row
+    // says exactly what xAI rejected — not just generic "Bad Request".
+    const err = e as Error & {
+      statusCode?: number;
+      responseBody?: string | Record<string, unknown>;
+      url?: string;
+      cause?: unknown;
+      data?: unknown;
+    };
+    const parts: string[] = [];
+    if (err.statusCode) parts.push(`HTTP ${err.statusCode}`);
+    parts.push(err.message ?? String(e));
+    if (err.responseBody) {
+      const body =
+        typeof err.responseBody === 'string'
+          ? err.responseBody
+          : JSON.stringify(err.responseBody);
+      parts.push(`xai_response=${body.slice(0, 800)}`);
+    } else if (err.data) {
+      parts.push(`data=${JSON.stringify(err.data).slice(0, 400)}`);
+    }
+    if (err.cause) {
+      const cause =
+        err.cause instanceof Error ? err.cause.message : String(err.cause);
+      parts.push(`cause=${cause.slice(0, 200)}`);
+    }
+    errorMessage = parts.join(' | ');
+    console.error(
+      `[AI-PORTFOLIO] Grok call failed in ${Date.now() - tGrok}ms:`,
+      errorMessage,
+    );
   }
 
   if (!aiResult) {
