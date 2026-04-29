@@ -401,22 +401,67 @@ export async function getLatestQuote(
 
 /**
  * Fetch historical OHLCV bars for a single symbol. Returns chronologically
- * ordered bars (oldest first). Used by the v8 strategy to compute SMA/RSI/ATR.
+ * ordered bars (oldest first).
+ *
+ * Without explicit `start` / `end`, Alpaca's bars endpoint behaves
+ * unpredictably — testing showed it returns just 1 bar for `limit=30`
+ * `1Day` requests on free-tier paper accounts. Pass an explicit time
+ * window derived from the requested timeframe + limit so we always get
+ * the count the caller asked for.
+ *
+ * Free-tier accounts get the IEX feed and SIP data delayed by 15 min.
+ * We default to `feed=iex` (broadest free-tier support) and shift `end`
+ * 16 min into the past so SIP-delay restrictions don't trim recent bars.
  */
 export async function getStockBars(
   creds: AlpacaCreds,
   symbol: string,
-  opts: { timeframe: '1Min' | '5Min' | '15Min' | '1Hour' | '1Day'; limit?: number } = { timeframe: '1Day', limit: 250 }
+  opts: {
+    timeframe: '1Min' | '5Min' | '15Min' | '1Hour' | '1Day';
+    limit?: number;
+    feed?: 'iex' | 'sip';
+  } = { timeframe: '1Day', limit: 250 }
 ): Promise<AlpacaResult<AlpacaBar[]>> {
+  const limit = opts.limit ?? 250;
+  const feed = opts.feed ?? 'iex';
+
+  const SIP_DELAY_BUFFER_MS = 16 * 60 * 1000;
+  const end = new Date(Date.now() - SIP_DELAY_BUFFER_MS);
+  const start = new Date(end.getTime() - barsWindowMs(opts.timeframe, limit));
+
   const qs = new URLSearchParams();
   qs.set('timeframe', opts.timeframe);
-  qs.set('limit', String(opts.limit ?? 250));
+  qs.set('limit', String(limit));
+  qs.set('start', start.toISOString());
+  qs.set('end', end.toISOString());
+  qs.set('feed', feed);
   qs.set('adjustment', 'raw');
   const url = `${getDataBase()}/stocks/${encodeURIComponent(symbol)}/bars?${qs}`;
   const r = await alpacaFetch<{ bars?: AlpacaBar[] }>(url, creds);
   if (!r.success) return r as AlpacaResult<AlpacaBar[]>;
   const bars = r.data.bars ?? [];
   return { success: true, status: r.status, data: bars };
+}
+
+/**
+ * How far back to look so we get ≈`limit` bars for the requested timeframe.
+ * Daily / hourly include a calendar pad (×1.6) for weekends + holidays so we
+ * actually get the requested count of trading bars back.
+ */
+function barsWindowMs(
+  timeframe: '1Min' | '5Min' | '15Min' | '1Hour' | '1Day',
+  limit: number,
+): number {
+  const minute = 60 * 1000;
+  const hour = 60 * minute;
+  const day = 24 * hour;
+  switch (timeframe) {
+    case '1Min':  return limit * minute;
+    case '5Min':  return limit * 5 * minute;
+    case '15Min': return limit * 15 * minute;
+    case '1Hour': return Math.ceil(limit * 1.6) * hour;
+    case '1Day':  return Math.ceil(limit * 1.6) * day;
+  }
 }
 
 /** Get latest trade for a symbol — falls back to latest quote if trade isn't available. */
