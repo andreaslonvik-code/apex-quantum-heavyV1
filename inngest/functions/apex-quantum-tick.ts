@@ -277,6 +277,24 @@ async function runUserTick(user: SerializedUser) {
     }
   }
 
+  // EXIT — close out legacy positions held outside the universe so cash
+  // can flow back to in-universe names. The WATCHLIST loop only iterates
+  // known tickers, so anything we hold that isn't on the list (e.g. legacy
+  // ABSI/LMND from the old 6-ticker engine) would otherwise be invisible.
+  const universeSet = new Set(WATCHLIST);
+  for (const [sym, pos] of positionsByTicker) {
+    if (universeSet.has(sym)) continue;
+    const exitPrice = parseFloat(pos.current_price) || 0;
+    const qty = Math.abs(parseFloat(pos.qty) || 0);
+    if (exitPrice <= 0 || qty < 1) continue;
+    sellSignals.push({
+      ticker: sym,
+      amount: qty,
+      price: exitPrice,
+      reason: 'EXIT — utenfor universet',
+    });
+  }
+
   buyCandidates.sort((a, b) => b.score - a.score);
   const heldCount = positionsByTicker.size;
   const slotsLeft = Math.max(0, RISK.MAX_POSITIONS - heldCount);
