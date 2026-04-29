@@ -193,7 +193,7 @@ async function persistSelection(
 ): Promise<void> {
   try {
     const sb = createAdminClient();
-    await sb.from('ai_portfolio_selections').insert({
+    const { error } = await sb.from('ai_portfolio_selections').insert({
       picks: result.picks,
       thesis: result.thesis,
       risk_read: result.riskRead,
@@ -203,26 +203,47 @@ async function persistSelection(
       failed: result.source === 'sharpe-fallback' && !!errorMessage,
       error_message: errorMessage ?? null,
     });
+    if (error) {
+      console.error('[AI-PORTFOLIO] supabase insert error:', error.message, error.details);
+    } else {
+      console.log(`[AI-PORTFOLIO] persisted ${result.source} selection (${result.picks.length} picks)`);
+    }
   } catch (e) {
-    console.error('[AI-PORTFOLIO] persist failed:', e);
+    console.error('[AI-PORTFOLIO] persist threw:', e);
   }
 }
 
 export async function selectEliteWithAI(creds: AlpacaCreds): Promise<AiSelectionResult> {
+  const t0 = Date.now();
+  console.log('[AI-PORTFOLIO] start');
+
   const stats = await gatherTickerStats(creds);
+  console.log(`[AI-PORTFOLIO] stats: ${stats.length}/${WATCHLIST.length} tickers in ${Date.now() - t0}ms`);
+
   if (stats.length < ELITE_SIZE * 1.5) {
-    // Not enough valid market data — fall back without even trying Grok.
+    console.warn(`[AI-PORTFOLIO] insufficient stats (${stats.length} < ${ELITE_SIZE * 1.5}), using fallback`);
     const fallback = sharpeFallback(stats);
     await persistSelection(fallback, null, 'insufficient market data');
     return fallback;
   }
 
   const newsIntel = await getLatestNewsIntel();
+  console.log(`[AI-PORTFOLIO] news: ${newsIntel ? `riskMode=${newsIntel.riskMode} confidence=${newsIntel.confidence}` : 'none'}`);
+
+  // Verify XAI key presence early so the failure mode is obvious in logs.
+  if (!process.env.XAI_API_KEY) {
+    console.error('[AI-PORTFOLIO] XAI_API_KEY not set — falling back to Sharpe');
+    const fallback = sharpeFallback(stats);
+    await persistSelection(fallback, null, 'XAI_API_KEY env var missing');
+    return fallback;
+  }
 
   let aiResult: AiPortfolio | null = null;
   let rawResponse: unknown = null;
   let errorMessage: string | undefined;
+  const tGrok = Date.now();
   try {
+    console.log('[AI-PORTFOLIO] calling Grok...');
     const r = await generateObject({
       model: grokModel,
       schema: AiPortfolioSchema,
@@ -231,9 +252,10 @@ export async function selectEliteWithAI(creds: AlpacaCreds): Promise<AiSelection
     });
     aiResult = r.object;
     rawResponse = r.object;
+    console.log(`[AI-PORTFOLIO] Grok OK in ${Date.now() - tGrok}ms — ${r.object.picks.length} picks, confidence ${r.object.confidence}`);
   } catch (e) {
     errorMessage = e instanceof Error ? e.message : String(e);
-    console.error('[AI-PORTFOLIO] Grok call failed:', errorMessage);
+    console.error(`[AI-PORTFOLIO] Grok call failed in ${Date.now() - tGrok}ms:`, errorMessage);
   }
 
   if (!aiResult) {
@@ -261,14 +283,12 @@ export async function selectEliteWithAI(creds: AlpacaCreds): Promise<AiSelection
   }
 
   if (validPicks.length < MIN_VALID_PICKS || aiResult.confidence < 0.4) {
+    const reason = validPicks.length < MIN_VALID_PICKS
+      ? `Grok returned only ${validPicks.length} valid picks`
+      : `Grok confidence ${aiResult.confidence} below 0.4 threshold`;
+    console.warn(`[AI-PORTFOLIO] ${reason} — using fallback`);
     const fallback = sharpeFallback(stats);
-    await persistSelection(
-      fallback,
-      rawResponse,
-      validPicks.length < MIN_VALID_PICKS
-        ? `Grok returned only ${validPicks.length} valid picks`
-        : `Grok confidence ${aiResult.confidence} below 0.4 threshold`,
-    );
+    await persistSelection(fallback, rawResponse, reason);
     return fallback;
   }
 
@@ -281,6 +301,7 @@ export async function selectEliteWithAI(creds: AlpacaCreds): Promise<AiSelection
     confidence: aiResult.confidence,
   };
   await persistSelection(result, rawResponse);
+  console.log(`[AI-PORTFOLIO] complete in ${Date.now() - t0}ms — picks=${validPicks.map((p) => p.ticker).join(',')}`);
   return result;
 }
 

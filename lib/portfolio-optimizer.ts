@@ -20,7 +20,11 @@
 import { type AlpacaCreds } from './alpaca';
 import { selectEliteWithAI } from './ai-portfolio';
 
-const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+// 15 min — AI runs 4× per hour instead of 1×. Higher cadence means more
+// reactive portfolio (catches news + market movement faster) at ~4× Grok
+// cost. Trade-off worth it given the autonomy mandate; tune up later if
+// cost becomes the binding constraint.
+const CACHE_TTL_MS = 15 * 60 * 1000;
 
 export type EliteSource = 'grok-4-heavy' | 'sharpe-fallback';
 
