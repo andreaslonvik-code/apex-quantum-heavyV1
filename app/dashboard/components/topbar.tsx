@@ -8,6 +8,8 @@ interface Props {
   setLang: (l: Lang) => void;
   mode: 'sim' | 'live';
   balance: number;
+  /** ISO currency from Alpaca (e.g. "USD") — drives the suffix. */
+  currency: string | null;
   accountId: string | null;
   botRunning: boolean;
   /** Disconnects the Alpaca account (does NOT sign the user out of Clerk). */
@@ -22,7 +24,7 @@ function maskAccount(id: string): string {
   return `${id.slice(0, 4)}•••••${id.slice(-3)}`;
 }
 
-export function Topbar({ lang, setLang, mode, balance, accountId, botRunning, onDisconnect, onStopAll }: Props) {
+export function Topbar({ lang, setLang, mode, balance, currency, accountId, botRunning, onDisconnect, onStopAll }: Props) {
   const t = I18N[lang];
   return (
     <header className="dbar-v8">
@@ -50,7 +52,7 @@ export function Topbar({ lang, setLang, mode, balance, accountId, botRunning, on
           </span>
         )}
         <span className="dbar-meta">
-          {t.balance}: <b className="aq-mono cy">{fmtMoney(balance, lang)} {moneySuffix(lang)}</b>
+          {t.balance}: <b className="aq-mono cy">{fmtMoney(balance, lang)} {moneySuffix(lang, currency)}</b>
         </span>
       </div>
       <div className="dbar-right">

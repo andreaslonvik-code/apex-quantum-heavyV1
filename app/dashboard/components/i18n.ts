@@ -217,7 +217,14 @@ export const fmtMoney = (n: number, lang: Lang): string => {
   return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 };
 
-export const moneySuffix = (lang: Lang): string => (lang === 'no' ? 'kr' : 'USD');
+// Suffix follows the *real* account currency from Alpaca, not the UI language.
+// Only render "kr" when the underlying ledger is actually NOK; otherwise show
+// the ISO code (USD, EUR, …) so the dashboard can never disagree with Alpaca.
+export const moneySuffix = (lang: Lang, currency?: string | null): string => {
+  const code = (currency || 'USD').toUpperCase();
+  if (code === 'NOK') return 'kr';
+  return code;
+};
 
 export const fmtUSD = (n: number): string =>
   n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

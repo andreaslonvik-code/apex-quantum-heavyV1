@@ -291,6 +291,7 @@ export default function DashboardPage() {
         setLang={setLang}
         mode={mode}
         balance={currentVal}
+        currency={accountInfo?.currency ?? null}
         accountId={accountInfo?.accountId ?? null}
         botRunning={botRunning}
         onDisconnect={handleDisconnect}
@@ -307,6 +308,7 @@ export default function DashboardPage() {
               profit={profit}
               profitPct={profitPct}
               mode={mode}
+              currency={accountInfo?.currency ?? null}
             />
             <ReturnsChart points={equityPoints} benchPoints={benchPoints} />
             <ChartSummary
@@ -315,6 +317,7 @@ export default function DashboardPage() {
               drawdownAbs={fromPeakAbs}
               drawdownPct={fromPeakPct}
               vsBenchPct={vsBenchPct}
+              currency={accountInfo?.currency ?? null}
             />
           </div>
 
@@ -362,6 +365,7 @@ export default function DashboardPage() {
             lang={lang}
             startVal={startVal}
             currentVal={currentVal}
+            currency={accountInfo?.currency ?? null}
             onWithdraw={() => {
               setWdStatus('idle');
               setWdError(undefined);
@@ -376,6 +380,7 @@ export default function DashboardPage() {
         lang={lang}
         startVal={startVal}
         currentVal={currentVal}
+        currency={accountInfo?.currency ?? null}
         status={wdStatus}
         errorMessage={wdError}
         onConfirm={handleWithdrawConfirm}

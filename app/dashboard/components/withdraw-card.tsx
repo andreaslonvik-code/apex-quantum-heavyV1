@@ -6,10 +6,11 @@ interface Props {
   lang: Lang;
   startVal: number;
   currentVal: number;
+  currency: string | null;
   onWithdraw: () => void;
 }
 
-export function WithdrawCard({ lang, startVal, currentVal, onWithdraw }: Props) {
+export function WithdrawCard({ lang, startVal, currentVal, currency, onWithdraw }: Props) {
   const t = I18N[lang];
   const profit = currentVal - startVal;
   const profitable = profit > 0;
@@ -22,7 +23,7 @@ export function WithdrawCard({ lang, startVal, currentVal, onWithdraw }: Props) 
         </div>
       </div>
       <p className="wd-card-desc">
-        {t.withdrawCardDesc} <b>{fmtMoney(startVal, lang)} {moneySuffix(lang)}</b> {t.withdrawCardDescTail}
+        {t.withdrawCardDesc} <b>{fmtMoney(startVal, lang)} {moneySuffix(lang, currency)}</b> {t.withdrawCardDescTail}
       </p>
       <button
         type="button"
@@ -31,7 +32,7 @@ export function WithdrawCard({ lang, startVal, currentVal, onWithdraw }: Props) 
         onClick={onWithdraw}
       >
         {profitable
-          ? `${t.withdrawCta} ${fmtMoney(profit, lang)} ${moneySuffix(lang)}`
+          ? `${t.withdrawCta} ${fmtMoney(profit, lang)} ${moneySuffix(lang, currency)}`
           : t.withdrawNothing}
       </button>
     </div>

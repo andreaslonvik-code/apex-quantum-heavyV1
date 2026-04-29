@@ -9,13 +9,14 @@ interface Props {
   lang: Lang;
   startVal: number;
   currentVal: number;
+  currency: string | null;
   status: WithdrawStatus;
   errorMessage?: string;
   onConfirm: () => void;
   onClose: () => void;
 }
 
-export function WithdrawModal({ open, lang, startVal, currentVal, status, errorMessage, onConfirm, onClose }: Props) {
+export function WithdrawModal({ open, lang, startVal, currentVal, currency, status, errorMessage, onConfirm, onClose }: Props) {
   if (!open) return null;
   const t = I18N[lang];
   const profit = currentVal - startVal;
@@ -41,7 +42,7 @@ export function WithdrawModal({ open, lang, startVal, currentVal, status, errorM
             </div>
             <h2 className="wd-t">{t.withdrawDone}</h2>
             <p className="wd-sub">
-              {fmtMoney(profit, lang)} {moneySuffix(lang)} {t.transferDone}
+              {fmtMoney(profit, lang)} {moneySuffix(lang, currency)} {t.transferDone}
             </p>
             <button className="btn-primary-v8 btn-lg wd-ok" onClick={onClose}>OK</button>
           </div>
@@ -63,28 +64,28 @@ export function WithdrawModal({ open, lang, startVal, currentVal, status, errorM
             <div className="cap wd-eye">💰 {t.withdraw.toUpperCase()}</div>
             <h2 className="wd-t">{t.withdrawAmount}</h2>
             <div className="wd-amount aq-mono">
-              +{fmtMoney(profit, lang)} <span className="wd-cur">{moneySuffix(lang)}</span>
+              +{fmtMoney(profit, lang)} <span className="wd-cur">{moneySuffix(lang, currency)}</span>
             </div>
             <div className="wd-pct aq-mono">▲ +{pct.toFixed(2)}% {t.abovePrincipal}</div>
             <p className="wd-desc">
-              {t.withdrawDesc} <b>{fmtMoney(startVal, lang)} {moneySuffix(lang)}</b>.
+              {t.withdrawDesc} <b>{fmtMoney(startVal, lang)} {moneySuffix(lang, currency)}</b>.
             </p>
             <div className="wd-rows">
               <div className="wd-row">
                 <span>{t.startVal.toLowerCase()}</span>
-                <span className="aq-mono">{fmtMoney(startVal, lang)} {moneySuffix(lang)}</span>
+                <span className="aq-mono">{fmtMoney(startVal, lang)} {moneySuffix(lang, currency)}</span>
               </div>
               <div className="wd-row">
                 <span>{t.nowVal.toLowerCase()}</span>
-                <span className="aq-mono">{fmtMoney(currentVal, lang)} {moneySuffix(lang)}</span>
+                <span className="aq-mono">{fmtMoney(currentVal, lang)} {moneySuffix(lang, currency)}</span>
               </div>
               <div className="wd-row wd-row-out">
                 <span>{t.payout}</span>
-                <span className="aq-mono up">+{fmtMoney(profit, lang)} {moneySuffix(lang)}</span>
+                <span className="aq-mono up">+{fmtMoney(profit, lang)} {moneySuffix(lang, currency)}</span>
               </div>
               <div className="wd-row">
                 <span>{t.remaining}</span>
-                <span className="aq-mono">{fmtMoney(startVal, lang)} {moneySuffix(lang)}</span>
+                <span className="aq-mono">{fmtMoney(startVal, lang)} {moneySuffix(lang, currency)}</span>
               </div>
             </div>
             <div className="wd-cta">

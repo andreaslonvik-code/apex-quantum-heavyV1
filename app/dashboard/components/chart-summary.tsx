@@ -11,16 +11,17 @@ interface Props {
   drawdownPct: number;
   /** Performance vs S&P 500 in pct, e.g. +0.41 (positive = outperforming). */
   vsBenchPct: number | null;
+  currency: string | null;
 }
 
-export function ChartSummary({ lang, current, drawdownAbs, drawdownPct, vsBenchPct }: Props) {
+export function ChartSummary({ lang, current, drawdownAbs, drawdownPct, vsBenchPct, currency }: Props) {
   const t = I18N[lang];
   return (
     <div className="chart-summary">
       <div className="chart-summary-cell">
         <div className="chart-summary-label">{t.chartNow}</div>
         <div className="chart-summary-value">{fmtMoney(current, lang)}</div>
-        <div className="chart-summary-sub">{moneySuffix(lang)}</div>
+        <div className="chart-summary-sub">{moneySuffix(lang, currency)}</div>
       </div>
       <div className="chart-summary-cell">
         <div className="chart-summary-label">{t.chartFromPeak}</div>

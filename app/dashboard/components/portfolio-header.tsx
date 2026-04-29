@@ -13,9 +13,10 @@ interface Props {
   profit: number;
   profitPct: number;
   mode: 'sim' | 'live';
+  currency: string | null;
 }
 
-export function PortfolioHeader({ lang, tf, onTf, profit, profitPct, mode }: Props) {
+export function PortfolioHeader({ lang, tf, onTf, profit, profitPct, mode, currency }: Props) {
   const t = I18N[lang];
   return (
     <>
@@ -27,7 +28,7 @@ export function PortfolioHeader({ lang, tf, onTf, profit, profitPct, mode }: Pro
               {profit >= 0 ? '+' : '−'}
               {fmtMoney(Math.abs(profit), lang)}
             </h1>
-            <span className="ph-suffix">{moneySuffix(lang)}</span>
+            <span className="ph-suffix">{moneySuffix(lang, currency)}</span>
             <span className={`ph-pct ${profit >= 0 ? 'up' : 'dn'}`}>
               {profitPct >= 0 ? '+' : ''}{profitPct.toFixed(2)}%
             </span>
