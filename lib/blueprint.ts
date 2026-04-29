@@ -126,14 +126,25 @@ export interface EliteEntry {
 }
 
 export const ELITE_PORTFOLIO: Readonly<Record<string, EliteEntry>> = {
-  MU:   { name: 'Micron Technology',     targetWeight: 31, volatility: 4 },
-  VRT:  { name: 'Vertiv',                targetWeight: 19, volatility: 3 },
-  AVGO: { name: 'Broadcom',              targetWeight: 18, volatility: 3 },
-  CEG:  { name: 'Constellation Energy',  targetWeight: 13, volatility: 3 },
-  PLTR: { name: 'Palantir',              targetWeight: 11, volatility: 5 },
-  HELP: { name: 'Heritage Global',       targetWeight: 4,  volatility: 4 },
+  // Core (semis + AI infra) — anchor of the portfolio.
+  MU:   { name: 'Micron Technology',     targetWeight: 22, volatility: 4 },
+  AVGO: { name: 'Broadcom',              targetWeight: 14, volatility: 3 },
+  VRT:  { name: 'Vertiv',                targetWeight: 13, volatility: 3 },
+  CEG:  { name: 'Constellation Energy',  targetWeight: 11, volatility: 3 },
+  PLTR: { name: 'Palantir',              targetWeight: 10, volatility: 5 },
+
+  // High-volatility satellites — bigger swings, smaller weights.
+  SMCI: { name: 'Super Micro',           targetWeight: 6,  volatility: 5 },
+  TSLA: { name: 'Tesla',                 targetWeight: 5,  volatility: 5 },
+  OKLO: { name: 'Oklo Inc',              targetWeight: 4,  volatility: 5 },
+  COIN: { name: 'Coinbase',              targetWeight: 3,  volatility: 5 },
   IONQ: { name: 'IonQ',                  targetWeight: 2,  volatility: 5 },
   RKLB: { name: 'Rocket Lab',            targetWeight: 2,  volatility: 5 },
+  HELP: { name: 'Heritage Global',       targetWeight: 3,  volatility: 4 },
+
+  // Oil — small ("tett") allocation actively monitored every cron tick.
+  XOM:  { name: 'ExxonMobil',            targetWeight: 3,  volatility: 2 },
+  OXY:  { name: 'Occidental',            targetWeight: 2,  volatility: 4 },
 };
 
 {
