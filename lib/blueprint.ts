@@ -109,6 +109,56 @@ if (WATCHLIST.length !== 102) {
   throw new Error(`Apex universe expected 102 tickers, got ${WATCHLIST.length}`);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Elite portfolio — the v6.1 blueprint target. The trading engine drives the
+// account toward these weights autonomously: trims overweighters, buys
+// underweighters, and exits anything held outside this set. The wider 102-
+// ticker WATCHLIST stays as the dashboard universe; only ELITE_PORTFOLIO is
+// actually traded.
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface EliteEntry {
+  name: string;
+  /** % of equity targeted in this ticker. Sums to 100 across the portfolio. */
+  targetWeight: number;
+  /** 1..5 vol tier — drives tactical signal multipliers. */
+  volatility: number;
+}
+
+export const ELITE_PORTFOLIO: Readonly<Record<string, EliteEntry>> = {
+  MU:   { name: 'Micron Technology',     targetWeight: 31, volatility: 4 },
+  VRT:  { name: 'Vertiv',                targetWeight: 19, volatility: 3 },
+  AVGO: { name: 'Broadcom',              targetWeight: 18, volatility: 3 },
+  CEG:  { name: 'Constellation Energy',  targetWeight: 13, volatility: 3 },
+  PLTR: { name: 'Palantir',              targetWeight: 11, volatility: 5 },
+  HELP: { name: 'Heritage Global',       targetWeight: 4,  volatility: 4 },
+  IONQ: { name: 'IonQ',                  targetWeight: 2,  volatility: 5 },
+  RKLB: { name: 'Rocket Lab',            targetWeight: 2,  volatility: 5 },
+};
+
+{
+  const total = Object.values(ELITE_PORTFOLIO).reduce((s, e) => s + e.targetWeight, 0);
+  if (Math.abs(total - 100) > 0.01) {
+    throw new Error(`ELITE_PORTFOLIO weights sum to ${total}, expected 100`);
+  }
+  for (const t of Object.keys(ELITE_PORTFOLIO)) {
+    if (!WATCHLIST.includes(t)) {
+      throw new Error(`ELITE_PORTFOLIO ticker ${t} is missing from the universe`);
+    }
+  }
+}
+
+// Rebalance bands — how far a position may drift before the engine acts.
+// Tight bands → rebalance often, more turnover. Loose bands → less churn.
+export const REBALANCE = {
+  /** Trim when posValue > targetValue × OVERWEIGHT_TRIGGER. */
+  OVERWEIGHT_TRIGGER: 1.30,
+  /** Buy when posValue < targetValue × UNDERWEIGHT_TRIGGER. */
+  UNDERWEIGHT_TRIGGER: 0.85,
+  /** Each rebalance trade closes this fraction of the gap to target. */
+  CONVERGENCE_RATE: 0.5,
+} as const;
+
 // Risk + sizing parameters. The trading loop reads these to bound exposure
 // even when signals would otherwise want to keep buying.
 export const RISK = {
