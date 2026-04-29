@@ -196,7 +196,7 @@ export interface ExecutedTrade {
 export interface ScanResult {
   session: MarketSession;
   marketOpen: boolean;
-  elite: { tickers: string[]; source: 'optimizer' | 'seed' };
+  elite: { tickers: string[]; source: 'grok-4-heavy' | 'sharpe-fallback' };
   cash: number;
   equity: number;
   positions: AlpacaPosition[];
@@ -227,7 +227,7 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
   const result: ScanResult = {
     session: 'closed',
     marketOpen: false,
-    elite: { tickers: [], source: 'seed' },
+    elite: { tickers: [], source: 'sharpe-fallback' },
     cash: 0,
     equity: 0,
     positions: [],

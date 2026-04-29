@@ -145,3 +145,35 @@ CREATE INDEX IF NOT EXISTS news_intelligence_scanned_at_idx
   WHERE failed = false;
 
 ALTER TABLE news_intelligence DISABLE ROW LEVEL SECURITY;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- AI portfolio selections
+--
+-- Hourly Grok-4-Heavy elite-portfolio decision. Replaces (with math fallback)
+-- the pure 30-day Sharpe optimizer for the elite-8 selection. Each row is a
+-- snapshot of one decision: picks + per-pick reasoning + overall thesis +
+-- model identity. Audit + future learning grist (we can backtest "AI picks"
+-- vs "Sharpe picks" once we have months of data).
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS ai_portfolio_selections (
+  id            BIGSERIAL PRIMARY KEY,
+  selected_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  /** Array<{ ticker, reasoning }> — Grok's elite picks for this window. */
+  picks         JSONB NOT NULL DEFAULT '[]'::jsonb,
+  /** Grok's overall thesis paragraph (≤ 800 chars). */
+  thesis        TEXT,
+  /** 'normal' | 'risk-on' | 'risk-off' | 'crash-warning' — Grok's read. */
+  risk_read     TEXT NOT NULL DEFAULT 'normal',
+  confidence    NUMERIC(4,2) NOT NULL DEFAULT 0,
+  /** Source label: 'grok-4-heavy' on AI success, 'sharpe-fallback' on failure. */
+  source        TEXT NOT NULL DEFAULT 'grok-4-heavy',
+  raw_response  JSONB,
+  failed        BOOLEAN NOT NULL DEFAULT false,
+  error_message TEXT
+);
+
+CREATE INDEX IF NOT EXISTS ai_portfolio_selections_selected_at_idx
+  ON ai_portfolio_selections (selected_at DESC);
+
+ALTER TABLE ai_portfolio_selections DISABLE ROW LEVEL SECURITY;

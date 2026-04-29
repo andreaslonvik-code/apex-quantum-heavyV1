@@ -19,6 +19,21 @@ export interface NewsFeedMacroEvent {
   reason: string;
 }
 
+export interface AiThesisPick {
+  ticker: string;
+  reasoning: string;
+  held: boolean;
+}
+
+export interface AiThesisPayload {
+  selectedAt: string;
+  thesis: string;
+  riskRead: 'normal' | 'risk-on' | 'risk-off' | 'crash-warning';
+  confidence: number;
+  source: string;
+  picks: AiThesisPick[];
+}
+
 export interface NewsFeedPayload {
   scannedAt: string | null;
   summary: string;
@@ -27,6 +42,7 @@ export interface NewsFeedPayload {
   confidence: number;
   events: NewsFeedEvent[];
   macroEvents: NewsFeedMacroEvent[];
+  aiThesis?: AiThesisPayload | null;
 }
 
 interface Props {
@@ -96,6 +112,39 @@ export function NewsFeed({ lang, feed }: Props) {
         </p>
       ) : (
         <>
+          {feed!.aiThesis && (
+            <div className="ai-thesis">
+              <div className="ai-thesis-head">
+                <span className="ai-thesis-label">
+                  🧠 {lang === 'no' ? 'AI-VURDERING' : 'AI THESIS'}
+                </span>
+                <span className="ai-thesis-meta aq-mono">
+                  {feed!.aiThesis.source}
+                  {feed!.aiThesis.confidence > 0 &&
+                    ` · ${(feed!.aiThesis.confidence * 100).toFixed(0)}%`}
+                </span>
+              </div>
+              <p className="ai-thesis-text">{feed!.aiThesis.thesis}</p>
+              {feed!.aiThesis.picks.length > 0 && (
+                <div className="ai-picks">
+                  {feed!.aiThesis.picks.map((p) => (
+                    <div key={p.ticker} className="ai-pick">
+                      <div className="ai-pick-head">
+                        <span className="news-ticker">{p.ticker}</span>
+                        {p.held && (
+                          <span className="news-tag news-tag-held">
+                            {lang === 'no' ? 'EID' : 'HELD'}
+                          </span>
+                        )}
+                      </div>
+                      <span className="ai-pick-reason">{p.reasoning}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {feed!.summary && (
             <p className="news-summary">
               {feed!.summary}

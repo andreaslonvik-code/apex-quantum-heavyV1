@@ -13,6 +13,7 @@ import {
 } from '@/lib/alpaca';
 import { getLatestNewsIntel } from '@/lib/news-intelligence';
 import { computeEliteTickers } from '@/lib/portfolio-optimizer';
+import { getLatestAiSelection } from '@/lib/ai-portfolio';
 
 export async function GET() {
   const userCreds = await getRequestCreds();
@@ -83,6 +84,27 @@ export async function GET() {
       reason: e.reason,
     }));
 
+  // AI portfolio thesis — Grok's most recent elite-pick decision with
+  // per-ticker reasoning. Filtered to the user's held + elite tickers
+  // for relevance.
+  const aiSel = await getLatestAiSelection();
+  const aiThesis = aiSel
+    ? {
+        selectedAt: aiSel.selectedAt,
+        thesis: aiSel.thesis,
+        riskRead: aiSel.riskRead,
+        confidence: aiSel.confidence,
+        source: aiSel.source,
+        picks: aiSel.picks
+          .filter((p) => relevantSet.has(p.ticker.toUpperCase()))
+          .map((p) => ({
+            ticker: p.ticker.toUpperCase(),
+            reasoning: p.reasoning,
+            held: heldSet.has(p.ticker.toUpperCase()),
+          })),
+      }
+    : null;
+
   return NextResponse.json({
     feed: {
       scannedAt: intel.scannedAt,
@@ -92,6 +114,7 @@ export async function GET() {
       confidence: intel.confidence,
       events,
       macroEvents,
+      aiThesis,
     },
   });
 }
