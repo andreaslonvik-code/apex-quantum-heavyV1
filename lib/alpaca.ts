@@ -106,9 +106,11 @@ export interface AlpacaOrder {
   side: string;
   status: string;
   type: string;
+  limit_price?: string;
   filled_avg_price?: string;
   filled_qty?: string;
   submitted_at: string;
+  filled_at?: string;
 }
 
 export interface AlpacaAsset {

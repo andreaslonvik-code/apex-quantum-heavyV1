@@ -184,7 +184,7 @@ export default function DashboardPage() {
   // First failed order, deduplicated by orderId/time. User can dismiss it.
   const failedOrder = useMemo(() => {
     return orders.find(
-      (o) => o.status === 'ERR' && !dismissedOrders.has(`${o.ticker}:${o.time}`)
+      (o) => o.status === 'ERR' && !dismissedOrders.has(`${o.ticker}:${o.submittedAt}`)
     );
   }, [orders, dismissedOrders]);
 
@@ -358,7 +358,7 @@ export default function DashboardPage() {
                   : `${failedOrder.reason || 'Order rejected'}. Possibly the market was closed or buying power was insufficient.`
               }
               onRetry={handleRetryOrder}
-              onDismiss={() => handleDismissOrder(failedOrder.ticker, failedOrder.time)}
+              onDismiss={() => handleDismissOrder(failedOrder.ticker, failedOrder.submittedAt)}
             />
           )}
           <WithdrawCard

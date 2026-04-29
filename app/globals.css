@@ -895,6 +895,7 @@ body {
 .pill { font-family: var(--font-mono); font-size: 9px; font-weight: 700; letter-spacing: .1em; padding: 2px 6px; border-radius: 3px; }
 .pill-ok { background: rgba(16,185,129,.18); color: #10b981; }
 .pill-err { background: rgba(239,68,68,.18); color: #ef4444; }
+.pill-pending { background: rgba(250,204,21,.15); color: #facc15; }
 
 /* system status */
 .sys { display: flex; flex-direction: column; gap: 18px; }
