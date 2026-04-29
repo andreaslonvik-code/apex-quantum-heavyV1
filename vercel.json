@@ -7,6 +7,10 @@
     {
       "path": "/api/cron/learn",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/news-scan",
+      "schedule": "5 * * * *"
     }
   ],
   "functions": {
@@ -15,6 +19,9 @@
     },
     "app/api/cron/learn/route.ts": {
       "maxDuration": 60
+    },
+    "app/api/cron/news-scan/route.ts": {
+      "maxDuration": 120
     },
     "app/api/apex/autonomous/route.ts": {
       "maxDuration": 60

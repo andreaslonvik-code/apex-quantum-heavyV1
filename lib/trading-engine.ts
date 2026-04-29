@@ -36,7 +36,7 @@ import {
   type AlpacaCreds,
   type AlpacaPosition,
 } from './alpaca';
-import { WATCHLIST, RISK, SIGNAL } from './blueprint';
+import { WATCHLIST, RISK, SIGNAL, SYMBOL_TO_SECTOR } from './blueprint';
 import { computeEliteTickers } from './portfolio-optimizer';
 import {
   closeEntryLots,
@@ -46,6 +46,12 @@ import {
 } from './learning';
 import { getMarketSession, isExtendedHours, type MarketSession } from './market-session';
 import { getOvernightGaps } from './gap-detector';
+import {
+  buyFactorFromIntel,
+  getLatestNewsIntel,
+  sectorMultiplierFromIntel,
+  tickerEventMultiplierFromIntel,
+} from './news-intelligence';
 
 export const HOLDINGS_CAP = 8;
 export const MAX_PER_TICKER_PCT = 15;
@@ -278,6 +284,8 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     session === 'regular' ? await getOvernightGaps(creds) : new Map();
 
   const multipliers = await getSignalMultipliers();
+  const newsIntel = await getLatestNewsIntel();
+  const newsBuyFactor = buyFactorFromIntel(newsIntel);
 
   const priceTargets = new Set<string>([
     ...WATCHLIST,
@@ -405,6 +413,16 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     const buyMul = buyTrendBoost(m.trend);
     const eliteBonus = eliteSet.has(ticker) ? ELITE_SCORE_BONUS : 1.0;
 
+    // News-driven multipliers (1.0 when no intel / low confidence).
+    const sectorKey = SYMBOL_TO_SECTOR[ticker];
+    const newsSectorMul = sectorMultiplierFromIntel(newsIntel, sectorKey);
+    const newsTickerMul = tickerEventMultiplierFromIntel(newsIntel, ticker);
+    // tickerEventMultiplier returns 0 when bearish events are strong enough
+    // to neutralise the buy — treat as a hard veto on this ticker.
+    if (newsTickerMul <= 0.05) continue;
+
+    const newsBuyMul = newsBuyFactor * newsSectorMul * newsTickerMul;
+
     const gap = gapsByTicker.get(ticker)?.gap;
     if (gap !== undefined && gap < GAP_DOWN_THRESHOLD) continue;
 
@@ -417,7 +435,7 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
       const gapStrength = Math.min(5, gap / GAP_UP_THRESHOLD);
       const buyValue =
         equity * 0.01 * gapStrength * buyMul * eliteBonus *
-        sessionSizeFactor *
+        sessionSizeFactor * newsBuyMul *
         multiplierFor('GAP_UP', multipliers);
       const cappedValue = Math.min(buyValue, tickerCapValue - posValue);
       const amount = Math.floor(cappedValue / price);
@@ -425,7 +443,7 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
         result.buyCandidates.push({
           ticker, amount, price,
           reason: `GAP_UP +${(gap * 100).toFixed(2)}%`,
-          score: 30 * gapStrength * buyMul * eliteBonus,
+          score: 30 * gapStrength * buyMul * eliteBonus * newsTickerMul,
           signalType: 'GAP_UP',
         });
       }
@@ -435,7 +453,7 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
       const dipStrength = Math.min(5, dropFromHigh / SIGNAL.DIP_THRESHOLD);
       const buyValue =
         equity * 0.005 * dipStrength * buyMul * eliteBonus *
-        sessionSizeFactor *
+        sessionSizeFactor * newsBuyMul *
         multiplierFor('DIP', multipliers);
       const cappedValue = Math.min(buyValue, tickerCapValue - posValue);
       const amount = Math.floor(cappedValue / price);
@@ -443,7 +461,7 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
         result.buyCandidates.push({
           ticker, amount, price,
           reason: `DIP -${(dropFromHigh * 100).toFixed(2)}%`,
-          score: 20 * dipStrength * buyMul * eliteBonus,
+          score: 20 * dipStrength * buyMul * eliteBonus * newsTickerMul,
           signalType: 'DIP',
         });
       }
@@ -453,7 +471,7 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
       const oversoldDepth = SIGNAL.RSI_OVERSOLD - m.rsi;
       const buyValue =
         equity * 0.01 * buyMul * eliteBonus *
-        sessionSizeFactor *
+        sessionSizeFactor * newsBuyMul *
         multiplierFor('RSI_LOW', multipliers);
       const cappedValue = Math.min(buyValue, tickerCapValue - posValue);
       const amount = Math.floor(cappedValue / price);
@@ -461,7 +479,7 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
         result.buyCandidates.push({
           ticker, amount, price,
           reason: `RSI LOW (${m.rsi.toFixed(0)})`,
-          score: 15 * oversoldDepth * buyMul * eliteBonus,
+          score: 15 * oversoldDepth * buyMul * eliteBonus * newsTickerMul,
           signalType: 'RSI_LOW',
         });
       }

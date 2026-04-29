@@ -15,6 +15,7 @@ import { WithdrawCard } from './components/withdraw-card';
 import { BottomStats } from './components/bottom-stats';
 import { Watchlist, type WatchlistRow, type Signal } from './components/watchlist';
 import { RecentOrders, type RecentOrder } from './components/recent-orders';
+import { NewsFeed, type NewsFeedPayload } from './components/news-feed';
 import { WithdrawModal, type WithdrawStatus } from './components/withdraw-modal';
 import type { Lang } from './components/i18n';
 import { WATCHLIST, TICKER_NAME } from '@/lib/blueprint';
@@ -64,6 +65,7 @@ export default function DashboardPage() {
   const [performance, setPerformance] = useState<PerformancePayload | null>(null);
   const [positions, setPositions] = useState<AlpacaPositionPayload[]>([]);
   const [orders, setOrders] = useState<RecentOrder[]>([]);
+  const [newsFeed, setNewsFeed] = useState<NewsFeedPayload | null>(null);
   const [dismissedOrders, setDismissedOrders] = useState<Set<string>>(new Set());
   const [botRunning, setBotRunning] = useState(true);
   const [wdOpen, setWdOpen] = useState(false);
@@ -83,6 +85,19 @@ export default function DashboardPage() {
       if (Array.isArray(ordRes?.orders)) setOrders(ordRes.orders as RecentOrder[]);
     } catch {
       /* soft-fail; next tick will retry */
+    }
+  }, []);
+
+  // News intel only updates hourly — poll on a slower cadence than the
+  // 3 s trading-state poll so we don't hammer Alpaca / Supabase for free.
+  const refreshNews = useCallback(async () => {
+    try {
+      const r = await fetch('/api/apex/news-feed', { credentials: 'include' });
+      if (!r.ok) return;
+      const data = await r.json();
+      if (data?.feed !== undefined) setNewsFeed(data.feed as NewsFeedPayload | null);
+    } catch {
+      /* soft-fail */
     }
   }, []);
 
@@ -128,6 +143,13 @@ export default function DashboardPage() {
       if (tickerRef.current) clearInterval(tickerRef.current);
     };
   }, [isConnected, refreshAll]);
+
+  useEffect(() => {
+    if (!isConnected) return;
+    refreshNews();
+    const newsTimer = setInterval(refreshNews, 60_000);
+    return () => clearInterval(newsTimer);
+  }, [isConnected, refreshNews]);
 
   // ── Derived values ───────────────────────────────────────────────────
   const startVal = performance?.current?.initialValue ?? accountInfo?.equity ?? 0;
@@ -361,6 +383,7 @@ export default function DashboardPage() {
               onDismiss={() => handleDismissOrder(failedOrder.ticker, failedOrder.submittedAt)}
             />
           )}
+          <NewsFeed lang={lang} feed={newsFeed} />
           <WithdrawCard
             lang={lang}
             startVal={startVal}

@@ -107,3 +107,41 @@ INSERT INTO signal_multipliers (signal_type, multiplier) VALUES
 ON CONFLICT (signal_type) DO NOTHING;
 
 ALTER TABLE signal_multipliers DISABLE ROW LEVEL SECURITY;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- News intelligence
+--
+-- Hourly Grok-4-Heavy scan of macro + per-ticker news + X/social sentiment.
+-- The trading engine reads the latest row at the start of each scan and uses
+-- it to bias BUY signal scoring (sector multipliers, ticker boosts/blocks)
+-- and to scale global BUY size in risk-off / crash-warning regimes.
+--
+-- Persisted (not just in-memory) so we keep an audit trail of which news
+-- influenced which trades. Old rows accumulate — clean up via TTL job later.
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS news_intelligence (
+  id              BIGSERIAL PRIMARY KEY,
+  scanned_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  summary         TEXT,
+  /** 'normal' | 'risk-on' | 'risk-off' | 'crash-warning' */
+  risk_mode       TEXT NOT NULL DEFAULT 'normal',
+  /** Map<sectorKey, number ∈ [-1, 1]> — multiplier on BUY scores per sector. */
+  sector_bias     JSONB NOT NULL DEFAULT '{}'::jsonb,
+  /** Array<{ ticker, direction, weight, source, reason }> — material events. */
+  ticker_events   JSONB NOT NULL DEFAULT '[]'::jsonb,
+  /** 0..1 — how confident Grok is in the read. <0.4 → ignored by trading. */
+  confidence      NUMERIC(4,2) NOT NULL DEFAULT 0,
+  /** Raw Grok response for audit. Keep so we can debug bad calls later. */
+  raw_response    JSONB,
+  /** True if the cron timed out / Grok returned malformed JSON / API error. */
+  failed          BOOLEAN NOT NULL DEFAULT false,
+  error_message   TEXT
+);
+
+-- Trading engine reads "the latest non-failed scan within last 4 hours".
+CREATE INDEX IF NOT EXISTS news_intelligence_scanned_at_idx
+  ON news_intelligence (scanned_at DESC)
+  WHERE failed = false;
+
+ALTER TABLE news_intelligence DISABLE ROW LEVEL SECURITY;
