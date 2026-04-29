@@ -196,7 +196,7 @@ export interface ExecutedTrade {
 export interface ScanResult {
   session: MarketSession;
   marketOpen: boolean;
-  elite: { tickers: string[]; source: 'grok-4-heavy' | 'sharpe-fallback' };
+  elite: { tickers: string[]; source: 'ai' | 'sharpe-fallback' };
   cash: number;
   equity: number;
   positions: AlpacaPosition[];

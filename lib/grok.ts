@@ -17,7 +17,7 @@ const grok = createXai({
   apiKey: process.env.XAI_API_KEY || '',
 });
 
-export const grokModel = grok(process.env.GROK_MODEL || 'grok-4-heavy');
+export const grokModel = grok(process.env.GROK_MODEL || 'grok-4');
 
 /**
  * System prompt for APEX QUANTUM trading AI.

@@ -29,7 +29,9 @@ import {
 } from './blueprint';
 
 const xai = createXai({ apiKey: process.env.XAI_API_KEY || '' });
-const grokModel = xai(process.env.GROK_MODEL || 'grok-4-heavy');
+// "Grok Heavy mode" is a UI feature, not an API model — use the underlying
+// model name. Override with GROK_MODEL env var.
+const grokModel = xai(process.env.GROK_MODEL || 'grok-4');
 
 const SECTOR_KEYS = Object.keys(SECTORS) as SectorKey[];
 

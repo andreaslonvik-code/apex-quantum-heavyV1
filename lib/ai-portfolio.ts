@@ -33,7 +33,12 @@ import { getLatestNewsIntel } from './news-intelligence';
 import { createAdminClient } from '@/utils/supabase/admin';
 
 const xai = createXai({ apiKey: process.env.XAI_API_KEY || '' });
-const grokModel = xai(process.env.GROK_MODEL || 'grok-4-heavy');
+// Note: "Grok Heavy mode" is a UI feature on x.com/grok.com (multi-agent
+// reasoning), not an API model. Use the underlying model name. Common
+// valid names: 'grok-4', 'grok-4-fast-reasoning', 'grok-4-0709', 'grok-3'.
+// Override with GROK_MODEL env var.
+const MODEL_NAME = process.env.GROK_MODEL || 'grok-4';
+const grokModel = xai(MODEL_NAME);
 
 const ELITE_SIZE = 8;
 const MAX_PER_SECTOR = 3;
@@ -65,7 +70,7 @@ export type AiPortfolio = z.infer<typeof AiPortfolioSchema>;
 
 export interface AiSelectionResult {
   tickers: Set<string>;
-  source: 'grok-4-heavy' | 'sharpe-fallback';
+  source: 'ai' | 'sharpe-fallback';
   picks: AiPortfolioPick[];
   thesis: string;
   riskRead: AiPortfolio['riskRead'];
@@ -323,7 +328,7 @@ export async function selectEliteWithAI(creds: AlpacaCreds): Promise<AiSelection
 
   const result: AiSelectionResult = {
     tickers: new Set(validPicks.map((p) => p.ticker)),
-    source: 'grok-4-heavy',
+    source: 'ai',
     picks: validPicks,
     thesis: aiResult.thesis,
     riskRead: aiResult.riskRead,

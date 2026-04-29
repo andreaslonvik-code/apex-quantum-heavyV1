@@ -140,14 +140,14 @@ export async function GET() {
       recentRows,
     },
     diagnosis:
-      result.source === 'grok-4-heavy'
+      result.source === 'ai'
         ? 'Grok call succeeded with valid JSON.'
         : `Fell back to Sharpe-math. Latest row error_message: "${
             recentRows[0]?.error_message ?? '(missing)'
           }"`,
     envCheck: {
       XAI_API_KEY: process.env.XAI_API_KEY ? `set (${(process.env.XAI_API_KEY as string).slice(0, 8)}...)` : 'MISSING',
-      GROK_MODEL: process.env.GROK_MODEL ?? '(default: grok-4-heavy)',
+      GROK_MODEL: process.env.GROK_MODEL ?? '(default: grok-4)',
       ALPACA_DATA_BASE: process.env.ALPACA_DATA_URL ?? '(default)',
     },
     alpacaBarsTest: barsTest,

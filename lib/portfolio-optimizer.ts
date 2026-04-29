@@ -26,7 +26,7 @@ import { selectEliteWithAI } from './ai-portfolio';
 // cost becomes the binding constraint.
 const CACHE_TTL_MS = 15 * 60 * 1000;
 
-export type EliteSource = 'grok-4-heavy' | 'sharpe-fallback';
+export type EliteSource = 'ai' | 'sharpe-fallback';
 
 interface CachedResult {
   ts: number;
