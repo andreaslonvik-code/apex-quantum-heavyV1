@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
 import { getRequestCreds } from '@/lib/get-request-creds';
-import { getAccount, getPositions } from '@/lib/alpaca';
+import { getAccount, getPositions, getStockBars } from '@/lib/alpaca';
+
+// Lightweight in-process cache for the SPY benchmark — refreshes every 60 s.
+// Keeps the dashboard's 3-second poll loop from hammering the data API.
+let benchCache: { fetchedAt: number; values: number[] } | null = null;
+const BENCH_TTL_MS = 60_000;
 
 // In-memory performance history (resets on deploy). Keyed per user.
 const performanceHistory: Map<
@@ -86,6 +91,30 @@ export async function GET() {
       if (drawdown > maxDrawdown) maxDrawdown = drawdown;
     }
 
+    // ── SPY benchmark ────────────────────────────────────────────────
+    // Fetch ~1 trading day of 15-min bars; cached for 60 s. Used to overlay
+    // a relative-performance line on the dashboard chart and to compute the
+    // "vs S&P 500" delta in the chart summary.
+    let benchValues: number[] = [];
+    const cached = benchCache;
+    if (cached && Date.now() - cached.fetchedAt < BENCH_TTL_MS) {
+      benchValues = cached.values;
+    } else {
+      const spy = await getStockBars(
+        { apiKey: userCreds.apiKey, apiSecret: userCreds.apiSecret, env: userCreds.environment },
+        'SPY',
+        { timeframe: '15Min', limit: 30 }
+      );
+      if (spy.success) {
+        benchValues = spy.data.map((b) => b.c);
+        benchCache = { fetchedAt: Date.now(), values: benchValues };
+      }
+    }
+    const benchStart = benchValues[0] ?? 0;
+    const benchEnd = benchValues[benchValues.length - 1] ?? 0;
+    const benchPct = benchStart > 0 ? (benchEnd / benchStart - 1) * 100 : null;
+    const vsBenchPct = benchPct === null ? null : sessionPnlPercent - benchPct;
+
     return NextResponse.json({
       current: {
         balance: cashBalance,
@@ -105,6 +134,12 @@ export async function GET() {
         dataPoints: history.length,
       },
       chartData,
+      benchmark: {
+        symbol: 'SPY',
+        values: benchValues,
+        pct: benchPct,
+        vsBenchPct,
+      },
       timestamp: now,
       sync: {
         cash: cashBalance,

@@ -26,7 +26,15 @@ export function Watchlist({ lang, rows }: Props) {
     HOLD: t.sigHold,
     WATCH: t.sigWatch,
   };
-  const heldCount = rows.filter((r) => r.qty > 0).length;
+  // Holdings first (by descending market value), then watch-only.
+  const sorted = [...rows].sort((a, b) => {
+    const aHeld = a.qty > 0 ? 1 : 0;
+    const bHeld = b.qty > 0 ? 1 : 0;
+    if (aHeld !== bHeld) return bHeld - aHeld;
+    if (aHeld) return b.qty * b.mark - a.qty * a.mark;
+    return a.ticker.localeCompare(b.ticker);
+  });
+  const heldCount = sorted.filter((r) => r.qty > 0).length;
   return (
     <div className="panel">
       <div className="panel-head">
@@ -57,7 +65,7 @@ export function Watchlist({ lang, rows }: Props) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((p) => {
+          {sorted.map((p) => {
             const held = p.qty > 0;
             const pnl = held ? (p.mark - p.avg) * p.qty : 0;
             const pct = held && p.avg > 0 ? (p.mark / p.avg - 1) * 100 : 0;
