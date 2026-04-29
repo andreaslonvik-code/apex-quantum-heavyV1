@@ -164,14 +164,29 @@ function generateSellSignals(args: {
   rsi: number;
   trend: 'UP' | 'DOWN' | 'NEUTRAL';
   riseFromLow: number;
+  equity: number;
 }): SellSignal[] {
-  const { ticker, price, pos, rsi, trend, riseFromLow } = args;
+  const { ticker, price, pos, rsi, trend, riseFromLow, equity } = args;
   const out: SellSignal[] = [];
   const qty = Math.abs(parseFloat(pos.qty) || 0);
   const avg = parseFloat(pos.avg_entry_price) || 0;
+  const posValue = Math.abs(parseFloat(pos.market_value) || 0);
   if (qty < 1) return out;
 
   const sellTrendMul = trend === 'DOWN' ? 1.3 : trend === 'UP' ? 0.85 : 1.0;
+
+  // REBALANCE — trim positions that exceed the per-ticker cap by more than
+  // 20 % of the cap. This frees cash so the engine can diversify across the
+  // wider universe instead of staying stuck in oversized legacy holdings.
+  if (equity > 0 && posValue > equity * (RISK.MAX_PER_TICKER_PCT / 100) * 1.2) {
+    const overPct = (posValue / equity) * 100 - RISK.MAX_PER_TICKER_PCT;
+    out.push({
+      ticker,
+      amount: Math.max(1, Math.floor(qty * 0.25)),
+      price,
+      reason: `REBALANCE +${overPct.toFixed(0)}% over cap`,
+    });
+  }
 
   if (riseFromLow >= SIGNAL.PEAK_THRESHOLD && qty > 2) {
     const peakStrength = Math.min(5, riseFromLow / SIGNAL.PEAK_THRESHOLD);
@@ -296,7 +311,7 @@ export async function POST(_req: NextRequest) {
       const pos = positionsByTicker.get(ticker.toUpperCase());
 
       if (pos) {
-        sellSignals.push(...generateSellSignals({ ticker, price, pos, rsi: m.rsi, trend: m.trend, riseFromLow }));
+        sellSignals.push(...generateSellSignals({ ticker, price, pos, rsi: m.rsi, trend: m.trend, riseFromLow, equity }));
       } else {
         const sector = SYMBOL_TO_SECTOR[ticker];
         const candidate = generateBuyCandidate({
