@@ -2,10 +2,32 @@ import { NextResponse } from 'next/server';
 import { getRequestCreds } from '@/lib/get-request-creds';
 import { getAccount, getPositions, getStockBars } from '@/lib/alpaca';
 
-// Lightweight in-process cache for the SPY benchmark — refreshes every 60 s.
-// Keeps the dashboard's 3-second poll loop from hammering the data API.
-let benchCache: { fetchedAt: number; values: number[] } | null = null;
+// Lightweight in-process cache per benchmark symbol — refreshes every 60 s.
+// Keeps the dashboard's 3-second poll loop from hammering the data API. SPY
+// powers the chart overlay + "vs S&P 500" delta; QQQ powers the NASDAQ card
+// in the top BenchmarkBar.
+const benchCache: Map<string, { fetchedAt: number; values: number[] }> = new Map();
 const BENCH_TTL_MS = 60_000;
+
+async function fetchBenchmark(
+  creds: { apiKey: string; apiSecret: string; env: 'paper' | 'live' },
+  symbol: string,
+): Promise<number[]> {
+  const cached = benchCache.get(symbol);
+  if (cached && Date.now() - cached.fetchedAt < BENCH_TTL_MS) return cached.values;
+  const r = await getStockBars(creds, symbol, { timeframe: '15Min', limit: 30 });
+  if (!r.success) return cached?.values ?? [];
+  const values = r.data.map((b) => b.c);
+  benchCache.set(symbol, { fetchedAt: Date.now(), values });
+  return values;
+}
+
+function pctChange(values: number[]): number | null {
+  const start = values[0];
+  const end = values[values.length - 1];
+  if (!start || !end) return null;
+  return (end / start - 1) * 100;
+}
 
 // In-memory performance history (resets on deploy). Keyed per user.
 const performanceHistory: Map<
@@ -91,28 +113,19 @@ export async function GET() {
       if (drawdown > maxDrawdown) maxDrawdown = drawdown;
     }
 
-    // ── SPY benchmark ────────────────────────────────────────────────
-    // Fetch ~1 trading day of 15-min bars; cached for 60 s. Used to overlay
-    // a relative-performance line on the dashboard chart and to compute the
-    // "vs S&P 500" delta in the chart summary.
-    let benchValues: number[] = [];
-    const cached = benchCache;
-    if (cached && Date.now() - cached.fetchedAt < BENCH_TTL_MS) {
-      benchValues = cached.values;
-    } else {
-      const spy = await getStockBars(
-        { apiKey: userCreds.apiKey, apiSecret: userCreds.apiSecret, env: userCreds.environment },
-        'SPY',
-        { timeframe: '15Min', limit: 30 }
-      );
-      if (spy.success) {
-        benchValues = spy.data.map((b) => b.c);
-        benchCache = { fetchedAt: Date.now(), values: benchValues };
-      }
-    }
-    const benchStart = benchValues[0] ?? 0;
-    const benchEnd = benchValues[benchValues.length - 1] ?? 0;
-    const benchPct = benchStart > 0 ? (benchEnd / benchStart - 1) * 100 : null;
+    // ── Benchmark fetch (SPY for chart overlay, QQQ for NASDAQ card) ──
+    // Both pulled in parallel; per-symbol 60-second cache.
+    const credsForBench = {
+      apiKey: userCreds.apiKey,
+      apiSecret: userCreds.apiSecret,
+      env: userCreds.environment,
+    };
+    const [benchValues, qqqValues] = await Promise.all([
+      fetchBenchmark(credsForBench, 'SPY'),
+      fetchBenchmark(credsForBench, 'QQQ'),
+    ]);
+    const benchPct = pctChange(benchValues);
+    const qqqPct = pctChange(qqqValues);
     const vsBenchPct = benchPct === null ? null : sessionPnlPercent - benchPct;
 
     return NextResponse.json({
@@ -139,6 +152,14 @@ export async function GET() {
         values: benchValues,
         pct: benchPct,
         vsBenchPct,
+      },
+      // Compact comparison for the BenchmarkBar at top of the dashboard.
+      // Apex pct is sessionPnlPercent (intraday return), matching the
+      // benchmark window so the comparison is apples-to-apples.
+      benchmarkBar: {
+        apexPct: sessionPnlPercent,
+        spyPct: benchPct,
+        qqqPct: qqqPct,
       },
       timestamp: now,
       sync: {

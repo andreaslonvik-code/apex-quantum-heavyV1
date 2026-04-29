@@ -897,6 +897,24 @@ body {
 .pill-err { background: rgba(239,68,68,.18); color: #ef4444; }
 .pill-pending { background: rgba(250,204,21,.15); color: #facc15; }
 
+/* Benchmark bar — APEX vs SPY vs QQQ ranked at top of dashboard */
+.bench-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 0 24px; margin: 18px 0 4px; }
+.bench-card { padding: 14px 18px; border-radius: 14px; background: rgba(255,255,255,.03); border: 1px solid rgba(255,255,255,.08); display: flex; flex-direction: column; gap: 6px; transition: border-color .2s ease, background .2s ease; }
+.bench-card-best { background: linear-gradient(135deg, rgba(16,185,129,.12), rgba(16,185,129,.04)); border-color: rgba(16,185,129,.4); }
+.bench-card-worst { background: linear-gradient(135deg, rgba(239,68,68,.10), rgba(239,68,68,.03)); border-color: rgba(239,68,68,.35); }
+.bench-card-mid { background: rgba(250,204,21,.04); border-color: rgba(250,204,21,.18); }
+.bench-card-mute { opacity: .6; }
+.bench-card-apex { box-shadow: inset 0 0 0 1px rgba(0,245,255,.18); }
+.bench-label { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: rgba(255,255,255,.55); }
+.bench-pct { font-family: var(--font-mono); font-size: 24px; font-weight: 700; letter-spacing: -.01em; }
+.bench-card-best .bench-pct { color: #10b981; }
+.bench-card-worst .bench-pct { color: #ef4444; }
+.bench-card-mid .bench-pct { color: #facc15; }
+.bench-card-mute .bench-pct { color: rgba(255,255,255,.4); }
+.bench-tag { font-family: var(--font-mono); font-size: 10px; font-weight: 700; letter-spacing: .1em; color: #10b981; margin-top: 2px; }
+.bench-tag.bench-tag-mute { color: var(--aq-muted); font-weight: 500; }
+@media (max-width: 720px) { .bench-bar { grid-template-columns: 1fr; padding: 0 12px; } }
+
 /* news feed */
 .news-panel .panel-head-r { display: flex; align-items: center; gap: 8px; }
 .tag.risk-mode { display: inline-flex; align-items: center; gap: 6px; }

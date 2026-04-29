@@ -16,6 +16,7 @@ import { BottomStats } from './components/bottom-stats';
 import { Watchlist, type WatchlistRow, type Signal } from './components/watchlist';
 import { RecentOrders, type RecentOrder } from './components/recent-orders';
 import { NewsFeed, type NewsFeedPayload } from './components/news-feed';
+import { BenchmarkBar, type BenchmarkBarPayload } from './components/benchmark-bar';
 import { WithdrawModal, type WithdrawStatus } from './components/withdraw-modal';
 import type { Lang } from './components/i18n';
 import { WATCHLIST, TICKER_NAME } from '@/lib/blueprint';
@@ -40,6 +41,7 @@ interface PerformancePayload {
   session: { peak: number; maxDrawdown: number };
   chartData: Array<{ time: string; value: number }>;
   benchmark?: { symbol: string; values: number[]; pct: number | null; vsBenchPct: number | null };
+  benchmarkBar?: BenchmarkBarPayload;
 }
 
 interface AlpacaPositionPayload {
@@ -319,6 +321,7 @@ export default function DashboardPage() {
         onDisconnect={handleDisconnect}
         onStopAll={handleStopAll}
       />
+      <BenchmarkBar lang={lang} data={performance?.benchmarkBar ?? null} />
       <main className="canvas">
         <div className="col-l">
           {/* Hero card: header + chart + chart-summary */}

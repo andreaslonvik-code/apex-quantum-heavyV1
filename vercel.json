@@ -10,7 +10,7 @@
     },
     {
       "path": "/api/cron/news-scan",
-      "schedule": "5 * * * *"
+      "schedule": "*/30 * * * *"
     }
   ],
   "functions": {
