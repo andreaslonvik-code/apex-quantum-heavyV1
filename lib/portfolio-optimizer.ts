@@ -37,10 +37,15 @@ import {
   type SectorKey,
 } from './blueprint';
 
-const ELITE_SIZE = 14;
-const MIN_WEIGHT_PCT = 2;
-const MAX_WEIGHT_PCT = 25;
-const MAX_PER_SECTOR = 4;
+// 8 names = "best ideas" concentration. Smaller (5-6) inflates single-stock
+// risk to where one earnings miss can wipe 10-20 % of equity in a day.
+// Larger (12+) dilutes the score signal — the optimizer would be forced to
+// include lower-conviction names, dragging expected return toward the mean.
+// 8 is the sweet spot for asymmetric upside without catastrophic blowup risk.
+const ELITE_SIZE = 8;
+const MIN_WEIGHT_PCT = 4;
+const MAX_WEIGHT_PCT = 28;
+const MAX_PER_SECTOR = 3;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const PRICE_FETCH_CONCURRENCY = 12;
 const TRADING_DAYS = 252;
@@ -53,25 +58,21 @@ interface TickerStats {
 }
 
 /**
- * Hand-curated fallback used only when the optimizer can't get enough Alpaca
- * data. Kept here (not exported from blueprint.ts) so consumers can't bypass
- * the optimizer by importing the seed directly.
+ * Hand-curated 8-name fallback used only when the optimizer can't get
+ * enough Alpaca data. Mirrors the original v6.1 blueprint allocation so the
+ * trading engine has a sensible "best ideas" portfolio to converge to during
+ * an outage. Kept private to this module so consumers can't bypass the
+ * optimizer by importing the seed directly.
  */
 const SEED_PORTFOLIO: Readonly<Record<string, EliteEntry>> = {
-  MU:   { name: 'Micron Technology',     targetWeight: 22, volatility: 4 },
-  AVGO: { name: 'Broadcom',              targetWeight: 14, volatility: 3 },
-  VRT:  { name: 'Vertiv',                targetWeight: 13, volatility: 3 },
-  CEG:  { name: 'Constellation Energy',  targetWeight: 11, volatility: 3 },
-  PLTR: { name: 'Palantir',              targetWeight: 10, volatility: 5 },
-  SMCI: { name: 'Super Micro',           targetWeight: 6,  volatility: 5 },
-  TSLA: { name: 'Tesla',                 targetWeight: 5,  volatility: 5 },
-  OKLO: { name: 'Oklo Inc',              targetWeight: 4,  volatility: 5 },
-  COIN: { name: 'Coinbase',              targetWeight: 3,  volatility: 5 },
-  IONQ: { name: 'IonQ',                  targetWeight: 2,  volatility: 5 },
+  MU:   { name: 'Micron Technology',     targetWeight: 28, volatility: 4 },
+  VRT:  { name: 'Vertiv',                targetWeight: 19, volatility: 3 },
+  AVGO: { name: 'Broadcom',              targetWeight: 18, volatility: 3 },
+  CEG:  { name: 'Constellation Energy',  targetWeight: 13, volatility: 3 },
+  PLTR: { name: 'Palantir',              targetWeight: 11, volatility: 5 },
+  HELP: { name: 'Heritage Global',       targetWeight: 5,  volatility: 4 },
+  IONQ: { name: 'IonQ',                  targetWeight: 4,  volatility: 5 },
   RKLB: { name: 'Rocket Lab',            targetWeight: 2,  volatility: 5 },
-  HELP: { name: 'Heritage Global',       targetWeight: 3,  volatility: 4 },
-  XOM:  { name: 'ExxonMobil',            targetWeight: 3,  volatility: 2 },
-  OXY:  { name: 'Occidental',            targetWeight: 2,  volatility: 4 },
 };
 
 interface CachedResult {
