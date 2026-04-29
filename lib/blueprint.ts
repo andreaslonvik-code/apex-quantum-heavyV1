@@ -157,10 +157,30 @@ export const RISK = {
 } as const;
 
 export const SIGNAL = {
-  DIP_THRESHOLD: 0.0003,
-  PEAK_THRESHOLD: 0.0005,
+  /** Min drop from local high to fire DIP. 0.5 % is past noise floor. */
+  DIP_THRESHOLD: 0.005,
+  /** Min rise from local low to fire PEAK. */
+  PEAK_THRESHOLD: 0.005,
   RSI_OVERSOLD: 48,
   RSI_OVERBOUGHT: 52,
-  PROFIT_TAKE_THRESHOLD: 0.003,
+  /** Profit % at which we trim 25 % to lock in some gain. */
+  PROFIT_TAKE_THRESHOLD: 0.03,
+  /** Static fallback stop (loss as a fraction of entry). ATR stop usually
+   *  overrides this — STOP_LOSS_THRESHOLD is a floor for ultra-low-vol names. */
   STOP_LOSS_THRESHOLD: -0.02,
+
+  // ── Adaptive stop loss ─────────────────────────────────────────────
+  /** Stop = entry − ATR_STOP_MULT × 14-day ATR. 1.5× gives volatile names
+   *  enough room to wiggle without false stop-outs. */
+  ATR_STOP_MULT: 1.5,
+  /** ATR computed over this many trading days. */
+  ATR_PERIOD: 14,
+
+  // ── Trailing stop / profit ratchet ─────────────────────────────────
+  /** Profit % needed before the trailing stop activates. Below this we use
+   *  the ATR / static stop only (don't squeeze winners that haven't run). */
+  TRAILING_PROFIT_TRIGGER: 0.03,
+  /** Once trailing is active, sell when price falls this far below the
+   *  position's high-water mark. Locks in gains as the position runs. */
+  TRAILING_DRAWDOWN_PCT: 0.02,
 } as const;

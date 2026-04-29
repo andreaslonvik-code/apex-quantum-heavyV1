@@ -31,6 +31,8 @@ import {
   getClock,
   getPositions,
   getLatestPrice,
+  getStockBars,
+  type AlpacaBar,
   type AlpacaCreds,
   type AlpacaPosition,
 } from './alpaca';
@@ -54,6 +56,68 @@ const GAP_DOWN_THRESHOLD = -0.03;
 
 interface PricePoint { price: number; timestamp: number }
 const priceHistory: Map<string, PricePoint[]> = new Map();
+
+// 14-day daily-bars cache for ATR computation. Refreshed at most hourly so
+// each held ticker triggers at most one bars request per hour. Survives
+// across cron invocations on a warm lambda; cold starts repopulate.
+const atrBarsCache: Map<string, { ts: number; atr: number }> = new Map();
+const ATR_CACHE_TTL_MS = 60 * 60 * 1000;
+
+function computeATR(bars: AlpacaBar[], period: number): number {
+  if (bars.length < period + 1) return 0;
+  const trs: number[] = [];
+  for (let i = 1; i < bars.length; i++) {
+    const tr = Math.max(
+      bars[i].h - bars[i].l,
+      Math.abs(bars[i].h - bars[i - 1].c),
+      Math.abs(bars[i].l - bars[i - 1].c),
+    );
+    trs.push(tr);
+  }
+  const window = trs.slice(-period);
+  return window.reduce((s, v) => s + v, 0) / window.length;
+}
+
+async function getCachedATR(creds: AlpacaCreds, ticker: string, period: number): Promise<number> {
+  const key = ticker.toUpperCase();
+  const cached = atrBarsCache.get(key);
+  if (cached && Date.now() - cached.ts < ATR_CACHE_TTL_MS) return cached.atr;
+  const r = await getStockBars(creds, ticker, { timeframe: '1Day', limit: period + 5 });
+  if (!r.success) return 0;
+  const atr = computeATR(r.data, period);
+  atrBarsCache.set(key, { ts: Date.now(), atr });
+  return atr;
+}
+
+// Per-position high-water-mark tracker for the trailing stop. Keyed by
+// `${clerkUserId}:${ticker}` so multi-user accounts don't bleed into each
+// other. Module-level Map — survives across cron invocations on warm
+// lambdas, resets on cold start. Cold-start risk is "stop is too loose
+// briefly" not "stop fires too eagerly", so it fails safe.
+interface HwmEntry { hwm: number; updatedAt: number }
+const highWaterMarks: Map<string, HwmEntry> = new Map();
+const HWM_TTL_MS = 24 * 60 * 60 * 1000;
+
+function hwmKey(clerkUserId: string, ticker: string): string {
+  return `${clerkUserId}:${ticker.toUpperCase()}`;
+}
+
+function trackHighWaterMark(clerkUserId: string, ticker: string, currentPrice: number): number {
+  const key = hwmKey(clerkUserId, ticker);
+  const now = Date.now();
+  const cached = highWaterMarks.get(key);
+  if (cached && now - cached.updatedAt < HWM_TTL_MS) {
+    if (currentPrice > cached.hwm) cached.hwm = currentPrice;
+    cached.updatedAt = now;
+    return cached.hwm;
+  }
+  highWaterMarks.set(key, { hwm: currentPrice, updatedAt: now });
+  return currentPrice;
+}
+
+function clearHighWaterMark(clerkUserId: string, ticker: string): void {
+  highWaterMarks.delete(hwmKey(clerkUserId, ticker));
+}
 
 function calculateRSI(prices: PricePoint[]): number {
   if (prices.length < 5) return 50;
@@ -225,6 +289,15 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     if (r.success && r.data > 0) priceByTicker.set(ticker, r.data);
   });
 
+  // Pre-fetch ATR for every held position in parallel — used by the
+  // adaptive stop loss below. Cached 1 hour, so usually 0 API calls per
+  // scan once warm.
+  const atrByTicker = new Map<string, number>();
+  await runInChunks(Array.from(positionsByTicker.keys()), 8, async (ticker) => {
+    const atr = await getCachedATR(creds, ticker, SIGNAL.ATR_PERIOD);
+    if (atr > 0) atrByTicker.set(ticker.toUpperCase(), atr);
+  });
+
   const buyTrendBoost = (trend: 'UP' | 'DOWN' | 'NEUTRAL') => trend === 'UP' ? 1.25 : trend === 'DOWN' ? 0.7 : 1.0;
   const sellTrendBoost = (trend: 'UP' | 'DOWN' | 'NEUTRAL') => trend === 'DOWN' ? 1.3 : trend === 'UP' ? 0.85 : 1.0;
   const sessionSizeFactor = isExtendedHours(session) ? EXTENDED_HOURS_SIZE_FACTOR : 1.0;
@@ -242,13 +315,51 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
 
     if (avg > 0) {
       const profitPct = (price - avg) / avg;
-      if (profitPct <= SIGNAL.STOP_LOSS_THRESHOLD) {
+      const atr = atrByTicker.get(sym) ?? 0;
+      const hwm = trackHighWaterMark(clerkUserId, sym, price);
+
+      // Adaptive base stop. ATR-derived stop adapts to per-ticker
+      // volatility (TSLA gets a wider stop than XOM at the same equity).
+      // Falls back to the static -2 % floor when ATR data unavailable.
+      const staticStopLevel = avg * (1 + SIGNAL.STOP_LOSS_THRESHOLD);
+      const atrStopLevel = atr > 0 ? avg - SIGNAL.ATR_STOP_MULT * atr : staticStopLevel;
+      // Take the LESS punishing of the two (further from current price)
+      // so an extreme-vol name doesn't get squeezed by the static floor.
+      const baseStopLevel = Math.min(staticStopLevel, atrStopLevel);
+
+      // Trailing stop activates only after the position has run > trigger.
+      // Sells when price falls TRAILING_DRAWDOWN_PCT from session HWM.
+      const trailingActive = profitPct >= SIGNAL.TRAILING_PROFIT_TRIGGER;
+      const trailingStopLevel = trailingActive
+        ? hwm * (1 - SIGNAL.TRAILING_DRAWDOWN_PCT)
+        : 0;
+
+      // Effective stop = whichever is HIGHER (closer to current price for a
+      // long). Once trailing locks in profits, it dominates the base stop.
+      const effectiveStop = Math.max(baseStopLevel, trailingStopLevel);
+
+      if (price <= effectiveStop) {
+        let reason: string;
+        let signalType: string;
+        if (trailingActive && trailingStopLevel >= baseStopLevel) {
+          const drawdownFromHwm = ((hwm - price) / hwm) * 100;
+          reason = `TRAILING −${drawdownFromHwm.toFixed(2)}% from $${hwm.toFixed(2)} (locked +${(profitPct * 100).toFixed(2)}%)`;
+          signalType = 'TRAILING';
+        } else if (atr > 0 && atrStopLevel < staticStopLevel) {
+          const stopPct = ((avg - price) / avg) * 100;
+          reason = `ATR_STOP −${stopPct.toFixed(2)}% (ATR ${atr.toFixed(2)}, ${SIGNAL.ATR_STOP_MULT}×)`;
+          signalType = 'STOPLOSS';
+        } else {
+          reason = `STOPLOSS ${(profitPct * 100).toFixed(2)}%`;
+          signalType = 'STOPLOSS';
+        }
         result.sellSignals.push({
           ticker: sym, amount: Math.max(1, Math.floor(qty * 0.5)), price,
-          reason: `STOPLOSS ${(profitPct * 100).toFixed(2)}%`,
-          priority: 95, signalType: 'STOPLOSS',
+          reason, priority: 95, signalType,
         });
       } else if (profitPct >= SIGNAL.PROFIT_TAKE_THRESHOLD) {
+        // PROFIT-trim at +3 % — small slice off the top to bank some gain.
+        // Trailing handles the give-back protection on the rest.
         result.sellSignals.push({
           ticker: sym, amount: Math.max(1, Math.floor(qty * 0.25)), price,
           reason: `PROFIT +${(profitPct * 100).toFixed(2)}%`,
