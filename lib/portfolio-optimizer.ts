@@ -1,50 +1,25 @@
 // Apex Quantum portfolio optimizer.
 //
-// Picks the elite portfolio dynamically from the 102-ticker universe by
-// risk-adjusted momentum. The trading engine (Vercel cron, on-demand route,
-// Inngest tick) calls computeElitePortfolio() at the start of each scan and
-// rebalances every user's account toward whatever the optimizer returns —
-// EXIT for tickers that fall out, UNDERWEIGHT-build for tickers that come
-// in, REBALANCE for weight changes.
+// Ranks the 102-ticker universe by risk-adjusted momentum (30-day return /
+// annualised volatility) and returns the top-8 names as the "preferred"
+// elite set. The trading engine treats this as a soft preference signal —
+// elite tickers get a score bonus when intraday BUY signals (DIP / RSI_LOW
+// / GAP_UP) compete for the limited 8-position slot budget. They are NOT
+// the only tickers that can be traded; the engine scans and trades across
+// the full 102-ticker universe.
 //
-// Algorithm
-//   1. Fetch 30 daily bars per universe ticker from Alpaca (parallel chunks).
-//   2. For each ticker compute:
-//        return30d = closes[last] / closes[first] − 1
-//        vol30d    = annualised stddev of log returns over the window
-//        sharpe    = return30d / vol30d  (risk-adjusted momentum)
-//   3. Sort descending by sharpe; require sharpe > 0 (no negative-momentum
-//      names in the elite list).
-//   4. Greedy top-N (= 14) with a per-sector cap so no single sector can
-//      dominate even if it has the strongest momentum.
-//   5. Score-proportional weights, clipped to [MIN_WEIGHT_PCT,
-//      MAX_WEIGHT_PCT], renormalised to exactly 100.
-//   6. Cache the result for CACHE_TTL_MS (1 hour). Cron ticks within the
-//      cache window get the same answer; rotation happens once per hour.
-//
-// Fallback
-//   If Alpaca returns too few valid bars (cold market data, outage, etc.)
-//   we return a hand-curated SEED_PORTFOLIO so the trading engine never
-//   trades a malformed universe.
+// Cached for 1 hour. Falls back to a curated SEED set if Alpaca returns
+// too little data (cold start, outage, broad bear market with all
+// negative momentum).
 
 import { getStockBars, type AlpacaCreds } from './alpaca';
 import {
   WATCHLIST,
   SYMBOL_TO_SECTOR,
-  SECTOR_VOLATILITY,
-  TICKER_NAME,
-  type EliteEntry,
   type SectorKey,
 } from './blueprint';
 
-// 8 names = "best ideas" concentration. Smaller (5-6) inflates single-stock
-// risk to where one earnings miss can wipe 10-20 % of equity in a day.
-// Larger (12+) dilutes the score signal — the optimizer would be forced to
-// include lower-conviction names, dragging expected return toward the mean.
-// 8 is the sweet spot for asymmetric upside without catastrophic blowup risk.
 const ELITE_SIZE = 8;
-const MIN_WEIGHT_PCT = 4;
-const MAX_WEIGHT_PCT = 28;
 const MAX_PER_SECTOR = 3;
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
 const PRICE_FETCH_CONCURRENCY = 12;
@@ -58,26 +33,17 @@ interface TickerStats {
 }
 
 /**
- * Hand-curated 8-name fallback used only when the optimizer can't get
- * enough Alpaca data. Mirrors the original v6.1 blueprint allocation so the
- * trading engine has a sensible "best ideas" portfolio to converge to during
- * an outage. Kept private to this module so consumers can't bypass the
- * optimizer by importing the seed directly.
+ * Fallback set used only when the optimizer can't get enough Alpaca data.
+ * Mirrors the original v6.1 blueprint anchor names. Kept private so
+ * consumers can't bypass the optimizer.
  */
-const SEED_PORTFOLIO: Readonly<Record<string, EliteEntry>> = {
-  MU:   { name: 'Micron Technology',     targetWeight: 28, volatility: 4 },
-  VRT:  { name: 'Vertiv',                targetWeight: 19, volatility: 3 },
-  AVGO: { name: 'Broadcom',              targetWeight: 18, volatility: 3 },
-  CEG:  { name: 'Constellation Energy',  targetWeight: 13, volatility: 3 },
-  PLTR: { name: 'Palantir',              targetWeight: 11, volatility: 5 },
-  HELP: { name: 'Heritage Global',       targetWeight: 5,  volatility: 4 },
-  IONQ: { name: 'IonQ',                  targetWeight: 4,  volatility: 5 },
-  RKLB: { name: 'Rocket Lab',            targetWeight: 2,  volatility: 5 },
-};
+const SEED_TICKERS = new Set<string>([
+  'MU', 'VRT', 'AVGO', 'CEG', 'PLTR', 'HELP', 'IONQ', 'RKLB',
+]);
 
 interface CachedResult {
   ts: number;
-  portfolio: Record<string, EliteEntry>;
+  tickers: Set<string>;
   source: 'optimizer' | 'seed';
   scanned: number;
   qualified: number;
@@ -92,18 +58,17 @@ async function runInChunks<T>(items: readonly T[], size: number, fn: (item: T) =
 }
 
 /**
- * Returns the elite portfolio for the next trading scan. Cached for
- * CACHE_TTL_MS — within a cache window every caller gets the same answer.
- *
- * The optimizer is universe-wide (not per-user) so any working `creds`
- * object works to pull the market data.
+ * Returns the preferred elite tickers for the next trading window. Cached
+ * for CACHE_TTL_MS. Universe-wide (not per-user) so any working `creds`
+ * works to pull market data — first user that calls populates the cache,
+ * everyone else gets it free.
  */
-export async function computeElitePortfolio(
+export async function computeEliteTickers(
   creds: AlpacaCreds,
-): Promise<{ portfolio: Record<string, EliteEntry>; source: 'optimizer' | 'seed'; scanned: number; qualified: number }> {
+): Promise<{ tickers: Set<string>; source: 'optimizer' | 'seed'; scanned: number; qualified: number }> {
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
     return {
-      portfolio: cached.portfolio,
+      tickers: cached.tickers,
       source: cached.source,
       scanned: cached.scanned,
       qualified: cached.qualified,
@@ -135,18 +100,16 @@ export async function computeElitePortfolio(
     stats.push({ ticker, return30d: ret30d, vol30d: vol, sharpe });
   });
 
-  // If we got too few stats — fallback to the seed list. The trading engine
-  // can't safely trade a universe that's mostly unknown.
   if (stats.length < ELITE_SIZE * 1.5) {
     cached = {
       ts: Date.now(),
-      portfolio: { ...SEED_PORTFOLIO },
+      tickers: new Set(SEED_TICKERS),
       source: 'seed',
       scanned,
       qualified: stats.length,
     };
     return {
-      portfolio: cached.portfolio,
+      tickers: cached.tickers,
       source: 'seed',
       scanned,
       qualified: stats.length,
@@ -155,12 +118,11 @@ export async function computeElitePortfolio(
 
   stats.sort((a, b) => b.sharpe - a.sharpe);
 
-  // Greedy top-N with sector cap.
   const sectorCount = new Map<SectorKey, number>();
   const selected: TickerStats[] = [];
   for (const s of stats) {
     if (selected.length >= ELITE_SIZE) break;
-    if (s.sharpe <= 0) break; // no negative-momentum names in elite
+    if (s.sharpe <= 0) break;
     const sector = SYMBOL_TO_SECTOR[s.ticker];
     if (sector) {
       const cnt = sectorCount.get(sector) || 0;
@@ -170,65 +132,31 @@ export async function computeElitePortfolio(
     selected.push(s);
   }
 
-  // If almost everything has negative momentum — bear market regime — fall
-  // back to seed rather than concentrating into 1-2 names.
   if (selected.length < 5) {
+    // Almost everything has negative momentum — bear market regime. Fall
+    // back to seed rather than concentrating into 1-2 names.
     cached = {
       ts: Date.now(),
-      portfolio: { ...SEED_PORTFOLIO },
+      tickers: new Set(SEED_TICKERS),
       source: 'seed',
       scanned,
       qualified: stats.length,
     };
     return {
-      portfolio: cached.portfolio,
+      tickers: cached.tickers,
       source: 'seed',
       scanned,
       qualified: stats.length,
     };
   }
 
-  // Score-proportional weights with min/max caps.
-  const totalScore = selected.reduce((s, t) => s + Math.max(t.sharpe, 0.1), 0);
-  const portfolio: Record<string, EliteEntry> = {};
-  for (const s of selected) {
-    const sector = SYMBOL_TO_SECTOR[s.ticker];
-    const vol = sector ? SECTOR_VOLATILITY[sector] : 3;
-    let weight = (Math.max(s.sharpe, 0.1) / totalScore) * 100;
-    weight = Math.max(MIN_WEIGHT_PCT, Math.min(MAX_WEIGHT_PCT, weight));
-    portfolio[s.ticker] = {
-      name: TICKER_NAME[s.ticker] || s.ticker,
-      targetWeight: weight,
-      volatility: vol,
-    };
-  }
-
-  // Renormalise so weights sum to exactly 100.
-  const sum = Object.values(portfolio).reduce((s, e) => s + e.targetWeight, 0);
-  if (sum > 0) {
-    const scale = 100 / sum;
-    for (const t of Object.keys(portfolio)) {
-      portfolio[t].targetWeight = Math.round(portfolio[t].targetWeight * scale);
-    }
-  }
-  // After rounding, total may be off by 1-2 — adjust the largest holding.
-  const totalAfter = Object.values(portfolio).reduce((s, e) => s + e.targetWeight, 0);
-  if (totalAfter !== 100 && Object.keys(portfolio).length > 0) {
-    const sorted = Object.entries(portfolio).sort((a, b) => b[1].targetWeight - a[1].targetWeight);
-    sorted[0][1].targetWeight += 100 - totalAfter;
-  }
-
+  const tickers = new Set(selected.map((s) => s.ticker));
   cached = {
     ts: Date.now(),
-    portfolio,
+    tickers,
     source: 'optimizer',
     scanned,
     qualified: stats.length,
   };
-  return {
-    portfolio,
-    source: 'optimizer',
-    scanned,
-    qualified: stats.length,
-  };
+  return { tickers, source: 'optimizer', scanned, qualified: stats.length };
 }
