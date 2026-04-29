@@ -25,12 +25,12 @@ import {
   type AlpacaPosition,
 } from '@/lib/alpaca';
 import {
-  ELITE_PORTFOLIO,
   REBALANCE,
   RISK,
   SIGNAL,
   TICKER_NAME,
 } from '@/lib/blueprint';
+import { computeElitePortfolio } from '@/lib/portfolio-optimizer';
 
 interface PricePoint { price: number; timestamp: number }
 const priceHistory: Map<string, PricePoint[]> = new Map();
@@ -140,6 +140,10 @@ export async function POST(_req: NextRequest) {
     if (positionsResult.success) {
       for (const p of positionsResult.data) positionsByTicker.set(p.symbol.toUpperCase(), p);
     }
+
+    // Optimizer picks the elite list dynamically. Cached for an hour.
+    const eliteResult = await computeElitePortfolio(creds);
+    const ELITE_PORTFOLIO = eliteResult.portfolio;
 
     // ── Pass 1: fetch prices for every ELITE ticker + every held ticker ─
     const priceTargets = new Set<string>([
@@ -387,7 +391,12 @@ export async function POST(_req: NextRequest) {
       success: true,
       mode: userCreds.environment,
       marketOpen,
-      blueprint: 'v6.1 elite portfolio',
+      blueprint: {
+        source: eliteResult.source,
+        scanned: eliteResult.scanned,
+        qualified: eliteResult.qualified,
+        size: Object.keys(ELITE_PORTFOLIO).length,
+      },
       signals: [
         ...sellSignals.map((s) => ({
           ticker: s.ticker, symbol: s.ticker, action: 'SELL',

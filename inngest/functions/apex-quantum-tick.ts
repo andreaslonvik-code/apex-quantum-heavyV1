@@ -20,11 +20,11 @@ import {
 } from '@/lib/alpaca';
 import { getAllConnectedUsers } from '@/lib/user-alpaca';
 import {
-  ELITE_PORTFOLIO,
   REBALANCE,
   RISK,
   SIGNAL,
 } from '@/lib/blueprint';
+import { computeElitePortfolio } from '@/lib/portfolio-optimizer';
 
 interface PricePoint { price: number; timestamp: number }
 const priceHistory: Map<string, PricePoint[]> = new Map();
@@ -109,6 +109,10 @@ async function runUserTick(user: SerializedUser) {
   if (positionsResult.success) {
     for (const p of positionsResult.data) positionsByTicker.set(p.symbol.toUpperCase(), p);
   }
+
+  // Optimizer picks the elite list dynamically. Cached for an hour.
+  const eliteResult = await computeElitePortfolio(creds);
+  const ELITE_PORTFOLIO = eliteResult.portfolio;
 
   // Fetch prices for every ELITE ticker + every held ticker (we need a
   // price for held positions even if they're outside ELITE so EXIT can fire).

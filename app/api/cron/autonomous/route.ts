@@ -27,11 +27,11 @@ import {
   type AlpacaPosition,
 } from '@/lib/alpaca';
 import {
-  ELITE_PORTFOLIO,
   REBALANCE,
   RISK,
   SIGNAL,
 } from '@/lib/blueprint';
+import { computeElitePortfolio } from '@/lib/portfolio-optimizer';
 
 interface PricePoint { price: number; timestamp: number }
 const priceHistory: Map<string, PricePoint[]> = new Map();
@@ -141,6 +141,11 @@ async function scanForUser(
   if (positionsResult.success) {
     for (const p of positionsResult.data) positionsByTicker.set(p.symbol.toUpperCase(), p);
   }
+
+  // Optimizer picks the elite list (top-N by risk-adjusted momentum). Cached
+  // for an hour so it's free on subsequent cron ticks within the window.
+  const eliteResult = await computeElitePortfolio(creds);
+  const ELITE_PORTFOLIO = eliteResult.portfolio;
 
   // Fetch prices for every ELITE ticker + every held ticker (so EXIT can fire
   // on legacy positions that aren't on the target list).

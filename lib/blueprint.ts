@@ -110,11 +110,12 @@ if (WATCHLIST.length !== 102) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Elite portfolio — the v6.1 blueprint target. The trading engine drives the
-// account toward these weights autonomously: trims overweighters, buys
-// underweighters, and exits anything held outside this set. The wider 102-
-// ticker WATCHLIST stays as the dashboard universe; only ELITE_PORTFOLIO is
-// actually traded.
+// Elite portfolio — selected dynamically by lib/portfolio-optimizer.ts from
+// the 102-ticker WATCHLIST. The optimizer ranks the universe by risk-adjusted
+// momentum (30-day return / annualised volatility) and emits the top 14 with
+// score-proportional weights, refreshed hourly. The trading engine drives
+// each user's account toward whatever the optimizer returns — see
+// computeElitePortfolio() for the algorithm and the seed fallback.
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface EliteEntry {
@@ -123,40 +124,6 @@ export interface EliteEntry {
   targetWeight: number;
   /** 1..5 vol tier — drives tactical signal multipliers. */
   volatility: number;
-}
-
-export const ELITE_PORTFOLIO: Readonly<Record<string, EliteEntry>> = {
-  // Core (semis + AI infra) — anchor of the portfolio.
-  MU:   { name: 'Micron Technology',     targetWeight: 22, volatility: 4 },
-  AVGO: { name: 'Broadcom',              targetWeight: 14, volatility: 3 },
-  VRT:  { name: 'Vertiv',                targetWeight: 13, volatility: 3 },
-  CEG:  { name: 'Constellation Energy',  targetWeight: 11, volatility: 3 },
-  PLTR: { name: 'Palantir',              targetWeight: 10, volatility: 5 },
-
-  // High-volatility satellites — bigger swings, smaller weights.
-  SMCI: { name: 'Super Micro',           targetWeight: 6,  volatility: 5 },
-  TSLA: { name: 'Tesla',                 targetWeight: 5,  volatility: 5 },
-  OKLO: { name: 'Oklo Inc',              targetWeight: 4,  volatility: 5 },
-  COIN: { name: 'Coinbase',              targetWeight: 3,  volatility: 5 },
-  IONQ: { name: 'IonQ',                  targetWeight: 2,  volatility: 5 },
-  RKLB: { name: 'Rocket Lab',            targetWeight: 2,  volatility: 5 },
-  HELP: { name: 'Heritage Global',       targetWeight: 3,  volatility: 4 },
-
-  // Oil — small ("tett") allocation actively monitored every cron tick.
-  XOM:  { name: 'ExxonMobil',            targetWeight: 3,  volatility: 2 },
-  OXY:  { name: 'Occidental',            targetWeight: 2,  volatility: 4 },
-};
-
-{
-  const total = Object.values(ELITE_PORTFOLIO).reduce((s, e) => s + e.targetWeight, 0);
-  if (Math.abs(total - 100) > 0.01) {
-    throw new Error(`ELITE_PORTFOLIO weights sum to ${total}, expected 100`);
-  }
-  for (const t of Object.keys(ELITE_PORTFOLIO)) {
-    if (!WATCHLIST.includes(t)) {
-      throw new Error(`ELITE_PORTFOLIO ticker ${t} is missing from the universe`);
-    }
-  }
 }
 
 // Rebalance bands — how far a position may drift before the engine acts.
