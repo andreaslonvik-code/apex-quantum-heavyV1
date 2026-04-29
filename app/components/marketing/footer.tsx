@@ -42,7 +42,6 @@ export function MFooter({ lang }: { lang: Lang }) {
               <span className="dot" />
               SYSTEM OK
             </span>
-            <span className="tag">v8.0.4</span>
           </div>
         </div>
         <div className="m-footer-cols">

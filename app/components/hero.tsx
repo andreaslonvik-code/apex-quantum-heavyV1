@@ -8,7 +8,7 @@ export function Hero({ language }: HeroProps) {
   const content = {
     no: {
       badge: '🤖 Autonom AI-trading på Alpaca',
-      title: 'Apex Quantum v8',
+      title: 'Apex Quantum',
       titleAccent: 'Din AI-trader på US-aksjemarkedet',
       description:
         'Apex Quantum analyserer markedsdynamikk og utfører aksjehandel fullt automatisk på dine vegne via Alpaca. Handler US equities (NASDAQ, NYSE, ARCA, AMEX) med Grok-4-Heavy AI. Lim inn dine egne Alpaca API-nøkler — vi lagrer dem kryptert (AES-256-GCM) og handler kun på din konto.',
@@ -26,7 +26,7 @@ export function Hero({ language }: HeroProps) {
     },
     en: {
       badge: '🤖 Autonomous AI Trading on Alpaca',
-      title: 'Apex Quantum v8',
+      title: 'Apex Quantum',
       titleAccent: 'Your AI Trader on US Equities',
       description:
         'Apex Quantum analyzes market dynamics and executes equity trading fully automatically via Alpaca. Trades US equities (NASDAQ, NYSE, ARCA, AMEX) with Grok-4-Heavy AI. Paste your own Alpaca API keys — we store them encrypted (AES-256-GCM) and trade only on your account.',

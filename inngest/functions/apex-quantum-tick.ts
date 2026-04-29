@@ -1,8 +1,11 @@
 // inngest/functions/apex-quantum-tick.ts
-// APEX QUANTUM — multi-user Alpaca trading tick.
-// Runs every minute, fans out to every connected user, executes 2 ticks ~30s
-// apart. Universe + per-ticker weights come from lib/blueprint.ts (shared with
-// the on-demand /api/apex/autonomous route).
+// APEX QUANTUM — multi-user Alpaca trading tick. Runs every minute, fans out
+// to every connected user, executes 2 ticks ~30 s apart per user.
+//
+// Strategy mirrors /api/apex/autonomous: scan the full 100-ticker universe,
+// generate SELL signals for held positions and BUY candidates for unheld
+// names, rank candidates, then place orders within the per-ticker /
+// per-sector / max-positions caps from lib/blueprint.ts.
 import { inngest } from '@/lib/inngest';
 import {
   placeOrder,
@@ -15,19 +18,14 @@ import {
   type AlpacaPosition,
 } from '@/lib/alpaca';
 import { getAllConnectedUsers } from '@/lib/user-alpaca';
-import { APEX_BLUEPRINT } from '@/lib/blueprint';
-
-const CONFIG = {
-  DIP_THRESHOLD: 0.0005,
-  PEAK_THRESHOLD: 0.0008,
-  RSI_OVERSOLD: 45,
-  RSI_OVERBOUGHT: 55,
-  PROFIT_TAKE_THRESHOLD: 0.005,
-  STOP_LOSS_THRESHOLD: -0.02,
-  POSITION_SIZE_PERCENT: 0.15,
-  MAX_TRADES_PER_TICK: 12,
-  PRICE_FETCH_CONCURRENCY: 12,
-};
+import {
+  WATCHLIST,
+  SYMBOL_TO_SECTOR,
+  SECTOR_VOLATILITY,
+  RISK,
+  SIGNAL,
+  type SectorKey,
+} from '@/lib/blueprint';
 
 interface PricePoint { price: number; timestamp: number }
 const priceHistory: Map<string, PricePoint[]> = new Map();
@@ -57,161 +55,138 @@ function analyzeMomentum(ticker: string, currentPrice: number) {
   const recent = history.filter((p) => p.timestamp > fifteenMinAgo);
   priceHistory.set(ticker, recent);
   if (recent.length < 3) {
-    return { rsi: 50, localHigh: currentPrice, localLow: currentPrice };
+    return { rsi: 50, localHigh: currentPrice, localLow: currentPrice, trend: 'NEUTRAL' as const };
   }
   const fiveMinAgo = now - 5 * 60 * 1000;
   const fiveMin = recent.filter((p) => p.timestamp > fiveMinAgo);
   const localHigh = Math.max(...fiveMin.map((p) => p.price));
   const localLow = Math.min(...fiveMin.map((p) => p.price));
-  return { rsi: calculateRSI(recent), localHigh, localLow };
+  const avgRecent = fiveMin.slice(-3).reduce((s, p) => s + p.price, 0) / 3;
+  const avgOlder = fiveMin.slice(0, 3).reduce((s, p) => s + p.price, 0) / Math.min(3, fiveMin.length);
+  const trend: 'UP' | 'DOWN' | 'NEUTRAL' =
+    avgRecent > avgOlder * 1.002 ? 'UP' : avgRecent < avgOlder * 0.998 ? 'DOWN' : 'NEUTRAL';
+  return { rsi: calculateRSI(recent), localHigh, localLow, trend };
 }
 
-interface TradingSignal {
+interface BuyCandidate {
   ticker: string;
-  action: 'buy' | 'sell';
   amount: number;
+  price: number;
+  score: number;
   reason: string;
-  priority: number;
+  sector: SectorKey | undefined;
+  value: number;
 }
 
-async function runInChunks<T>(items: T[], size: number, fn: (item: T) => Promise<void>): Promise<void> {
+interface SellSignal {
+  ticker: string;
+  amount: number;
+  price: number;
+  reason: string;
+}
+
+async function runInChunks<T>(items: readonly T[], size: number, fn: (item: T) => Promise<void>): Promise<void> {
   for (let i = 0; i < items.length; i += size) {
     await Promise.all(items.slice(i, i + size).map(fn));
   }
 }
 
-async function generateSignals(
-  creds: AlpacaCreds,
-  positions: Map<string, AlpacaPosition>,
-  cash: number,
-  totalValue: number,
-  marketOpen: boolean
-): Promise<TradingSignal[]> {
-  const signals: TradingSignal[] = [];
-  const isPaper = creds.env === 'paper';
-  if (!marketOpen && !isPaper) return signals;
+function generateBuyCandidate(args: {
+  ticker: string;
+  price: number;
+  rsi: number;
+  trend: 'UP' | 'DOWN' | 'NEUTRAL';
+  dropFromHigh: number;
+  cash: number;
+  equity: number;
+  posValue: number;
+  sectorValue: number;
+}): BuyCandidate | null {
+  const { ticker, price, rsi, trend, dropFromHigh, cash, equity, posValue, sectorValue } = args;
+  if (cash < price * 1.5) return null;
+  if (trend === 'DOWN') return null;
 
-  // Fetch all blueprint prices in parallel chunks instead of one-at-a-time.
-  // 32 tickers @ concurrency 12 → 3 round trips; each is ~150-300ms.
-  const tickers = Object.keys(APEX_BLUEPRINT);
-  const priceByTicker = new Map<string, number>();
-  await runInChunks(tickers, CONFIG.PRICE_FETCH_CONCURRENCY, async (ticker) => {
-    const r = await getLatestPrice(creds, ticker);
-    if (r.success && r.data > 0) priceByTicker.set(ticker, r.data);
-  });
+  const sector = SYMBOL_TO_SECTOR[ticker];
+  const vol = sector ? SECTOR_VOLATILITY[sector] : 3;
+  const volMul = 1 + (vol - 2) * 0.20;
+  const trendMul = trend === 'UP' ? 1.25 : 1.0;
 
-  for (const [ticker, info] of Object.entries(APEX_BLUEPRINT)) {
-    const currentPrice = priceByTicker.get(ticker);
-    if (!currentPrice) continue;
-    const momentum = analyzeMomentum(ticker, currentPrice);
+  let score = 0;
+  let reason = '';
+  if (dropFromHigh >= SIGNAL.DIP_THRESHOLD) {
+    const dipStrength = Math.min(5, dropFromHigh / SIGNAL.DIP_THRESHOLD);
+    score += dipStrength * 10;
+    reason = `DIP -${(dropFromHigh * 100).toFixed(2)}%`;
+  }
+  if (rsi < SIGNAL.RSI_OVERSOLD) {
+    score += (SIGNAL.RSI_OVERSOLD - rsi) * 1.5;
+    reason = reason ? `${reason} | RSI ${rsi.toFixed(0)}` : `RSI LOW (${rsi.toFixed(0)})`;
+  }
+  if (score <= 0) return null;
+  score *= trendMul;
 
-    const pos = positions.get(ticker.toUpperCase());
-    const qty = pos ? Math.abs(parseFloat(pos.qty) || 0) : 0;
-    const avg = pos ? parseFloat(pos.avg_entry_price) || 0 : 0;
-    const value = pos ? Math.abs(parseFloat(pos.market_value) || 0) : 0;
+  const baseValue = cash * RISK.POSITION_SIZE_PCT * volMul * trendMul;
+  const tickerCap = Math.max(0, equity * (RISK.MAX_PER_TICKER_PCT / 100) - posValue);
+  const sectorCap = Math.max(0, equity * (RISK.MAX_PER_SECTOR_PCT / 100) - sectorValue);
+  const cashCap = cash * 0.95;
+  const targetValue = Math.min(baseValue, tickerCap, sectorCap, cashCap);
+  const amount = Math.floor(targetValue / price);
+  if (amount < 1) return null;
 
-    const baseSize = Math.max(1, Math.floor((cash * CONFIG.POSITION_SIZE_PERCENT) / currentPrice));
-    const volMul = 1 + (info.volatility - 2) * 0.2;
-    const targetValue = (totalValue * info.targetWeight) / 100;
-    const deviation = targetValue > 0 ? ((value - targetValue) / targetValue) * 100 : -100;
+  return { ticker, amount, price, score, reason, sector, value: amount * price };
+}
 
-    const dropFromHigh = momentum.localHigh > 0 ? (momentum.localHigh - currentPrice) / momentum.localHigh : 0;
-    const riseFromLow = momentum.localLow > 0 ? (currentPrice - momentum.localLow) / momentum.localLow : 0;
+function generateSellSignals(args: {
+  ticker: string;
+  price: number;
+  pos: AlpacaPosition;
+  rsi: number;
+  trend: 'UP' | 'DOWN' | 'NEUTRAL';
+  riseFromLow: number;
+}): SellSignal[] {
+  const { ticker, price, pos, rsi, trend, riseFromLow } = args;
+  const out: SellSignal[] = [];
+  const qty = Math.abs(parseFloat(pos.qty) || 0);
+  const avg = parseFloat(pos.avg_entry_price) || 0;
+  if (qty < 1) return out;
 
-    if (dropFromHigh >= CONFIG.DIP_THRESHOLD && cash > baseSize * currentPrice) {
-      const dipStrength = Math.min(4, dropFromHigh / CONFIG.DIP_THRESHOLD);
-      signals.push({
+  const sellTrendMul = trend === 'DOWN' ? 1.3 : trend === 'UP' ? 0.85 : 1.0;
+
+  if (riseFromLow >= SIGNAL.PEAK_THRESHOLD && qty > 2) {
+    const peakStrength = Math.min(5, riseFromLow / SIGNAL.PEAK_THRESHOLD);
+    const sellSize = Math.floor(Math.min(qty * 0.4, qty * 0.1 * peakStrength * sellTrendMul));
+    if (sellSize > 0) {
+      out.push({ ticker, amount: sellSize, price, reason: `PEAK +${(riseFromLow * 100).toFixed(2)}%` });
+    }
+  }
+  if (rsi > SIGNAL.RSI_OVERBOUGHT && qty > 3) {
+    out.push({
+      ticker,
+      amount: Math.floor(qty * 0.25 * sellTrendMul),
+      price,
+      reason: `RSI HIGH (${rsi.toFixed(0)})`,
+    });
+  }
+  if (avg > 0) {
+    const profitPct = (price - avg) / avg;
+    if (profitPct >= SIGNAL.PROFIT_TAKE_THRESHOLD) {
+      out.push({
         ticker,
-        action: 'buy',
-        amount: Math.floor(baseSize * dipStrength * volMul),
-        reason: `DIP -${(dropFromHigh * 100).toFixed(2)}%`,
-        priority: 5,
+        amount: Math.max(1, Math.floor(qty * 0.5)),
+        price,
+        reason: `PROFIT +${(profitPct * 100).toFixed(2)}%`,
       });
     }
-    if (momentum.rsi < CONFIG.RSI_OVERSOLD && cash > baseSize * currentPrice) {
-      signals.push({
+    if (profitPct <= SIGNAL.STOP_LOSS_THRESHOLD) {
+      out.push({
         ticker,
-        action: 'buy',
-        amount: Math.floor(baseSize * 1.5),
-        reason: `RSI OVERSOLD (${momentum.rsi.toFixed(0)})`,
-        priority: 4,
-      });
-    }
-    if (deviation < -15 && cash > baseSize * currentPrice) {
-      signals.push({
-        ticker,
-        action: 'buy',
-        amount: Math.floor(baseSize * 2),
-        reason: `UNDERWEIGHT ${deviation.toFixed(0)}%`,
-        priority: 3,
-      });
-    }
-    if (qty === 0 && cash > baseSize * currentPrice * 2) {
-      signals.push({
-        ticker,
-        action: 'buy',
-        amount: Math.floor(baseSize * 3),
-        reason: `BUILD ${info.targetWeight}%`,
-        priority: 2,
-      });
-    }
-
-    if (riseFromLow >= CONFIG.PEAK_THRESHOLD && qty > 2) {
-      const peakStrength = Math.min(4, riseFromLow / CONFIG.PEAK_THRESHOLD);
-      const sellSize = Math.floor(Math.min(qty * 0.3, baseSize * peakStrength));
-      if (sellSize > 0) {
-        signals.push({
-          ticker,
-          action: 'sell',
-          amount: sellSize,
-          reason: `PEAK +${(riseFromLow * 100).toFixed(2)}%`,
-          priority: 5,
-        });
-      }
-    }
-    if (qty > 0 && avg > 0) {
-      const profitPct = (currentPrice - avg) / avg;
-      if (profitPct >= CONFIG.PROFIT_TAKE_THRESHOLD) {
-        signals.push({
-          ticker,
-          action: 'sell',
-          amount: Math.max(1, Math.floor(qty * 0.4)),
-          reason: `PROFIT +${(profitPct * 100).toFixed(2)}%`,
-          priority: 5,
-        });
-      }
-      if (profitPct <= CONFIG.STOP_LOSS_THRESHOLD) {
-        signals.push({
-          ticker,
-          action: 'sell',
-          amount: Math.floor(qty * 0.5),
-          reason: `STOPLOSS ${(profitPct * 100).toFixed(2)}%`,
-          priority: 6,
-        });
-      }
-    }
-    if (momentum.rsi > CONFIG.RSI_OVERBOUGHT && qty > 3) {
-      signals.push({
-        ticker,
-        action: 'sell',
-        amount: Math.floor(qty * 0.2),
-        reason: `RSI OVERBOUGHT (${momentum.rsi.toFixed(0)})`,
-        priority: 3,
-      });
-    }
-    if (deviation > 25 && qty > 5) {
-      signals.push({
-        ticker,
-        action: 'sell',
-        amount: Math.floor(qty * 0.15),
-        reason: `OVERWEIGHT +${deviation.toFixed(0)}%`,
-        priority: 2,
+        amount: Math.floor(qty * 0.5),
+        price,
+        reason: `STOPLOSS ${(profitPct * 100).toFixed(2)}%`,
       });
     }
   }
-
-  signals.sort((a, b) => b.priority - a.priority);
-  return signals.slice(0, CONFIG.MAX_TRADES_PER_TICK);
+  return out.filter((s) => s.amount > 0);
 }
 
 type SerializedUser = Awaited<ReturnType<typeof getAllConnectedUsers>>[number];
@@ -227,66 +202,123 @@ async function runUserTick(user: SerializedUser) {
   if (!accountResult.success) {
     return { clerkUserId: user.clerkUserId, error: 'Account fetch failed', details: accountResult.error };
   }
-
   const account = accountResult.data;
   const cash = parseFloat(account.cash) || 0;
-  const totalValue = parseFloat(account.equity) || parseFloat(account.portfolio_value) || user.startBalance;
+  const equity = parseFloat(account.equity) || parseFloat(account.portfolio_value) || user.startBalance;
 
   const clockResult = await getClock(creds);
   const marketOpen = clockResult.success ? clockResult.data.is_open : false;
 
   const positionsResult = await getPositions(creds);
-  const positionsMap = new Map<string, AlpacaPosition>();
+  const positionsByTicker = new Map<string, AlpacaPosition>();
   if (positionsResult.success) {
-    for (const p of positionsResult.data) positionsMap.set(p.symbol.toUpperCase(), p);
+    for (const p of positionsResult.data) positionsByTicker.set(p.symbol.toUpperCase(), p);
+  }
+
+  const sectorValue = new Map<SectorKey, number>();
+  for (const pos of positionsByTicker.values()) {
+    const sector = SYMBOL_TO_SECTOR[pos.symbol.toUpperCase()];
+    if (!sector) continue;
+    const v = Math.abs(parseFloat(pos.market_value) || 0);
+    sectorValue.set(sector, (sectorValue.get(sector) || 0) + v);
   }
 
   console.log(
-    `[APEX-INNGEST] user=${user.clerkUserId} env=${user.environment} cash=${cash.toFixed(0)} total=${totalValue.toFixed(0)}`
+    `[APEX-INNGEST] user=${user.clerkUserId} env=${user.environment} cash=${cash.toFixed(0)} equity=${equity.toFixed(0)}`
   );
 
-  const signals = await generateSignals(creds, positionsMap, cash, totalValue, marketOpen);
+  // Pass 1: prices in parallel.
+  const priceByTicker = new Map<string, number>();
+  await runInChunks(WATCHLIST, RISK.PRICE_FETCH_CONCURRENCY, async (ticker) => {
+    const r = await getLatestPrice(creds, ticker);
+    if (r.success && r.data > 0) priceByTicker.set(ticker, r.data);
+  });
+
+  // Pass 2: score everything.
+  const sellSignals: SellSignal[] = [];
+  const buyCandidates: BuyCandidate[] = [];
+  for (const ticker of WATCHLIST) {
+    const price = priceByTicker.get(ticker);
+    if (!price) continue;
+    const m = analyzeMomentum(ticker, price);
+    const dropFromHigh = m.localHigh > 0 ? (m.localHigh - price) / m.localHigh : 0;
+    const riseFromLow  = m.localLow  > 0 ? (price - m.localLow) / m.localLow  : 0;
+    const pos = positionsByTicker.get(ticker.toUpperCase());
+
+    if (pos) {
+      sellSignals.push(...generateSellSignals({ ticker, price, pos, rsi: m.rsi, trend: m.trend, riseFromLow }));
+    } else {
+      const sector = SYMBOL_TO_SECTOR[ticker];
+      const candidate = generateBuyCandidate({
+        ticker,
+        price,
+        rsi: m.rsi,
+        trend: m.trend,
+        dropFromHigh,
+        cash,
+        equity,
+        posValue: 0,
+        sectorValue: sector ? sectorValue.get(sector) || 0 : 0,
+      });
+      if (candidate) buyCandidates.push(candidate);
+    }
+  }
+
+  buyCandidates.sort((a, b) => b.score - a.score);
+  const heldCount = positionsByTicker.size;
+  const slotsLeft = Math.max(0, RISK.MAX_POSITIONS - heldCount);
+  const sellsAllowedToHit = !marketOpen ? 0 : Math.min(sellSignals.length, RISK.MAX_TRADES_PER_SCAN);
+  const buysBudget = Math.max(0, Math.min(slotsLeft, RISK.MAX_TRADES_PER_SCAN - sellsAllowedToHit));
+
+  const acceptedBuys: BuyCandidate[] = [];
+  let runningCash = cash;
+  const runningSectorValue = new Map<SectorKey, number>(sectorValue);
+  for (const c of buyCandidates) {
+    if (acceptedBuys.length >= buysBudget) break;
+    if (c.sector) {
+      const sv = runningSectorValue.get(c.sector) || 0;
+      if (sv + c.value > equity * (RISK.MAX_PER_SECTOR_PCT / 100)) continue;
+    }
+    if (c.value > runningCash * 0.95) continue;
+    acceptedBuys.push(c);
+    runningCash -= c.value;
+    if (c.sector) runningSectorValue.set(c.sector, (runningSectorValue.get(c.sector) || 0) + c.value);
+  }
 
   let totalBought = 0;
   let totalSold = 0;
   const executed: Array<{ ticker: string; action: string; amount: number; orderId?: string; reason: string }> = [];
-  let runningCash = cash;
 
-  for (const signal of signals) {
-    const priceResult = await getLatestPrice(creds, signal.ticker);
-    if (!priceResult.success || priceResult.data <= 0) continue;
-    const tradeValue = signal.amount * priceResult.data;
-
-    if (signal.action === 'buy' && tradeValue > runningCash * 0.95) continue;
-    if (signal.action === 'sell') {
-      const pos = positionsMap.get(signal.ticker.toUpperCase());
+  if (marketOpen) {
+    for (const sig of sellSignals.slice(0, sellsAllowedToHit)) {
+      const pos = positionsByTicker.get(sig.ticker.toUpperCase());
       const have = pos ? Math.abs(parseFloat(pos.qty)) : 0;
-      if (!pos || have < signal.amount) continue;
+      if (!pos || have < sig.amount) continue;
+      const r = await placeOrder(creds, {
+        symbol: sig.ticker,
+        qty: sig.amount,
+        side: 'sell',
+        type: 'market',
+        time_in_force: 'day',
+      });
+      if (r.success) {
+        totalSold += sig.amount * sig.price;
+        executed.push({ ticker: sig.ticker, action: 'sell', amount: sig.amount, orderId: r.data.id, reason: sig.reason });
+      }
     }
+  }
 
-    const orderRes = await placeOrder(creds, {
-      symbol: signal.ticker,
-      qty: signal.amount,
-      side: signal.action,
+  for (const c of acceptedBuys) {
+    const r = await placeOrder(creds, {
+      symbol: c.ticker,
+      qty: c.amount,
+      side: 'buy',
       type: 'market',
       time_in_force: 'day',
     });
-
-    if (orderRes.success) {
-      if (signal.action === 'buy') {
-        totalBought += tradeValue;
-        runningCash -= tradeValue;
-      } else {
-        totalSold += tradeValue;
-        runningCash += tradeValue;
-      }
-      executed.push({
-        ticker: signal.ticker,
-        action: signal.action,
-        amount: signal.amount,
-        orderId: orderRes.data.id,
-        reason: signal.reason,
-      });
+    if (r.success) {
+      totalBought += c.value;
+      executed.push({ ticker: c.ticker, action: 'buy', amount: c.amount, orderId: r.data.id, reason: c.reason });
     }
   }
 
@@ -294,7 +326,8 @@ async function runUserTick(user: SerializedUser) {
     clerkUserId: user.clerkUserId,
     env: user.environment,
     marketOpen,
-    signals: signals.length,
+    candidates: buyCandidates.length,
+    sellSignals: sellSignals.length,
     executed: executed.length,
     totalBought,
     totalSold,
