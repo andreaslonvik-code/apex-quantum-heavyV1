@@ -3,10 +3,17 @@
     {
       "path": "/api/cron/autonomous",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/learn",
+      "schedule": "0 2 * * *"
     }
   ],
   "functions": {
     "app/api/cron/autonomous/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/cron/learn/route.ts": {
       "maxDuration": 60
     },
     "app/api/apex/autonomous/route.ts": {

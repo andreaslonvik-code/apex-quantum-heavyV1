@@ -10,6 +10,7 @@ import { getUserAlpacaCreds } from './user-alpaca';
 import type { AlpacaEnv } from './alpaca';
 
 export interface RequestCreds {
+  clerkUserId: string;
   apiKey: string;
   apiSecret: string;
   environment: AlpacaEnv;
@@ -30,6 +31,7 @@ export async function getRequestCreds(): Promise<RequestCreds | null> {
     if (!creds) return null;
 
     return {
+      clerkUserId: userId,
       apiKey: creds.apiKey,
       apiSecret: creds.apiSecret,
       environment: creds.environment,

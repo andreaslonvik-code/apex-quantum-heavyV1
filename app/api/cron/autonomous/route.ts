@@ -32,6 +32,12 @@ import {
   SIGNAL,
 } from '@/lib/blueprint';
 import { computeElitePortfolio } from '@/lib/portfolio-optimizer';
+import {
+  closeEntryLots,
+  getSignalMultipliers,
+  multiplierFor,
+  recordEntryLot,
+} from '@/lib/learning';
 
 interface PricePoint { price: number; timestamp: number }
 const priceHistory: Map<string, PricePoint[]> = new Map();
@@ -80,6 +86,8 @@ interface TradeSignal {
   price: number;
   reason: string;
   priority: number;
+  /** Maps to entry/exit_signal_type in position_lots — drives the learning loop. */
+  signalType: string;
 }
 
 async function runInChunks<T>(items: readonly T[], size: number, fn: (item: T) => Promise<void>): Promise<void> {
@@ -162,6 +170,12 @@ async function scanForUser(
   const sellSignals: TradeSignal[] = [];
   const buyCandidates: TradeSignal[] = [];
 
+  // Learned BUY-signal multipliers — the trading engine scales DIP/RSI_LOW/
+  // UNDERWEIGHT sizes by these. Risk-management signals (EXIT/STOPLOSS/
+  // OVERWEIGHT) always run at full strength, so we just leave their
+  // multiplier at 1.0.
+  const multipliers = await getSignalMultipliers();
+
   // EXIT — close out anything held outside the target portfolio. Highest
   // priority because legacy holdings drag the portfolio away from blueprint.
   const eliteSet = new Set(Object.keys(ELITE_PORTFOLIO));
@@ -172,7 +186,7 @@ async function scanForUser(
     if (exitPrice <= 0 || qty < 1) continue;
     sellSignals.push({
       ticker: sym, amount: qty, price: exitPrice,
-      reason: 'EXIT — utenfor blueprint', priority: 100,
+      reason: 'EXIT — utenfor blueprint', priority: 100, signalType: 'EXIT',
     });
   }
 
@@ -203,7 +217,7 @@ async function scanForUser(
         sellSignals.push({
           ticker, amount: sellAmount, price,
           reason: `OVERWEIGHT ${currentWeight.toFixed(0)}% > ${info.targetWeight}%`,
-          priority: 80,
+          priority: 80, signalType: 'OVERWEIGHT',
         });
       }
     }
@@ -213,12 +227,12 @@ async function scanForUser(
       if (profitPct <= SIGNAL.STOP_LOSS_THRESHOLD) {
         sellSignals.push({
           ticker, amount: Math.max(1, Math.floor(posQty * 0.5)), price,
-          reason: `STOPLOSS ${(profitPct * 100).toFixed(2)}%`, priority: 95,
+          reason: `STOPLOSS ${(profitPct * 100).toFixed(2)}%`, priority: 95, signalType: 'STOPLOSS',
         });
       } else if (profitPct >= SIGNAL.PROFIT_TAKE_THRESHOLD && posValue > targetValue) {
         sellSignals.push({
           ticker, amount: Math.max(1, Math.floor(posQty * 0.25)), price,
-          reason: `PROFIT +${(profitPct * 100).toFixed(2)}%`, priority: 60,
+          reason: `PROFIT +${(profitPct * 100).toFixed(2)}%`, priority: 60, signalType: 'PROFIT',
         });
       }
     }
@@ -226,7 +240,7 @@ async function scanForUser(
     if (m.rsi > SIGNAL.RSI_OVERBOUGHT && posQty > 3 && posValue >= targetValue * 0.9) {
       sellSignals.push({
         ticker, amount: Math.floor(posQty * 0.15 * sellTrendMul), price,
-        reason: `RSI HIGH (${m.rsi.toFixed(0)})`, priority: 40,
+        reason: `RSI HIGH (${m.rsi.toFixed(0)})`, priority: 40, signalType: 'RSI_HIGH',
       });
     }
     // PEAK — only when at/over weight.
@@ -236,43 +250,44 @@ async function scanForUser(
       if (sellSize > 0) {
         sellSignals.push({
           ticker, amount: sellSize, price,
-          reason: `PEAK +${(riseFromLow * 100).toFixed(2)}%`, priority: 50,
+          reason: `PEAK +${(riseFromLow * 100).toFixed(2)}%`, priority: 50, signalType: 'PEAK',
         });
       }
     }
 
-    // UNDERWEIGHT — structural rebalance, highest BUY priority.
+    // UNDERWEIGHT — structural rebalance, highest BUY priority. Multiplier
+    // applied to buyValue so the dollar bet scales with learned confidence.
     if (posValue < targetValue * REBALANCE.UNDERWEIGHT_TRIGGER) {
       const gap = targetValue - posValue;
-      const buyValue = gap * REBALANCE.CONVERGENCE_RATE;
+      const buyValue = gap * REBALANCE.CONVERGENCE_RATE * multiplierFor('UNDERWEIGHT', multipliers);
       const amount = Math.floor(buyValue / price);
       if (amount >= 1) {
         buyCandidates.push({
           ticker, amount, price,
           reason: `UNDERWEIGHT ${currentWeight.toFixed(0)}% < ${info.targetWeight}%`,
-          priority: 90,
+          priority: 90, signalType: 'UNDERWEIGHT',
         });
       }
     }
     // DIP / RSI LOW — tactical adds when below 110 % of target.
     if (dropFromHigh >= SIGNAL.DIP_THRESHOLD && m.trend !== 'DOWN' && posValue < targetValue * 1.1) {
       const dipStrength = Math.min(5, dropFromHigh / SIGNAL.DIP_THRESHOLD);
-      const buyValue = (equity * 0.005) * dipStrength * buyTrendMul;
+      const buyValue = (equity * 0.005) * dipStrength * buyTrendMul * multiplierFor('DIP', multipliers);
       const amount = Math.floor(buyValue / price);
       if (amount >= 1) {
         buyCandidates.push({
           ticker, amount, price,
-          reason: `DIP -${(dropFromHigh * 100).toFixed(2)}%`, priority: 55,
+          reason: `DIP -${(dropFromHigh * 100).toFixed(2)}%`, priority: 55, signalType: 'DIP',
         });
       }
     }
     if (m.rsi < SIGNAL.RSI_OVERSOLD && m.trend !== 'DOWN' && posValue < targetValue * 1.1) {
-      const buyValue = equity * 0.01 * buyTrendMul;
+      const buyValue = equity * 0.01 * buyTrendMul * multiplierFor('RSI_LOW', multipliers);
       const amount = Math.floor(buyValue / price);
       if (amount >= 1) {
         buyCandidates.push({
           ticker, amount, price,
-          reason: `RSI LOW (${m.rsi.toFixed(0)})`, priority: 50,
+          reason: `RSI LOW (${m.rsi.toFixed(0)})`, priority: 50, signalType: 'RSI_LOW',
         });
       }
     }
@@ -287,7 +302,9 @@ async function scanForUser(
   let tradesThisScan = 0;
   const maxTrades = RISK.MAX_TRADES_PER_SCAN;
 
-  // SELLs first — they free cash for BUYs.
+  // SELLs first — they free cash for BUYs. Each successful SELL FIFO-closes
+  // the oldest open lots for that ticker, attributing realised P&L back to
+  // the entry signal that originated those shares.
   for (const sig of sellSignals) {
     if (tradesThisScan >= maxTrades) break;
     const pos = positionsByTicker.get(sig.ticker.toUpperCase());
@@ -304,13 +321,21 @@ async function scanForUser(
       result.totalSold += tradeValue;
       runningCash += tradeValue;
       tradesThisScan++;
+      await closeEntryLots({
+        clerkUserId: user.clerkUserId,
+        ticker: sig.ticker,
+        qty: amount,
+        exitPrice: sig.price,
+        exitSignalType: sig.signalType,
+      });
     } else {
       result.errors = result.errors || [];
       result.errors.push(`SELL ${sig.ticker}: ${r.error}`);
     }
   }
 
-  // BUYs.
+  // BUYs. Each successful BUY records a new FIFO lot tagged with the entry
+  // signal type — that's the data the daily learning cron aggregates.
   for (const sig of buyCandidates) {
     if (tradesThisScan >= maxTrades) break;
     const tradeValue = sig.amount * sig.price;
@@ -324,6 +349,14 @@ async function scanForUser(
       result.totalBought += tradeValue;
       runningCash -= tradeValue;
       tradesThisScan++;
+      await recordEntryLot({
+        clerkUserId: user.clerkUserId,
+        ticker: sig.ticker,
+        qty: sig.amount,
+        entryPrice: sig.price,
+        signalType: sig.signalType,
+        signalReason: sig.reason,
+      });
     } else {
       result.errors = result.errors || [];
       result.errors.push(`BUY ${sig.ticker}: ${r.error}`);

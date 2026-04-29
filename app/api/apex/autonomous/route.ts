@@ -31,6 +31,12 @@ import {
   TICKER_NAME,
 } from '@/lib/blueprint';
 import { computeElitePortfolio } from '@/lib/portfolio-optimizer';
+import {
+  closeEntryLots,
+  getSignalMultipliers,
+  multiplierFor,
+  recordEntryLot,
+} from '@/lib/learning';
 
 interface PricePoint { price: number; timestamp: number }
 const priceHistory: Map<string, PricePoint[]> = new Map();
@@ -81,6 +87,8 @@ interface TradeSignal {
   reason: string;
   /** Higher score → executed first when the per-scan budget is tight. */
   priority: number;
+  /** Maps to entry/exit_signal_type in position_lots — drives the learning loop. */
+  signalType: string;
 }
 
 async function runInChunks<T>(items: readonly T[], size: number, fn: (item: T) => Promise<void>): Promise<void> {
@@ -160,6 +168,10 @@ export async function POST(_req: NextRequest) {
     const sellSignals: TradeSignal[] = [];
     const buyCandidates: TradeSignal[] = [];
 
+    // Learned BUY-signal multipliers — DIP/RSI_LOW/UNDERWEIGHT sizes scale
+    // by these. Risk-management signals stay at 1.0.
+    const multipliers = await getSignalMultipliers();
+
     // EXIT — close out anything held that isn't on the target portfolio.
     // Highest priority: legacy holdings drag the account away from the
     // blueprint and the cash is needed to fund target buys.
@@ -175,6 +187,7 @@ export async function POST(_req: NextRequest) {
         price: exitPrice,
         reason: 'EXIT — utenfor blueprint',
         priority: 100,
+        signalType: 'EXIT',
       });
     }
 
@@ -204,11 +217,9 @@ export async function POST(_req: NextRequest) {
         const sellAmount = Math.min(posQty, Math.floor((excess * REBALANCE.CONVERGENCE_RATE) / price));
         if (sellAmount >= 1) {
           sellSignals.push({
-            ticker,
-            amount: sellAmount,
-            price,
+            ticker, amount: sellAmount, price,
             reason: `OVERWEIGHT ${currentWeight.toFixed(0)}% > ${info.targetWeight}%`,
-            priority: 80,
+            priority: 80, signalType: 'OVERWEIGHT',
           });
         }
       }
@@ -217,31 +228,23 @@ export async function POST(_req: NextRequest) {
         const profitPct = (price - posAvg) / posAvg;
         if (profitPct <= SIGNAL.STOP_LOSS_THRESHOLD) {
           sellSignals.push({
-            ticker,
-            amount: Math.max(1, Math.floor(posQty * 0.5)),
-            price,
+            ticker, amount: Math.max(1, Math.floor(posQty * 0.5)), price,
             reason: `STOPLOSS ${(profitPct * 100).toFixed(2)}%`,
-            priority: 95,
+            priority: 95, signalType: 'STOPLOSS',
           });
         } else if (profitPct >= SIGNAL.PROFIT_TAKE_THRESHOLD && posValue > targetValue) {
-          // Take partial profit only when we're already at/over weight.
           sellSignals.push({
-            ticker,
-            amount: Math.max(1, Math.floor(posQty * 0.25)),
-            price,
+            ticker, amount: Math.max(1, Math.floor(posQty * 0.25)), price,
             reason: `PROFIT +${(profitPct * 100).toFixed(2)}%`,
-            priority: 60,
+            priority: 60, signalType: 'PROFIT',
           });
         }
       }
       // RSI HIGH — trim into strength.
       if (m.rsi > SIGNAL.RSI_OVERBOUGHT && posQty > 3 && posValue >= targetValue * 0.9) {
         sellSignals.push({
-          ticker,
-          amount: Math.floor(posQty * 0.15 * sellTrendMul),
-          price,
-          reason: `RSI HIGH (${m.rsi.toFixed(0)})`,
-          priority: 40,
+          ticker, amount: Math.floor(posQty * 0.15 * sellTrendMul), price,
+          reason: `RSI HIGH (${m.rsi.toFixed(0)})`, priority: 40, signalType: 'RSI_HIGH',
         });
       }
       // PEAK — short-term spike from intra-scan low.
@@ -250,60 +253,49 @@ export async function POST(_req: NextRequest) {
         const sellSize = Math.floor(Math.min(posQty * 0.3, posQty * 0.05 * peakStrength * sellTrendMul));
         if (sellSize > 0) {
           sellSignals.push({
-            ticker,
-            amount: sellSize,
-            price,
+            ticker, amount: sellSize, price,
             reason: `PEAK +${(riseFromLow * 100).toFixed(2)}%`,
-            priority: 50,
+            priority: 50, signalType: 'PEAK',
           });
         }
       }
 
       // ── BUY signals ───────────────────────────────────────────────────
       // UNDERWEIGHT — structural rebalance toward target weight. Highest
-      // BUY priority because this is what makes the portfolio match the
-      // blueprint.
+      // BUY priority. Multiplier applied so dollar bet scales with learned
+      // confidence in the UNDERWEIGHT signal.
       if (posValue < targetValue * REBALANCE.UNDERWEIGHT_TRIGGER) {
         const gap = targetValue - posValue;
-        const buyValue = gap * REBALANCE.CONVERGENCE_RATE;
+        const buyValue = gap * REBALANCE.CONVERGENCE_RATE * multiplierFor('UNDERWEIGHT', multipliers);
         const amount = Math.floor(buyValue / price);
         if (amount >= 1) {
           buyCandidates.push({
-            ticker,
-            amount,
-            price,
+            ticker, amount, price,
             reason: `UNDERWEIGHT ${currentWeight.toFixed(0)}% < ${info.targetWeight}%`,
-            priority: 90,
+            priority: 90, signalType: 'UNDERWEIGHT',
           });
         }
       }
-      // DIP — tactical: accumulate ELITE on short-term weakness, even when
-      // close to target (small adds only).
       if (dropFromHigh >= SIGNAL.DIP_THRESHOLD && m.trend !== 'DOWN' && posValue < targetValue * 1.1) {
         const dipStrength = Math.min(5, dropFromHigh / SIGNAL.DIP_THRESHOLD);
-        const buyValue = (equity * 0.005) * dipStrength * buyTrendMul; // 0.5 % of equity per unit dip
+        const buyValue = (equity * 0.005) * dipStrength * buyTrendMul * multiplierFor('DIP', multipliers);
         const amount = Math.floor(buyValue / price);
         if (amount >= 1) {
           buyCandidates.push({
-            ticker,
-            amount,
-            price,
+            ticker, amount, price,
             reason: `DIP -${(dropFromHigh * 100).toFixed(2)}%`,
-            priority: 55,
+            priority: 55, signalType: 'DIP',
           });
         }
       }
-      // RSI LOW — tactical accumulation on oversold ELITE names.
       if (m.rsi < SIGNAL.RSI_OVERSOLD && m.trend !== 'DOWN' && posValue < targetValue * 1.1) {
-        const buyValue = equity * 0.01 * buyTrendMul; // 1 % of equity
+        const buyValue = equity * 0.01 * buyTrendMul * multiplierFor('RSI_LOW', multipliers);
         const amount = Math.floor(buyValue / price);
         if (amount >= 1) {
           buyCandidates.push({
-            ticker,
-            amount,
-            price,
+            ticker, amount, price,
             reason: `RSI LOW (${m.rsi.toFixed(0)})`,
-            priority: 50,
+            priority: 50, signalType: 'RSI_LOW',
           });
         }
       }
@@ -347,6 +339,13 @@ export async function POST(_req: NextRequest) {
             amount, price: sig.price, value: tradeValue,
             orderId: r.data.id, status: 'OK', reason: sig.reason,
           });
+          await closeEntryLots({
+            clerkUserId: userCreds.clerkUserId,
+            ticker: sig.ticker,
+            qty: amount,
+            exitPrice: sig.price,
+            exitSignalType: sig.signalType,
+          });
         } else {
           executedTrades.push({
             ticker: sig.ticker, symbol: sig.ticker, action: 'SELL',
@@ -376,6 +375,14 @@ export async function POST(_req: NextRequest) {
             ticker: sig.ticker, symbol: sig.ticker, action: 'BUY',
             amount: sig.amount, price: sig.price, value: tradeValue,
             orderId: r.data.id, status: 'OK', reason: sig.reason,
+          });
+          await recordEntryLot({
+            clerkUserId: userCreds.clerkUserId,
+            ticker: sig.ticker,
+            qty: sig.amount,
+            entryPrice: sig.price,
+            signalType: sig.signalType,
+            signalReason: sig.reason,
           });
         } else {
           executedTrades.push({
