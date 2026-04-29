@@ -1,6 +1,8 @@
 // inngest/functions/apex-quantum-tick.ts
-// APEX QUANTUM v8 — multi-user Alpaca trading tick.
-// Runs every minute, fans out to every connected user, executes 2 ticks ~30s apart.
+// APEX QUANTUM — multi-user Alpaca trading tick.
+// Runs every minute, fans out to every connected user, executes 2 ticks ~30s
+// apart. Universe + per-ticker weights come from lib/blueprint.ts (shared with
+// the on-demand /api/apex/autonomous route).
 import { inngest } from '@/lib/inngest';
 import {
   placeOrder,
@@ -13,15 +15,7 @@ import {
   type AlpacaPosition,
 } from '@/lib/alpaca';
 import { getAllConnectedUsers } from '@/lib/user-alpaca';
-
-const APEX_BLUEPRINT: Record<string, { name: string; targetWeight: number; volatility: number }> = {
-  MU:   { name: 'Micron Technology',    targetWeight: 25, volatility: 3 },
-  CEG:  { name: 'Constellation Energy', targetWeight: 10, volatility: 2 },
-  VRT:  { name: 'Vertiv Holdings',      targetWeight: 10, volatility: 2 },
-  RKLB: { name: 'Rocket Lab',           targetWeight: 8,  volatility: 4 },
-  LMND: { name: 'Lemonade Inc',         targetWeight: 7,  volatility: 4 },
-  ABSI: { name: 'Absci Corporation',    targetWeight: 5,  volatility: 5 },
-};
+import { APEX_BLUEPRINT } from '@/lib/blueprint';
 
 const CONFIG = {
   DIP_THRESHOLD: 0.0005,
@@ -32,6 +26,7 @@ const CONFIG = {
   STOP_LOSS_THRESHOLD: -0.02,
   POSITION_SIZE_PERCENT: 0.15,
   MAX_TRADES_PER_TICK: 12,
+  PRICE_FETCH_CONCURRENCY: 12,
 };
 
 interface PricePoint { price: number; timestamp: number }
@@ -79,6 +74,12 @@ interface TradingSignal {
   priority: number;
 }
 
+async function runInChunks<T>(items: T[], size: number, fn: (item: T) => Promise<void>): Promise<void> {
+  for (let i = 0; i < items.length; i += size) {
+    await Promise.all(items.slice(i, i + size).map(fn));
+  }
+}
+
 async function generateSignals(
   creds: AlpacaCreds,
   positions: Map<string, AlpacaPosition>,
@@ -88,13 +89,20 @@ async function generateSignals(
 ): Promise<TradingSignal[]> {
   const signals: TradingSignal[] = [];
   const isPaper = creds.env === 'paper';
+  if (!marketOpen && !isPaper) return signals;
+
+  // Fetch all blueprint prices in parallel chunks instead of one-at-a-time.
+  // 32 tickers @ concurrency 12 → 3 round trips; each is ~150-300ms.
+  const tickers = Object.keys(APEX_BLUEPRINT);
+  const priceByTicker = new Map<string, number>();
+  await runInChunks(tickers, CONFIG.PRICE_FETCH_CONCURRENCY, async (ticker) => {
+    const r = await getLatestPrice(creds, ticker);
+    if (r.success && r.data > 0) priceByTicker.set(ticker, r.data);
+  });
 
   for (const [ticker, info] of Object.entries(APEX_BLUEPRINT)) {
-    if (!marketOpen && !isPaper) continue;
-
-    const priceResult = await getLatestPrice(creds, ticker);
-    if (!priceResult.success || priceResult.data <= 0) continue;
-    const currentPrice = priceResult.data;
+    const currentPrice = priceByTicker.get(ticker);
+    if (!currentPrice) continue;
     const momentum = analyzeMomentum(ticker, currentPrice);
 
     const pos = positions.get(ticker.toUpperCase());
@@ -296,7 +304,7 @@ async function runUserTick(user: SerializedUser) {
 export const apexQuantumTick = inngest.createFunction(
   {
     id: 'apex-quantum-tick',
-    name: 'APEX QUANTUM v8 Per-User Trading Tick (Alpaca)',
+    name: 'APEX QUANTUM Per-User Trading Tick (Alpaca)',
     retries: 3,
     triggers: [{ cron: '*/1 * * * *' }],
   },
@@ -310,7 +318,7 @@ export const apexQuantumTick = inngest.createFunction(
     });
 
     if (!users.length) {
-      return { version: 'APEX QUANTUM v8', mode: 'multi-user', users: 0 };
+      return { version: 'APEX QUANTUM', mode: 'multi-user', users: 0 };
     }
 
     const results: unknown[] = [];
@@ -339,7 +347,7 @@ export const apexQuantumTick = inngest.createFunction(
       return { purged: true };
     });
 
-    return { version: 'APEX QUANTUM v8', mode: 'multi-user', users: users.length, results };
+    return { version: 'APEX QUANTUM', mode: 'multi-user', users: users.length, results };
   }
 );
 
