@@ -157,13 +157,14 @@ export const REBALANCE = {
 // even when signals would otherwise want to keep buying.
 export const RISK = {
   /** Hard cap on simultaneous holdings. Matches elite slate size. */
-  MAX_POSITIONS: 8,
+  MAX_POSITIONS: 5,
   /** % of equity any single ticker may occupy. Matches top tier-cap. */
-  MAX_PER_TICKER_PCT: 35,
-  /** % of equity any single sector may occupy. Loose enough that two
-   *  top-tier picks (32 % + 20 %) can both land in the same sector when
-   *  the AI selector has high conviction in a theme. */
-  MAX_PER_SECTOR_PCT: 55,
+  MAX_PER_TICKER_PCT: 50,
+  /** % of equity any single sector may occupy. Loose enough that the
+   *  top-tier pick (45 %) plus a same-sector secondary (25 %) can both
+   *  land — common when the AI selector has strong conviction in a
+   *  theme like AI/semis. */
+  MAX_PER_SECTOR_PCT: 75,
   /** Base BUY size as a % of cash before signal/vol/trend multipliers. */
   POSITION_SIZE_PCT: 0.08,
   /** Halt for the day at -3 % unrealised. */
@@ -195,8 +196,10 @@ export const SIGNAL = {
   PEAK_THRESHOLD: 0.005,
   RSI_OVERSOLD: 48,
   RSI_OVERBOUGHT: 52,
-  /** Profit % at which we trim 25 % to lock in some gain. */
-  PROFIT_TAKE_THRESHOLD: 0.03,
+  /** Profit % at which we trim 25 %. Set high so we don't cut winners
+   *  early — the profit-ratchet trailing stop handles give-back risk
+   *  much earlier than this. */
+  PROFIT_TAKE_THRESHOLD: 0.15,
   /** Static fallback stop (loss as a fraction of entry). ATR stop usually
    *  overrides this — STOP_LOSS_THRESHOLD is a floor for ultra-low-vol names. */
   STOP_LOSS_THRESHOLD: -0.02,
@@ -209,10 +212,32 @@ export const SIGNAL = {
   ATR_PERIOD: 14,
 
   // ── Trailing stop / profit ratchet ─────────────────────────────────
-  /** Profit % needed before the trailing stop activates. Below this we use
-   *  the ATR / static stop only (don't squeeze winners that haven't run). */
-  TRAILING_PROFIT_TRIGGER: 0.03,
-  /** Once trailing is active, sell when price falls this far below the
-   *  position's high-water mark. Locks in gains as the position runs. */
-  TRAILING_DRAWDOWN_PCT: 0.02,
+  /** Profit % needed before any trailing stop activates. Below this we
+   *  use the ATR / static stop only — small fluctuations shouldn't fire
+   *  trailing on a position that hasn't earned protection yet. */
+  TRAILING_PROFIT_TRIGGER: 0.08,
+  /** Initial trailing distance once a position has cleared the trigger.
+   *  The profit-ratchet tightens this dynamically as gains grow — see
+   *  trailingDistanceForProfit() in trading-engine.ts. */
+  TRAILING_DRAWDOWN_PCT: 0.06,
 } as const;
+
+/**
+ * Profit ratchet — returns the trailing-stop distance to apply at a given
+ * profit level. Tightens as the position runs so more of every additional
+ * % of gain gets locked in. Below TRAILING_PROFIT_TRIGGER the trailing
+ * stop doesn't apply at all (caller checks).
+ *
+ *   +8 % … +15 %  → 6 % trail (let it breathe through normal volatility)
+ *   +15 % … +25 % → 5 % trail
+ *   +25 % … +40 % → 4 % trail
+ *   +40 % … +60 % → 3 % trail
+ *   +60 %+        → 2 % trail (lock the parabolic move)
+ */
+export function trailingDistanceForProfit(profitPct: number): number {
+  if (profitPct >= 0.60) return 0.02;
+  if (profitPct >= 0.40) return 0.03;
+  if (profitPct >= 0.25) return 0.04;
+  if (profitPct >= 0.15) return 0.05;
+  return 0.06;
+}

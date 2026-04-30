@@ -36,7 +36,7 @@ import {
   type AlpacaCreds,
   type AlpacaPosition,
 } from './alpaca';
-import { WATCHLIST, RISK, SIGNAL, SYMBOL_TO_SECTOR, EXTREME_CONVICTION_TICKERS, EXTREME_CONVICTION_BOOST } from './blueprint';
+import { WATCHLIST, RISK, SIGNAL, SYMBOL_TO_SECTOR, EXTREME_CONVICTION_TICKERS, EXTREME_CONVICTION_BOOST, trailingDistanceForProfit } from './blueprint';
 import { computeEliteTickers } from './portfolio-optimizer';
 import { computeTargetWeights, targetDollars } from './elite-allocation';
 import {
@@ -369,11 +369,13 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
       // so an extreme-vol name doesn't get squeezed by the static floor.
       const baseStopLevel = Math.min(staticStopLevel, atrStopLevel);
 
-      // Trailing stop activates only after the position has run > trigger.
-      // Sells when price falls TRAILING_DRAWDOWN_PCT from session HWM.
+      // Trailing stop activates after the position has run > trigger.
+      // The distance tightens as profit grows (profit-ratchet) so more of
+      // each additional % gets locked in. See trailingDistanceForProfit.
       const trailingActive = profitPct >= SIGNAL.TRAILING_PROFIT_TRIGGER;
+      const trailingDistance = trailingDistanceForProfit(profitPct);
       const trailingStopLevel = trailingActive
-        ? hwm * (1 - SIGNAL.TRAILING_DRAWDOWN_PCT)
+        ? hwm * (1 - trailingDistance)
         : 0;
 
       // Effective stop = whichever is HIGHER (closer to current price for a
@@ -385,7 +387,8 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
         let signalType: string;
         if (trailingActive && trailingStopLevel >= baseStopLevel) {
           const drawdownFromHwm = ((hwm - price) / hwm) * 100;
-          reason = `TRAILING −${drawdownFromHwm.toFixed(2)}% from $${hwm.toFixed(2)} (locked +${(profitPct * 100).toFixed(2)}%)`;
+          reason = `TRAILING −${drawdownFromHwm.toFixed(2)}% from $${hwm.toFixed(2)} ` +
+            `(ratchet ${(trailingDistance * 100).toFixed(0)}% trail at +${(profitPct * 100).toFixed(1)}%, locked)`;
           signalType = 'TRAILING';
         } else if (atr > 0 && atrStopLevel < staticStopLevel) {
           const stopPct = ((avg - price) / avg) * 100;

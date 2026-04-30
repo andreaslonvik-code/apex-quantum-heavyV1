@@ -16,16 +16,16 @@
 
 import type { AiPortfolioPick } from './ai-portfolio';
 
-/** Tier weights — sum to 1.00. Sorted by score desc, slot-1 gets index 0. */
+/** Tier weights — sum to 1.00. Sorted by score desc, slot-1 gets index 0.
+ *  5 slots, heavy top-tier — concentration is the engine of asymmetric
+ *  upside on this strategy. Top conviction holds 45 % of the book; the
+ *  long tail is intentionally short. */
 export const ELITE_TIER_WEIGHTS: readonly number[] = [
-  0.32,  // 1st conviction
-  0.20,  // 2nd
+  0.45,  // 1st conviction
+  0.25,  // 2nd
   0.15,  // 3rd
-  0.12,  // 4th
-  0.08,  // 5th
-  0.06,  // 6th
-  0.04,  // 7th
-  0.03,  // 8th
+  0.10,  // 4th
+  0.05,  // 5th
 ];
 
 /** Hold this much of equity in cash for slippage + intraday frictions. */
@@ -35,7 +35,7 @@ export const CASH_BUFFER_PCT = 0.01;
 export const MIN_PICK_SCORE = 7.5;
 
 /** Per-ticker hard ceiling regardless of tier (sanity guardrail). */
-export const ABSOLUTE_TICKER_CAP = 0.35;
+export const ABSOLUTE_TICKER_CAP = 0.50;
 
 export interface AllocationTarget {
   ticker: string;
