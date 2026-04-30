@@ -29,7 +29,7 @@ export const ELITE_TIER_WEIGHTS: readonly number[] = [
 ];
 
 /** Hold this much of equity in cash for slippage + intraday frictions. */
-export const CASH_BUFFER_PCT = 0.02;
+export const CASH_BUFFER_PCT = 0.01;
 
 /** Hard floor — picks below this score get zero weight. */
 export const MIN_PICK_SCORE = 7.5;

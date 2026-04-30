@@ -152,15 +152,15 @@ export const RISK = {
   POSITION_SIZE_PCT: 0.08,
   /** Halt for the day at -3 % unrealised. */
   DAILY_LOSS_LIMIT: -0.03,
-  /** Max trades placed per scan (BUY + SELL combined). */
-  MAX_TRADES_PER_SCAN: 12,
+  /** Max trades placed per scan (BUY + SELL combined). Sized so a full
+   *  rotation (8 non-elite exits + 8 elite entries) fits in one tick. */
+  MAX_TRADES_PER_SCAN: 20,
   /** Parallelism for /quotes calls — Alpaca paper rate ≈ 200/min. */
   PRICE_FETCH_CONCURRENCY: 12,
   /** Each rebalance trade closes this fraction of the gap to target.
-   *  Aggressive enough that we converge to target within a few ticks
-   *  during regular session, conservative enough that one stale price
-   *  can't dump 100 % into a name. */
-  REBALANCE_CONVERGENCE: 0.5,
+   *  At 0.95 we converge to target in essentially one tick — leaves a
+   *  tiny gap so the next tick can fine-tune after fills settle. */
+  REBALANCE_CONVERGENCE: 0.95,
   /** Position is "underweight enough to top up" when current value falls
    *  below target × this factor. */
   REBALANCE_UNDERWEIGHT: 0.85,

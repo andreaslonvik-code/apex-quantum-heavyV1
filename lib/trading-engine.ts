@@ -425,6 +425,24 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
   // outrank any signal-based candidate in the BUY ordering below.
   const targets = computeTargetWeights(eliteResult.picks);
   const targetByTicker = targetDollars(targets, equity);
+  const eliteTargetSet = new Set(targets.map((t) => t.ticker));
+
+  // Force-exit positions that aren't in the elite slate. Frees both the
+  // HOLDINGS_CAP slot and the cash for elite picks to fill. Priority 70
+  // sits below STOPLOSS (100) and TRAILING (90) — those should still win
+  // when they fire — but above regular profit-take (~20-50).
+  for (const [sym, pos] of positionsByTicker) {
+    if (eliteTargetSet.has(sym)) continue;
+    const qty = Math.abs(parseFloat(pos.qty) || 0);
+    if (qty < 1) continue;
+    const price = priceByTicker.get(sym);
+    if (!price) continue;
+    result.sellSignals.push({
+      ticker: sym, amount: Math.floor(qty), price,
+      reason: `EXIT non-elite (rotate to current slate)`,
+      priority: 70, signalType: 'NON_ELITE_EXIT',
+    });
+  }
   for (const t of targets) {
     const ticker = t.ticker;
     const price = priceByTicker.get(ticker);
