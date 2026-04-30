@@ -20,7 +20,7 @@ import { createAdminClient } from '@/utils/supabase/admin';
 
 // yahoo-finance2's quote/quoteSummary overloads don't narrow nicely without
 // explicit casts — these types capture just the fields we actually read.
-type YahooQuote = { regularMarketPrice?: number };
+type YahooQuote = { regularMarketPrice?: number; regularMarketChangePercent?: number };
 type YahooSummary = { calendarEvents?: { earnings?: { earningsDate?: unknown[] } } };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -29,6 +29,61 @@ type YahooSummary = { calendarEvents?: { earnings?: { earningsDate?: unknown[] }
 
 const VIX_CACHE_TTL_MS = 5 * 60 * 1000;
 let vixCache: { ts: number; level: number } | null = null;
+
+/**
+ * Real-time market context snapshot — verified prices we feed into the
+ * Grok news-scan prompt so it doesn't hallucinate "WTI ~$71" from stale
+ * training data. Cached 5 min so 30-min news scans get fresh-ish numbers
+ * without slamming Yahoo on every tick.
+ */
+export interface MarketSnapshot {
+  vix: number | null;
+  wti: number | null;        // CL=F West Texas Intermediate crude
+  brent: number | null;      // BZ=F Brent crude
+  gold: number | null;       // GC=F Gold futures
+  spxChangePct: number | null;  // ^GSPC daily change %
+  ndxChangePct: number | null;  // ^NDX daily change %
+  takenAt: string;           // ISO timestamp so prompt can stamp freshness
+}
+
+const SNAPSHOT_CACHE_TTL_MS = 5 * 60 * 1000;
+let snapshotCache: { ts: number; data: MarketSnapshot } | null = null;
+
+export async function getMarketSnapshot(): Promise<MarketSnapshot> {
+  if (snapshotCache && Date.now() - snapshotCache.ts < SNAPSHOT_CACHE_TTL_MS) {
+    return snapshotCache.data;
+  }
+  const symbols = ['^VIX', 'CL=F', 'BZ=F', 'GC=F', '^GSPC', '^NDX'];
+  const quotes: Record<string, YahooQuote | undefined> = {};
+  await Promise.all(
+    symbols.map(async (s) => {
+      try {
+        quotes[s] = (await yahooFinance.quote(s)) as YahooQuote | undefined;
+      } catch (e) {
+        console.error(`[MARKET-CONTEXT] snapshot fetch failed for ${s}:`, e);
+      }
+    }),
+  );
+  const num = (q: YahooQuote | undefined): number | null => {
+    const n = Number(q?.regularMarketPrice);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const pct = (q: YahooQuote | undefined): number | null => {
+    const p = Number(q?.regularMarketChangePercent);
+    return Number.isFinite(p) ? p : null;
+  };
+  const data: MarketSnapshot = {
+    vix: num(quotes['^VIX']),
+    wti: num(quotes['CL=F']),
+    brent: num(quotes['BZ=F']),
+    gold: num(quotes['GC=F']),
+    spxChangePct: pct(quotes['^GSPC']),
+    ndxChangePct: pct(quotes['^NDX']),
+    takenAt: new Date().toISOString(),
+  };
+  snapshotCache = { ts: Date.now(), data };
+  return data;
+}
 
 /** Returns the most recent VIX close. Falls back to 15 (calm regime) on error. */
 export async function getVixLevel(): Promise<number> {

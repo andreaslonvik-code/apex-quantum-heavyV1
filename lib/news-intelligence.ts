@@ -27,6 +27,7 @@ import {
   WATCHLIST,
   type SectorKey,
 } from './blueprint';
+import { getMarketSnapshot, type MarketSnapshot } from './market-context';
 
 const xai = createXai({ apiKey: process.env.XAI_API_KEY || '' });
 // News scanning is fact-extraction + categorisation — the heavy reasoning
@@ -77,8 +78,26 @@ export interface StoredNewsIntel {
 // Prompt
 // ─────────────────────────────────────────────────────────────────────────────
 
-function buildPrompt(): string {
+function formatSnapshot(s: MarketSnapshot): string {
+  const fmt = (n: number | null, prefix = '$', suffix = '') =>
+    n === null ? 'n/a' : `${prefix}${n.toFixed(2)}${suffix}`;
+  const fmtPct = (n: number | null) =>
+    n === null ? 'n/a' : `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
+  return `# VERIFISERTE SANNTIDSPRISER (Yahoo Finance, snapshot ${s.takenAt})
+**Bruk DISSE tallene — IKKE fabriker prisestimater fra hukommelsen.**
+- VIX: ${fmt(s.vix, '', '')}
+- WTI olje (CL=F): ${fmt(s.wti)}
+- Brent olje (BZ=F): ${fmt(s.brent)}
+- Gull (GC=F): ${fmt(s.gold, '$', '/oz')}
+- S&P 500 dagens endring: ${fmtPct(s.spxChangePct)}
+- Nasdaq 100 dagens endring: ${fmtPct(s.ndxChangePct)}
+`;
+}
+
+function buildPrompt(snapshot: MarketSnapshot): string {
   return `Du er APEX QUANTUM sin nyhets-analytiker. Hver time leser du verdens-nyhetsbildet og X-sentiment, og leverer en strukturert vurdering som driver allokeringen.
+
+${formatSnapshot(snapshot)}
 
 # Datakilder
 - Globale finansnyheter (Reuters, Bloomberg, FT, WSJ, CNBC) — fokus siste timen
@@ -132,9 +151,14 @@ Tilgjengelige keys: ${SECTOR_KEYS.join(', ')}
 
 \`confidence\`: 0..1. Hvis nyhetsbildet er rolig eller tvetydig: LAV confidence (0.3-0.5). Ikke fabriker signaler.
 
-Returner JSON som matcher schema. Eksempel ved rolig dag:
+Regler for summary-teksten:
+- Bruk KUN priser fra "VERIFISERTE SANNTIDSPRISER" over. Hvis du vil nevne en pris, hent verdien derfra.
+- IKKE skriv "olje ~$72" eller andre tall fra hukommelsen — det undergraver tilliten.
+- Du kan beskrive bevegelse uten tall ("olje stabilt", "olje ned", "VIX lav") hvis du ikke vil bruke eksakte verdier.
+
+Returner JSON som matcher schema. Eksempel ved rolig dag (priser hentet fra snapshot):
 {
-  "summary": "Rolig nyhetsbilde. AI-capex driver semis. Olje stabilt ~$72. Ingen geopolitiske eskaleringer.",
+  "summary": "Rolig nyhetsbilde. AI-capex driver semis. Olje stabilt rundt nivå i snapshot. Ingen geopolitiske eskaleringer.",
   "riskMode": "normal",
   "sectorBias": { "semis": 0.2 },
   "tickerEvents": [],
@@ -148,10 +172,11 @@ Returner JSON som matcher schema. Eksempel ved rolig dag:
 
 export async function scanNews(): Promise<{ intel: NewsIntel | null; raw: unknown; error?: string }> {
   try {
+    const snapshot = await getMarketSnapshot();
     const result = await generateObject({
       model: grokModel,
       schema: NewsIntelSchema,
-      prompt: buildPrompt(),
+      prompt: buildPrompt(snapshot),
       temperature: 0.3,
     });
     return { intel: result.object, raw: result.object };
