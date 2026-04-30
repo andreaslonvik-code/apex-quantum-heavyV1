@@ -89,10 +89,25 @@ function buildPrompt(): string {
 # Proaktiv overvåkning (alltid sjekk)
 - **Midtøsten**: Hormuz-stredet, Iran, Israel-konflikt, Saudi/OPEC+ rykter
 - **USA/Kina**: tariffer, Taiwan, halvleder-eksport-restriksjoner, valuta-bevegelser
-- **Trump-administrasjonen**: policy-uttalelser, særlig handel/sanksjoner/energi
+- **Trump-administrasjonen**: policy-uttalelser om handel/sanksjoner/energi/Fed-press. Følg Truth Social via cross-poster på X / nyhets-aggregatorer (truthsocial.com har ingen API; poster cross-posts som regel innen minutter til X eller blir sitert av Reuters/Axios)
 - **Elon Musk**: Tesla/SpaceX/X uttalelser som har historie å flytte kurs
 - **Oljepris**: spike-bevegelser, OPEC+ rykter, raffineri-hendelser
-- **Boble/krakk-signaler**: AI peak-euphoria, uvanlige opsjoner, insider-salg, kreditt-spreads, VIX-spikes, bank-stress
+- **Makro-regime**: stagflasjon-signaler (CPI vs. lønnsvekst-gap, oljepris-spike + svak ISM), deflasjon (M2-kontraksjon, fallende råvarekurv), bankkriser (regional-bank stress, deposit flight), sovereign credit (CDS-spreads), Fed-policy-skifter
+- **Boble/krakk-signaler**: AI peak-euphoria, uvanlige opsjoner, insider-salg, kreditt-spreads, VIX-spikes, bank-stress, repo-stress
+
+# Spesifikk fokus
+
+**Kvante-aksjer (sektor i tidlig vekst — høy sensitivitet for nyheter)**:
+IONQ, RGTI (Rigetti), QBTS (D-Wave), QUBT (Quantum Computing Inc), ARQQ (Arqit). Følg: kvante-supremasi-publikasjoner, IBM/Google/Microsoft kvante-kunngjøringer, DARPA/DOE-kontrakter, akademiske gjennombrudd som peker mot nær-kommersialisering.
+
+**HELP / Cybin (biotek-katalysator)**:
+Følg fase 3-utvikling tett: FDA-meldinger, IND-amendments, interim readouts, partnerskap, kapital-innhentinger. Ved positiv readout: aksjen kan gappe +50-200 % og deretter rekyl ned 20-40 % på dag 1-3. Flagg slike hendelser med høy weight og direction='bullish' med 'rebound entry'-merknad i reason.
+
+**Prioriterte tickere (alltid sjekk selv på rolige dager)**:
+MU, IONQ, EQNR, AVGO, PLTR, VRT, HELP. Disse skal alltid vurderes — inkluder i tickerEvents når det er noe materielt, eller i summary når det er rolig.
+
+**Toppanalytiker-konsensus**:
+Følg offentlige calls fra: Goldman Sachs (David Kostin), JPMorgan (Marko Kolanovic, Mislav Matejka), Morgan Stanley (Mike Wilson), Stan Druckenmiller, Bill Ackman, Cathie Wood (kontrarisk), Mohamed El-Erian. Når 3+ av disse skifter retning samtidig — det er sterkt signal.
 
 # Watchlist (sjekk for materielle hendelser siste timen)
 ${WATCHLIST.join(', ')}
