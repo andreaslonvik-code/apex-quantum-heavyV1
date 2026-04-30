@@ -110,6 +110,19 @@ interface HwmEntry { hwm: number; updatedAt: number }
 const highWaterMarks: Map<string, HwmEntry> = new Map();
 const HWM_TTL_MS = 24 * 60 * 60 * 1000;
 
+// Per-(user, ticker) first-seen timestamp. Used to gate NON_ELITE_EXIT
+// so newly opened positions get a fair window to move before being
+// forcibly rotated out at a small loss. Module-level so warm lambdas
+// reuse it; cold-start failure mode is "exit window resets, position
+// might exit a few minutes earlier than ideal" — safe.
+const positionFirstSeen: Map<string, number> = new Map();
+const NON_ELITE_MIN_HOLD_MS = 30 * 60 * 1000;
+const NON_ELITE_PROTECT_PLPC = -0.003; // skip exit if loss > 0.3 %
+
+function firstSeenKey(clerkUserId: string, ticker: string): string {
+  return `${clerkUserId}:${ticker.toUpperCase()}`;
+}
+
 function hwmKey(clerkUserId: string, ticker: string): string {
   return `${clerkUserId}:${ticker.toUpperCase()}`;
 }
@@ -433,26 +446,65 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     `[${targets.map((t) => `${t.ticker}:${(t.weight * 100).toFixed(1)}%(${t.score.toFixed(1)})`).join(', ')}]`
   );
 
+  // Stamp first-seen for any position we haven't tracked yet. Lets the
+  // hold-time gate below give every new entry a fair window.
+  const tickNow = Date.now();
+  for (const sym of positionsByTicker.keys()) {
+    const k = firstSeenKey(clerkUserId, sym);
+    if (!positionFirstSeen.has(k)) positionFirstSeen.set(k, tickNow);
+  }
+  // Clean up stamps for tickers we no longer hold.
+  for (const k of positionFirstSeen.keys()) {
+    if (!k.startsWith(`${clerkUserId}:`)) continue;
+    const sym = k.slice(clerkUserId.length + 1);
+    if (!positionsByTicker.has(sym)) positionFirstSeen.delete(k);
+  }
+
   // Force-exit positions that aren't in the elite slate. Frees both the
   // HOLDINGS_CAP slot and the cash for elite picks to fill. Priority 70
   // sits below STOPLOSS (100) and TRAILING (90) — those should still win
   // when they fire — but above regular profit-take (~20-50).
+  //
+  // Two gates protect against the "buy-DIP-then-exit-at-loss" churn:
+  //   1. Hold-time: skip exit unless held for at least 30 min — gives
+  //      a fair window to move before rotating out.
+  //   2. P/L: skip exit if currently down > 0.3 % — let the position
+  //      come back rather than crystallising the loss.
+  // Either-or: BOTH must clear (held ≥ 30 min AND P/L ≥ -0.3 %) for the
+  // exit to fire. STOPLOSS / TRAILING / RSI_HIGH still rotate out
+  // independently when their own thresholds are hit.
   let forceExitCount = 0;
+  let nonEliteSkipped = { tooNew: 0, tooNegative: 0 };
   for (const [sym, pos] of positionsByTicker) {
     if (eliteTargetSet.has(sym)) continue;
     const qty = Math.abs(parseFloat(pos.qty) || 0);
     if (qty < 1) continue;
     const price = priceByTicker.get(sym);
     if (!price) continue;
+
+    const ageMs = tickNow - (positionFirstSeen.get(firstSeenKey(clerkUserId, sym)) ?? tickNow);
+    if (ageMs < NON_ELITE_MIN_HOLD_MS) {
+      nonEliteSkipped.tooNew++;
+      continue;
+    }
+    const plpc = parseFloat(pos.unrealized_plpc) || 0;
+    if (plpc < NON_ELITE_PROTECT_PLPC) {
+      nonEliteSkipped.tooNegative++;
+      continue;
+    }
+
     result.sellSignals.push({
       ticker: sym, amount: Math.floor(qty), price,
-      reason: `EXIT non-elite (rotate to current slate)`,
+      reason: `EXIT non-elite (held ${Math.round(ageMs / 60000)}min, P/L ${(plpc * 100).toFixed(2)}%)`,
       priority: 70, signalType: 'NON_ELITE_EXIT',
     });
     forceExitCount++;
   }
-  if (forceExitCount > 0) {
-    console.log(`[REBALANCE] ${clerkUserId} force-exit ${forceExitCount} non-elite positions`);
+  if (forceExitCount > 0 || nonEliteSkipped.tooNew > 0 || nonEliteSkipped.tooNegative > 0) {
+    console.log(
+      `[REBALANCE] ${clerkUserId} force-exit ${forceExitCount} ` +
+      `(skipped tooNew=${nonEliteSkipped.tooNew} tooNegative=${nonEliteSkipped.tooNegative})`
+    );
   }
   let rebalanceBuyCount = 0;
   let rebalanceTrimCount = 0;

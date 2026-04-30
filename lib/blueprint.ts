@@ -174,9 +174,10 @@ export const RISK = {
   /** Parallelism for /quotes calls — Alpaca paper rate ≈ 200/min. */
   PRICE_FETCH_CONCURRENCY: 12,
   /** Each rebalance trade closes this fraction of the gap to target.
-   *  At 0.95 we converge to target in essentially one tick — leaves a
-   *  tiny gap so the next tick can fine-tune after fills settle. */
-  REBALANCE_CONVERGENCE: 0.95,
+   *  At 0.4 we converge over ~3-4 ticks, giving us an averaged entry
+   *  price across a few minutes instead of paying whatever the spot
+   *  is on the first tick. Reduces single-tick adverse selection. */
+  REBALANCE_CONVERGENCE: 0.4,
   /** Position is "underweight enough to top up" when current value falls
    *  below target × this factor. */
   REBALANCE_UNDERWEIGHT: 0.85,
@@ -186,14 +187,14 @@ export const RISK = {
 } as const;
 
 export const SIGNAL = {
-  /** Min drop from local high to fire DIP. 0.3 % gives more frequent
-   *  entries on the asymmetric-upside names while still being above
-   *  most quote noise. */
-  DIP_THRESHOLD: 0.003,
+  /** Min drop from local high to fire DIP. 0.5 % is past quote noise —
+   *  lower thresholds produced too many false entries that immediately
+   *  reversed. */
+  DIP_THRESHOLD: 0.005,
   /** Min rise from local low to fire PEAK. */
-  PEAK_THRESHOLD: 0.003,
-  RSI_OVERSOLD: 50,
-  RSI_OVERBOUGHT: 50,
+  PEAK_THRESHOLD: 0.005,
+  RSI_OVERSOLD: 48,
+  RSI_OVERBOUGHT: 52,
   /** Profit % at which we trim 25 % to lock in some gain. */
   PROFIT_TAKE_THRESHOLD: 0.03,
   /** Static fallback stop (loss as a fraction of entry). ATR stop usually

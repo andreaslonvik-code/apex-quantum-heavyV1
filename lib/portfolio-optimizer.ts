@@ -20,11 +20,11 @@
 import { type AlpacaCreds } from './alpaca';
 import { selectEliteWithAI, getLatestAiSelection, type AiPortfolioPick } from './ai-portfolio';
 
-// 15 min — AI runs 4× per hour instead of 1×. Higher cadence means more
-// reactive portfolio (catches news + market movement faster) at ~4× Grok
-// cost. Trade-off worth it given the autonomy mandate; tune up later if
-// cost becomes the binding constraint.
-const CACHE_TTL_MS = 15 * 60 * 1000;
+// 60 min — slate refreshes hourly. Faster refresh causes excess turnover
+// (every drop-out costs roundtrip spread on US stocks ~0.03-0.05 %).
+// Hourly is fast enough to react to news regime shifts but slow enough
+// that spread bleed stays manageable.
+const CACHE_TTL_MS = 60 * 60 * 1000;
 
 // Cron lambdas cold-start frequently — module-level cache dies between
 // invocations, so every cold start would otherwise pay the full Grok
