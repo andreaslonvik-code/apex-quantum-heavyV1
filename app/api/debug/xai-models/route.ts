@@ -53,13 +53,14 @@ export async function GET() {
     const models = (parsed.data ?? []).map((m) => m.id).sort();
 
     // Recommendations for the two roles we use Grok in:
-    // - Portfolio selection: highest-quality reasoning (Heavy/multi-agent
-    //   if available, else top-tier reasoning model)
+    // - Portfolio selection: highest-quality reasoning model accessible via
+    //   /v1/chat/completions. NOTE: multi-agent models (like
+    //   grok-4.20-multi-agent-0309) are NOT in this list because xAI
+    //   rejects them on chat completions — they require a dedicated
+    //   endpoint we haven't wired up.
     // - News scan: fast non-reasoning (fact extraction doesn't need
     //   chain-of-thought; cheaper + faster)
     const portfolioPreference = [
-      'grok-4.20-multi-agent-0309',
-      'grok-4-heavy',
       'grok-4.20-0309-reasoning',
       'grok-4-1-fast-reasoning',
       'grok-4-fast-reasoning',

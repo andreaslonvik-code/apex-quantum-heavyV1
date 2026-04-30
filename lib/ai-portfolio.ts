@@ -35,14 +35,15 @@ import { createAdminClient } from '@/utils/supabase/admin';
 const xai = createXai({ apiKey: process.env.XAI_API_KEY || '' });
 // Portfolio selection is the highest-stakes Grok call we make — it picks
 // the 8 elite tickers the trading engine will trade against for the next
-// 15 min. Defaults to grok-4.20-multi-agent-0309, the API equivalent of
-// "Grok Heavy mode" (parallel reasoning agents). Falls back to legacy
-// GROK_MODEL env var, then to the canonical model name. Override with
-// GROK_MODEL_PORTFOLIO on Vercel for any other variant.
+// 15 min. Defaults to grok-4.20-0309-reasoning — the latest single-agent
+// reasoning model. We can't use multi-agent variants (e.g.
+// grok-4.20-multi-agent-0309) because xAI rejects multi-agent requests
+// on /v1/chat/completions, which is what the AI SDK uses under the hood.
+// Override with GROK_MODEL_PORTFOLIO on Vercel for any other variant.
 export const PORTFOLIO_MODEL_NAME =
   process.env.GROK_MODEL_PORTFOLIO ||
   process.env.GROK_MODEL ||
-  'grok-4.20-multi-agent-0309';
+  'grok-4.20-0309-reasoning';
 const grokModel = xai(PORTFOLIO_MODEL_NAME);
 
 // Multi-agent models can take 60-120s. Vercel cron has a 60s budget; if
