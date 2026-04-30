@@ -344,6 +344,31 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
   const sellTrendBoost = (trend: 'UP' | 'DOWN' | 'NEUTRAL') => trend === 'DOWN' ? 1.3 : trend === 'UP' ? 0.85 : 1.0;
   const sessionSizeFactor = isExtendedHours(session) ? EXTENDED_HOURS_SIZE_FACTOR : 1.0;
 
+  // ── News-aware exit ───────────────────────────────────────────────────
+  // When the news scanner flags a strong-conviction bearish event on a
+  // held ticker, exit the full position immediately rather than waiting
+  // for ATR / trailing to react after the price has moved. Catalysts
+  // (earnings miss, regulator action, contract loss) gap the stock 5-20 %
+  // before our reactive stops would catch them.
+  if (newsIntel) {
+    for (const ev of newsIntel.tickerEvents) {
+      if (ev.direction !== 'bearish') continue;
+      if (ev.weight < 0.5) continue;
+      const ticker = ev.ticker.toUpperCase();
+      const pos = positionsByTicker.get(ticker);
+      if (!pos) continue;
+      const qty = Math.abs(parseFloat(pos.qty) || 0);
+      if (qty < 1) continue;
+      const price = priceByTicker.get(ticker);
+      if (!price) continue;
+      result.sellSignals.push({
+        ticker, amount: Math.floor(qty), price,
+        reason: `NEWS_EXIT bearish ${ev.source}/${(ev.weight * 100).toFixed(0)}% — ${ev.reason.slice(0, 60)}`,
+        priority: 85, signalType: 'NEWS_EXIT',
+      });
+    }
+  }
+
   // ── SELL signals on held positions ────────────────────────────────────
   for (const [sym, pos] of positionsByTicker) {
     const price = priceByTicker.get(sym);
@@ -378,18 +403,31 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
         ? hwm * (1 - trailingDistance)
         : 0;
 
+      // Breakeven floor: once HWM has been ≥ 5 % above entry, we won't
+      // let the position go negative again. Closes the "give back all
+      // gains in choppy market" weakness — small wins still won't fall
+      // back to losses. Tiny offset (entry × 1.001) keeps us above
+      // entry after spread on exit.
+      const breakevenReached = hwm >= avg * 1.05;
+      const breakevenStopLevel = breakevenReached ? avg * 1.001 : 0;
+
       // Effective stop = whichever is HIGHER (closer to current price for a
-      // long). Once trailing locks in profits, it dominates the base stop.
-      const effectiveStop = Math.max(baseStopLevel, trailingStopLevel);
+      // long). Trailing dominates once profits are locked in; breakeven
+      // floor activates after the position has been at +5 % to prevent
+      // a winner from giving back to a loser.
+      const effectiveStop = Math.max(baseStopLevel, trailingStopLevel, breakevenStopLevel);
 
       if (price <= effectiveStop) {
         let reason: string;
         let signalType: string;
-        if (trailingActive && trailingStopLevel >= baseStopLevel) {
+        if (trailingActive && trailingStopLevel >= Math.max(baseStopLevel, breakevenStopLevel)) {
           const drawdownFromHwm = ((hwm - price) / hwm) * 100;
           reason = `TRAILING −${drawdownFromHwm.toFixed(2)}% from $${hwm.toFixed(2)} ` +
             `(ratchet ${(trailingDistance * 100).toFixed(0)}% trail at +${(profitPct * 100).toFixed(1)}%, locked)`;
           signalType = 'TRAILING';
+        } else if (breakevenReached && breakevenStopLevel >= baseStopLevel) {
+          reason = `BREAKEVEN_FLOOR — protecting prior +${((hwm / avg - 1) * 100).toFixed(1)}% peak`;
+          signalType = 'BREAKEVEN';
         } else if (atr > 0 && atrStopLevel < staticStopLevel) {
           const stopPct = ((avg - price) / avg) * 100;
           reason = `ATR_STOP −${stopPct.toFixed(2)}% (ATR ${atr.toFixed(2)}, ${SIGNAL.ATR_STOP_MULT}×)`;
