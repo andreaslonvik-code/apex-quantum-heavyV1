@@ -556,6 +556,15 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
       nonEliteSkipped.tooNegative++;
       continue;
     }
+    // Don't rotate out a winner just because the slate refreshed — let
+    // it ride. STOPLOSS / TRAILING / BREAKEVEN / RSI_HIGH still close
+    // the position when its own thesis breaks; we just don't kill it
+    // for slate-rotation cosmetics. A position at +1 % might be on
+    // its way to +20 %; rotating it costs spread + opportunity.
+    if (plpc >= 0.01) {
+      nonEliteSkipped.tooNegative++;
+      continue;
+    }
 
     result.sellSignals.push({
       ticker: sym, amount: Math.floor(qty), price,
@@ -779,7 +788,16 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
   if (newsIntel) {
     for (const ev of newsIntel.tickerEvents) {
       const ticker = ev.ticker.toUpperCase();
-      if (!EXTREME_CONVICTION_TICKERS.has(ticker)) continue;
+      // Fire on any name we either already hold OR have on the current
+      // elite slate, plus the static EXTREME_CONVICTION list as a safety
+      // net for high-vol catalyst names. Old behaviour limited this to
+      // the 10 hardcoded names — too narrow when Grok flags a strong
+      // bullish event on AMD or AVGO that aren't in the static list.
+      const eligible =
+        EXTREME_CONVICTION_TICKERS.has(ticker) ||
+        eliteSet.has(ticker) ||
+        positionsByTicker.has(ticker);
+      if (!eligible) continue;
       if (ev.direction !== 'bullish') continue;
       if (ev.weight < 0.6) continue;
       const price = priceByTicker.get(ticker);
