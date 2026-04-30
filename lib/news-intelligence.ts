@@ -141,8 +141,29 @@ export async function scanNews(): Promise<{ intel: NewsIntel | null; raw: unknow
     });
     return { intel: result.object, raw: result.object };
   } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    console.error('[NEWS] scanNews failed:', msg);
+    // Extract full xAI error so the audit row tells us exactly what went
+    // wrong (model rejected, schema mismatch, rate limit, etc.).
+    const err = e as Error & {
+      statusCode?: number;
+      responseBody?: string | Record<string, unknown>;
+      cause?: unknown;
+    };
+    const parts: string[] = [];
+    if (err.statusCode) parts.push(`HTTP ${err.statusCode}`);
+    parts.push(err.message ?? String(e));
+    if (err.responseBody) {
+      const body =
+        typeof err.responseBody === 'string'
+          ? err.responseBody
+          : JSON.stringify(err.responseBody);
+      parts.push(`xai_response=${body.slice(0, 800)}`);
+    }
+    if (err.cause) {
+      const cause = err.cause instanceof Error ? err.cause.message : String(err.cause);
+      parts.push(`cause=${cause.slice(0, 200)}`);
+    }
+    const msg = parts.join(' | ');
+    console.error(`[NEWS] scanNews failed (model=${NEWS_MODEL_NAME}):`, msg);
     return { intel: null, raw: null, error: msg };
   }
 }
