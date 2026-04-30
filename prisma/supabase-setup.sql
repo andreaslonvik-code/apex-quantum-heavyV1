@@ -177,3 +177,25 @@ CREATE INDEX IF NOT EXISTS ai_portfolio_selections_selected_at_idx
   ON ai_portfolio_selections (selected_at DESC);
 
 ALTER TABLE ai_portfolio_selections DISABLE ROW LEVEL SECURITY;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Earnings calendar
+--
+-- Per-ticker next earnings date pulled from Yahoo Finance, cached so we
+-- don't hit Yahoo every single trading scan. Trading engine reads this to
+-- block BUYs on tickers reporting in the next 24h (binary risk we can't
+-- manage with stops since pre-market gaps bypass STOPLOSS).
+-- ─────────────────────────────────────────────────────────────────────────────
+
+CREATE TABLE IF NOT EXISTS earnings_calendar (
+  ticker             TEXT PRIMARY KEY,
+  next_earnings_at   TIMESTAMPTZ,
+  fetched_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  source             TEXT NOT NULL DEFAULT 'yahoo'
+);
+
+CREATE INDEX IF NOT EXISTS earnings_calendar_next_idx
+  ON earnings_calendar (next_earnings_at)
+  WHERE next_earnings_at IS NOT NULL;
+
+ALTER TABLE earnings_calendar DISABLE ROW LEVEL SECURITY;

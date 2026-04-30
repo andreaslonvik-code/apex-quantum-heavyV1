@@ -52,6 +52,11 @@ import {
   sectorMultiplierFromIntel,
   tickerEventMultiplierFromIntel,
 } from './news-intelligence';
+import {
+  getVixLevel,
+  hasImminentEarnings,
+  vixBuyFactor,
+} from './market-context';
 
 export const HOLDINGS_CAP = 8;
 export const MAX_PER_TICKER_PCT = 15;
@@ -287,6 +292,21 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
   const newsIntel = await getLatestNewsIntel();
   const newsBuyFactor = buyFactorFromIntel(newsIntel);
 
+  // Market-context layer: VIX-aware sizing + earnings veto.
+  // VIX scales every BUY uniformly. Earnings is per-ticker — pre-fetched
+  // in parallel for elite tickers + held tickers (the only ones with
+  // realistic BUY paths) so the per-ticker loop below stays synchronous.
+  const vixLevel = await getVixLevel();
+  const vixFactor = vixBuyFactor(vixLevel);
+  const earningsBlockSet = new Set<string>();
+  await runInChunks(
+    Array.from(new Set([...eliteSet, ...positionsByTicker.keys()])),
+    8,
+    async (ticker) => {
+      if (await hasImminentEarnings(ticker)) earningsBlockSet.add(ticker);
+    },
+  );
+
   const priceTargets = new Set<string>([
     ...WATCHLIST,
     ...positionsByTicker.keys(),
@@ -413,6 +433,11 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     const buyMul = buyTrendBoost(m.trend);
     const eliteBonus = eliteSet.has(ticker) ? ELITE_SCORE_BONUS : 1.0;
 
+    // Earnings veto: never enter a new BUY on a ticker reporting earnings
+    // in the next 24 h. Pre-market gap on bad print bypasses our STOPLOSS
+    // entirely — this is binary risk we don't want to take.
+    if (earningsBlockSet.has(ticker)) continue;
+
     // News-driven multipliers (1.0 when no intel / low confidence).
     const sectorKey = SYMBOL_TO_SECTOR[ticker];
     const newsSectorMul = sectorMultiplierFromIntel(newsIntel, sectorKey);
@@ -421,7 +446,9 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     // to neutralise the buy — treat as a hard veto on this ticker.
     if (newsTickerMul <= 0.05) continue;
 
-    const newsBuyMul = newsBuyFactor * newsSectorMul * newsTickerMul;
+    // Combined buy multiplier: news regime × sector tilt × per-ticker event
+    // × VIX regime. VIX is global so it scales every BUY uniformly.
+    const newsBuyMul = newsBuyFactor * newsSectorMul * newsTickerMul * vixFactor;
 
     const gap = gapsByTicker.get(ticker)?.gap;
     if (gap !== undefined && gap < GAP_DOWN_THRESHOLD) continue;
