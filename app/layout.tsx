@@ -22,7 +22,6 @@ export const metadata: Metadata = {
   description:
     "Self-directing AI trading system. Scans nine million signals a second, evolves its own strategies in real time, and compounds capital 24/7 — without you lifting a finger.",
   keywords: ["autonomous trading", "AI", "algorithmic trading", "quantitative finance", "Alpaca"],
-  icons: { icon: "/favicon.ico" },
   openGraph: {
     title: "APEX QUANTUM · Autonomous Trading Intelligence",
     description: "+187% YTD · 4,12 Sharpe · 73,4% win rate · 24/7 autonomous",
