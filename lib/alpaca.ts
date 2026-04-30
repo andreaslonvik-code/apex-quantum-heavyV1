@@ -85,6 +85,12 @@ export interface AlpacaOrderRequest {
   // the entry. Alpaca rejects the order if these are present without
   // order_class === 'bracket'.
   order_class?: 'simple' | 'bracket' | 'oco' | 'oto';
+  // Position intent — server-side enforcement that prevents accidental
+  // short-opening on a SELL or accidental cover on a BUY. Always set
+  // 'sell_to_close' on SELL and 'buy_to_open' on BUY for this strategy
+  // (long-only). Alpaca rejects the order with code 4040X if the intent
+  // would create the wrong-side exposure.
+  position_intent?: 'buy_to_open' | 'buy_to_close' | 'sell_to_open' | 'sell_to_close';
   take_profit?: { limit_price: number };
   stop_loss?: { stop_price: number; limit_price?: number };
 }

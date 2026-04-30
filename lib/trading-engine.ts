@@ -793,12 +793,43 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
   const maxTrades = RISK.MAX_TRADES_PER_SCAN;
   const useExtendedHours = isExtendedHours(session);
 
+  // CRITICAL: track remaining sellable qty per ticker. Without this,
+  // multiple SELL signals (TRIM + STOPLOSS + NON_ELITE_EXIT + REBALANCE_TRIM
+  // + NEWS_EXIT) on the same ticker each see the original qty, each
+  // submits a full SELL, and Alpaca margin-paper accepts the excess by
+  // SHORTING the stock. That's the bug that opened the $300k short book.
+  // Decrement after every fill; refuse to sell beyond what we hold.
+  const remainingSellable = new Map<string, number>();
+  for (const [sym, pos] of positionsByTicker) {
+    const qty = parseFloat(pos.qty) || 0;
+    // Only LONG positions are sellable. Short positions need BUY-to-cover,
+    // not SELL — never let the engine extend an existing short.
+    if (pos.side === 'long' && qty > 0) {
+      remainingSellable.set(sym.toUpperCase(), qty);
+    } else {
+      remainingSellable.set(sym.toUpperCase(), 0);
+    }
+  }
+
   for (const sig of result.acceptedSells) {
     if (tradesThisScan >= maxTrades) break;
-    const pos = positionsByTicker.get(sig.ticker.toUpperCase());
-    const have = pos ? Math.abs(parseFloat(pos.qty)) : 0;
-    if (!pos || have < 1) continue;
-    const amount = Math.min(sig.amount, have);
+    const tickerKey = sig.ticker.toUpperCase();
+    const pos = positionsByTicker.get(tickerKey);
+    const have = remainingSellable.get(tickerKey) ?? 0;
+
+    // Three guards. Any one of these prevents accidental shorting.
+    if (!pos) continue;
+    if (pos.side !== 'long') {
+      result.errors.push(`SELL ${sig.ticker} blocked: position side=${pos.side}`);
+      continue;
+    }
+    if (have < 1) {
+      // Already fully sold by an earlier signal in this same scan.
+      continue;
+    }
+
+    const amount = Math.min(sig.amount, Math.floor(have));
+    if (amount < 1) continue;
     const tradeValue = amount * sig.price;
 
     const orderReq = useExtendedHours
@@ -807,16 +838,21 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
           type: 'limit' as const, time_in_force: 'day' as const,
           limit_price: +(sig.price * 0.999).toFixed(2),
           extended_hours: true,
+          position_intent: 'sell_to_close' as const,
         }
       : {
           symbol: sig.ticker, qty: amount, side: 'sell' as const,
           type: 'market' as const, time_in_force: 'day' as const,
+          position_intent: 'sell_to_close' as const,
         };
     const r = await placeOrder(creds, orderReq);
     if (r.success) {
       result.totalSold += tradeValue;
       runningCash += tradeValue;
       tradesThisScan++;
+      // Decrement remaining sellable so the next SELL signal for this
+      // same ticker sees the reduced qty and can't oversell.
+      remainingSellable.set(tickerKey, have - amount);
       result.executedTrades.push({
         ticker: sig.ticker, symbol: sig.ticker, action: 'SELL',
         amount, price: sig.price, value: tradeValue,
@@ -850,10 +886,12 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
           type: 'limit' as const, time_in_force: 'day' as const,
           limit_price: +(sig.price * 1.001).toFixed(2),
           extended_hours: true,
+          position_intent: 'buy_to_open' as const,
         }
       : {
           symbol: sig.ticker, qty: sig.amount, side: 'buy' as const,
           type: 'market' as const, time_in_force: 'day' as const,
+          position_intent: 'buy_to_open' as const,
         };
     const r = await placeOrder(creds, orderReq);
     if (r.success) {
