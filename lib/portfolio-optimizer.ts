@@ -18,13 +18,21 @@
 // decider has changed.
 
 import { type AlpacaCreds } from './alpaca';
-import { selectEliteWithAI, type AiPortfolioPick } from './ai-portfolio';
+import { selectEliteWithAI, getLatestAiSelection, type AiPortfolioPick } from './ai-portfolio';
 
 // 15 min — AI runs 4× per hour instead of 1×. Higher cadence means more
 // reactive portfolio (catches news + market movement faster) at ~4× Grok
 // cost. Trade-off worth it given the autonomy mandate; tune up later if
 // cost becomes the binding constraint.
 const CACHE_TTL_MS = 15 * 60 * 1000;
+
+// Cron lambdas cold-start frequently — module-level cache dies between
+// invocations, so every cold start would otherwise pay the full Grok
+// portfolio call cost (up to 55 s) and time the cron out at the 60 s
+// maxDuration. We pull the latest persisted selection from
+// ai_portfolio_selections as the cold-start cache instead. Same TTL
+// applies; only fully-stale rows trigger a fresh Grok call.
+const DB_CACHE_TTL_MS = CACHE_TTL_MS;
 
 export type EliteSource = 'ai' | 'sharpe-fallback';
 
@@ -37,6 +45,15 @@ interface CachedResult {
 
 let cached: CachedResult | null = null;
 
+// In-flight promise so concurrent callers (e.g. 5 users fanned out in the
+// same cron tick) wait on a single AI call instead of all firing their
+// own 25 s Grok request in parallel.
+let inFlight: Promise<{
+  tickers: Set<string>;
+  picks: AiPortfolioPick[];
+  source: EliteSource;
+}> | null = null;
+
 export async function computeEliteTickers(
   creds: AlpacaCreds,
 ): Promise<{
@@ -46,6 +63,7 @@ export async function computeEliteTickers(
   scanned: number;
   qualified: number;
 }> {
+  // 1) Hot in-memory cache (warm lambda)
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
     return {
       tickers: cached.tickers,
@@ -56,13 +74,56 @@ export async function computeEliteTickers(
     };
   }
 
-  const r = await selectEliteWithAI(creds);
-  cached = {
-    ts: Date.now(),
-    tickers: r.tickers,
-    picks: r.picks,
-    source: r.source,
-  };
+  // 2) Cold-lambda fallback: read latest persisted selection from DB
+  //    before paying for a fresh Grok call. Avoids the 60 s cron timeout
+  //    that bites when every cold start hits xAI from scratch.
+  const stored = await getLatestAiSelection();
+  if (stored) {
+    const ageMs = Date.now() - new Date(stored.selectedAt).getTime();
+    if (ageMs < DB_CACHE_TTL_MS && stored.picks.length > 0) {
+      // Backfill score for picks persisted before the score field was
+      // added to the schema. Use rank-based defaults: 1st = 9.5, 2nd =
+      // 9.0, etc — same shape sharpeFallback would produce.
+      const picks = stored.picks.map((p, idx): AiPortfolioPick => ({
+        ticker: p.ticker,
+        reasoning: p.reasoning,
+        score: typeof p.score === 'number' ? p.score : Math.max(7.5, 9.5 - idx * 0.25),
+      }));
+      const tickers = new Set(picks.map((p) => p.ticker.toUpperCase()));
+      const source: EliteSource =
+        stored.source === 'ai' ? 'ai' : 'sharpe-fallback';
+      cached = { ts: Date.now() - ageMs, tickers, picks, source };
+      console.log(
+        `[ELITE] DB cache hit — age ${Math.round(ageMs / 1000)}s, source=${source}, picks=${picks.length}`
+      );
+      return {
+        tickers, picks, source,
+        scanned: 0, qualified: tickers.size,
+      };
+    }
+  }
+
+  // 3) Both caches stale → run the full AI portfolio call.
+  if (!inFlight) {
+    console.log('[ELITE] caches cold/stale — running selectEliteWithAI');
+    inFlight = (async () => {
+      try {
+        const r = await selectEliteWithAI(creds);
+        cached = {
+          ts: Date.now(),
+          tickers: r.tickers,
+          picks: r.picks,
+          source: r.source,
+        };
+        return { tickers: r.tickers, picks: r.picks, source: r.source };
+      } finally {
+        inFlight = null;
+      }
+    })();
+  } else {
+    console.log('[ELITE] AI call already in flight — joining');
+  }
+  const r = await inFlight;
   return {
     tickers: r.tickers,
     picks: r.picks,

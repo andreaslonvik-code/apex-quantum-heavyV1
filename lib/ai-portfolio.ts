@@ -46,11 +46,12 @@ export const PORTFOLIO_MODEL_NAME =
   'grok-4.20-0309-reasoning';
 const grokModel = xai(PORTFOLIO_MODEL_NAME);
 
-// Multi-agent models can take 60-120s. Vercel cron has a 60s budget; if
-// the call doesn't complete in time the function gets killed mid-execution.
-// Abort just inside the 60s window so the fallback path runs and persists
-// rather than the lambda being terminated.
-const PORTFOLIO_AI_TIMEOUT_MS = 55_000;
+// Vercel cron has a 60 s budget and we still need ~20 s after this call
+// for per-user trading scans + order placement. Aborting at 25 s keeps
+// the worst case fitting comfortably; if Grok hasn't responded by then,
+// Sharpe-fallback persists a usable selection that future ticks read
+// from the DB cache without paying any AI cost at all.
+const PORTFOLIO_AI_TIMEOUT_MS = 25_000;
 
 const ELITE_SIZE = 8;
 const MAX_PER_SECTOR = 3;
