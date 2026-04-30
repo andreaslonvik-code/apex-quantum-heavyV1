@@ -427,10 +427,17 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
   const targetByTicker = targetDollars(targets, equity);
   const eliteTargetSet = new Set(targets.map((t) => t.ticker));
 
+  console.log(
+    `[REBALANCE] ${clerkUserId} session=${session} equity=$${equity.toFixed(0)} cash=$${cash.toFixed(0)} ` +
+    `picks=${eliteResult.picks.length} targets=${targets.length} ` +
+    `[${targets.map((t) => `${t.ticker}:${(t.weight * 100).toFixed(1)}%(${t.score.toFixed(1)})`).join(', ')}]`
+  );
+
   // Force-exit positions that aren't in the elite slate. Frees both the
   // HOLDINGS_CAP slot and the cash for elite picks to fill. Priority 70
   // sits below STOPLOSS (100) and TRAILING (90) — those should still win
   // when they fire — but above regular profit-take (~20-50).
+  let forceExitCount = 0;
   for (const [sym, pos] of positionsByTicker) {
     if (eliteTargetSet.has(sym)) continue;
     const qty = Math.abs(parseFloat(pos.qty) || 0);
@@ -442,11 +449,18 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
       reason: `EXIT non-elite (rotate to current slate)`,
       priority: 70, signalType: 'NON_ELITE_EXIT',
     });
+    forceExitCount++;
   }
+  if (forceExitCount > 0) {
+    console.log(`[REBALANCE] ${clerkUserId} force-exit ${forceExitCount} non-elite positions`);
+  }
+  let rebalanceBuyCount = 0;
+  let rebalanceTrimCount = 0;
+  let rebalanceSkipReason = { noPrice: 0, earningsVeto: 0, newsVeto: 0, atTarget: 0, amountTooSmall: 0 };
   for (const t of targets) {
     const ticker = t.ticker;
     const price = priceByTicker.get(ticker);
-    if (!price) continue;
+    if (!price) { rebalanceSkipReason.noPrice++; continue; }
     const pos = positionsByTicker.get(ticker);
     const posValue = pos ? Math.abs(parseFloat(pos.market_value) || 0) : 0;
     const targetValue = targetByTicker.get(ticker) ?? 0;
@@ -467,16 +481,17 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
           reason: `TRIM toward ${(t.weight * 100).toFixed(1)}% target (rank ${t.rank}, score ${t.score.toFixed(1)})`,
           priority: 60, signalType: 'REBALANCE_TRIM',
         });
+        rebalanceTrimCount++;
       }
       continue;
     }
 
     // Skip BUYs when an event vetoes this ticker.
-    if (earningsBlockSet.has(ticker)) continue;
+    if (earningsBlockSet.has(ticker)) { rebalanceSkipReason.earningsVeto++; continue; }
     const sectorKey = SYMBOL_TO_SECTOR[ticker];
     const newsSectorMul = sectorMultiplierFromIntel(newsIntel, sectorKey);
     const newsTickerMul = tickerEventMultiplierFromIntel(newsIntel, ticker);
-    if (newsTickerMul <= 0.05) continue;
+    if (newsTickerMul <= 0.05) { rebalanceSkipReason.newsVeto++; continue; }
 
     if (posValue < targetValue * RISK.REBALANCE_UNDERWEIGHT) {
       const gap = targetValue - posValue;
@@ -501,9 +516,20 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
           score: 1000 + (t.score * 10) + (10 - t.rank), // dominates signal-based scores
           signalType: 'REBALANCE_BUY',
         });
+        rebalanceBuyCount++;
+      } else {
+        rebalanceSkipReason.amountTooSmall++;
       }
+    } else {
+      rebalanceSkipReason.atTarget++;
     }
   }
+  console.log(
+    `[REBALANCE] ${clerkUserId} buy=${rebalanceBuyCount} trim=${rebalanceTrimCount} ` +
+    `skip noPrice=${rebalanceSkipReason.noPrice} earningsVeto=${rebalanceSkipReason.earningsVeto} ` +
+    `newsVeto=${rebalanceSkipReason.newsVeto} atTarget=${rebalanceSkipReason.atTarget} ` +
+    `amountTooSmall=${rebalanceSkipReason.amountTooSmall}`
+  );
 
   // ── BUY signals across the full 102 universe ─────────────────────────
   for (const ticker of WATCHLIST) {
