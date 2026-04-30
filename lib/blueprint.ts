@@ -140,12 +140,14 @@ export const REBALANCE = {
 // Risk + sizing parameters. The trading loop reads these to bound exposure
 // even when signals would otherwise want to keep buying.
 export const RISK = {
-  /** Hard cap on simultaneous holdings. */
-  MAX_POSITIONS: 15,
-  /** % of equity any single ticker may occupy. */
-  MAX_PER_TICKER_PCT: 15,
-  /** % of equity any single sector may occupy. */
-  MAX_PER_SECTOR_PCT: 30,
+  /** Hard cap on simultaneous holdings. Matches elite slate size. */
+  MAX_POSITIONS: 8,
+  /** % of equity any single ticker may occupy. Matches top tier-cap. */
+  MAX_PER_TICKER_PCT: 35,
+  /** % of equity any single sector may occupy. Loose enough that two
+   *  top-tier picks (32 % + 20 %) can both land in the same sector when
+   *  the AI selector has high conviction in a theme. */
+  MAX_PER_SECTOR_PCT: 55,
   /** Base BUY size as a % of cash before signal/vol/trend multipliers. */
   POSITION_SIZE_PCT: 0.08,
   /** Halt for the day at -3 % unrealised. */
@@ -154,6 +156,17 @@ export const RISK = {
   MAX_TRADES_PER_SCAN: 12,
   /** Parallelism for /quotes calls — Alpaca paper rate ≈ 200/min. */
   PRICE_FETCH_CONCURRENCY: 12,
+  /** Each rebalance trade closes this fraction of the gap to target.
+   *  Aggressive enough that we converge to target within a few ticks
+   *  during regular session, conservative enough that one stale price
+   *  can't dump 100 % into a name. */
+  REBALANCE_CONVERGENCE: 0.5,
+  /** Position is "underweight enough to top up" when current value falls
+   *  below target × this factor. */
+  REBALANCE_UNDERWEIGHT: 0.85,
+  /** Position is "overweight enough to trim" when current value exceeds
+   *  target × this factor. */
+  REBALANCE_OVERWEIGHT: 1.30,
 } as const;
 
 export const SIGNAL = {

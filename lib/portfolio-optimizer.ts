@@ -18,7 +18,7 @@
 // decider has changed.
 
 import { type AlpacaCreds } from './alpaca';
-import { selectEliteWithAI } from './ai-portfolio';
+import { selectEliteWithAI, type AiPortfolioPick } from './ai-portfolio';
 
 // 15 min — AI runs 4× per hour instead of 1×. Higher cadence means more
 // reactive portfolio (catches news + market movement faster) at ~4× Grok
@@ -31,6 +31,7 @@ export type EliteSource = 'ai' | 'sharpe-fallback';
 interface CachedResult {
   ts: number;
   tickers: Set<string>;
+  picks: AiPortfolioPick[];
   source: EliteSource;
 }
 
@@ -38,10 +39,17 @@ let cached: CachedResult | null = null;
 
 export async function computeEliteTickers(
   creds: AlpacaCreds,
-): Promise<{ tickers: Set<string>; source: EliteSource; scanned: number; qualified: number }> {
+): Promise<{
+  tickers: Set<string>;
+  picks: AiPortfolioPick[];
+  source: EliteSource;
+  scanned: number;
+  qualified: number;
+}> {
   if (cached && Date.now() - cached.ts < CACHE_TTL_MS) {
     return {
       tickers: cached.tickers,
+      picks: cached.picks,
       source: cached.source,
       scanned: 0,
       qualified: cached.tickers.size,
@@ -52,10 +60,12 @@ export async function computeEliteTickers(
   cached = {
     ts: Date.now(),
     tickers: r.tickers,
+    picks: r.picks,
     source: r.source,
   };
   return {
     tickers: r.tickers,
+    picks: r.picks,
     source: r.source,
     scanned: 0,
     qualified: r.tickers.size,

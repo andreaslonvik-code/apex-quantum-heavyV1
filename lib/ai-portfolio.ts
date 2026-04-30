@@ -68,6 +68,9 @@ interface TickerStats {
 const PickSchema = z.object({
   ticker: z.string(),
   reasoning: z.string().max(280),
+  /** Conviction score 0-10. ≥9 = top conviction (drives 25-35% of portfolio).
+   *  8-9 = strong. 7-8 = solid satellite. Below 7 should not be picked. */
+  score: z.number().min(0).max(10),
 });
 
 const AiPortfolioSchema = z.object({
@@ -133,9 +136,16 @@ function sharpeFallback(stats: TickerStats[]): AiSelectionResult {
     selected.push(s);
   }
   const tickers = new Set(selected.map((s) => s.ticker));
+  // Map Sharpe rank → 0-10 score so the allocation layer can compute weights
+  // from the same field whether Grok or fallback ran. Top Sharpe in cohort →
+  // 9.5; bottom of cohort → 7.5. Linear interpolation.
+  const topSharpe = selected[0]?.sharpe ?? 0;
+  const bottomSharpe = selected[selected.length - 1]?.sharpe ?? 0;
+  const sharpeRange = Math.max(topSharpe - bottomSharpe, 1e-6);
   const picks: AiPortfolioPick[] = selected.map((s) => ({
     ticker: s.ticker,
     reasoning: `Sharpe ${s.sharpe.toFixed(2)} (30d return ${(s.return30d * 100).toFixed(1)}%, vol ${(s.vol30d * 100).toFixed(0)}%)`,
+    score: 7.5 + 2.0 * ((s.sharpe - bottomSharpe) / sharpeRange),
   }));
   return {
     tickers,
@@ -180,6 +190,12 @@ Velg 8 tickere for porteføljen. Prinsipper:
 3. **Sektor-spredning.** Maks 3 picks fra samme sektor — unngå konsentrasjons-risiko.
 4. **Kun positive momentum eller klart fundamentalt drevet.** Ingen "fallende kniver".
 5. **Hver pick må ha begrunnelse.** En setning som forklarer *hvorfor* — ikke generic "sterk Sharpe".
+6. **Score 0-10 per pick** — driver konsentrert allokering. Skala:
+   - 9.5-10: top conviction, vil drive 25-35 % av porteføljen (få nyhet + sterk Sharpe + tema-tailwind)
+   - 8.5-9.4: sterk overbevisning, 12-20 %
+   - 7.5-8.4: solid satellitt, 4-10 %
+   - Under 7.5: ikke pick (vi vil ha kvalitet, ikke fyll)
+   Differensier scorene — hvis alle 8 får 9.0 mister du allokerings-edge.
 
 # Risk read
 - 'crash-warning' BARE ved ekstreme makro-signaler (bank-failures, sovereign default, krigsutbrudd)
@@ -195,8 +211,10 @@ Returner JSON som matcher schema. Eksempel:
   "thesis": "AI-capex-drevet semi-rally fortsetter, men Hormuz-spenninger gir asymmetrisk olje-upside. Tar 4 semis (top-Sharpe), 2 olje (XOM som anker, OXY for shale-beta), 1 datacenter (VRT), 1 power (CEG som AI-nuclear hedge).",
   "riskRead": "normal",
   "picks": [
-    { "ticker": "MU", "reasoning": "Top-Sharpe semis + Micron earnings beat sist uke + AI-capex driver" },
-    { "ticker": "XOM", "reasoning": "Hormuz-spenninger gir oljepris-upside, XOM som lavest-vol oljeaktør i universet" },
+    { "ticker": "MU", "reasoning": "Top-Sharpe semis + earnings beat + AI-capex driver", "score": 9.6 },
+    { "ticker": "AVGO", "reasoning": "Custom-AI-silisium + sterk dominanse i hyperscaler-pipeline", "score": 9.4 },
+    { "ticker": "VRT", "reasoning": "Datacenter cooling — direkte AI-capex play", "score": 9.2 },
+    { "ticker": "XOM", "reasoning": "Hormuz gir oljepris-upside, lavest-vol olje i universet", "score": 8.8 },
     ...
   ],
   "confidence": 0.75
@@ -329,7 +347,7 @@ export async function selectEliteWithAI(creds: AlpacaCreds): Promise<AiSelection
       if (cnt >= MAX_PER_SECTOR) continue;
       sectorCount.set(sector, cnt + 1);
     }
-    validPicks.push({ ticker: tk, reasoning: p.reasoning });
+    validPicks.push({ ticker: tk, reasoning: p.reasoning, score: p.score });
     if (validPicks.length >= ELITE_SIZE) break;
   }
 

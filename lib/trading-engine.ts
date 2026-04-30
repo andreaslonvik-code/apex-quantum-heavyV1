@@ -38,6 +38,7 @@ import {
 } from './alpaca';
 import { WATCHLIST, RISK, SIGNAL, SYMBOL_TO_SECTOR } from './blueprint';
 import { computeEliteTickers } from './portfolio-optimizer';
+import { computeTargetWeights, targetDollars } from './elite-allocation';
 import {
   closeEntryLots,
   getSignalMultipliers,
@@ -58,8 +59,8 @@ import {
   vixBuyFactor,
 } from './market-context';
 
-export const HOLDINGS_CAP = 8;
-export const MAX_PER_TICKER_PCT = 15;
+export const HOLDINGS_CAP = RISK.MAX_POSITIONS;
+export const MAX_PER_TICKER_PCT = RISK.MAX_PER_TICKER_PCT;
 const EXTENDED_HOURS_SIZE_FACTOR = 0.5;
 const ELITE_SCORE_BONUS = 1.2;
 const GAP_UP_THRESHOLD = 0.02;
@@ -417,6 +418,75 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     }
   }
 
+  // ── Target-allocation rebalance pass ─────────────────────────────────
+  // Drives positions toward the elite slate's tier-cap weights. Emits
+  // BUYs to close underweight gaps and TRIM-SELLs when a winner runs
+  // past its overweight threshold. These signals get score 1000+ so they
+  // outrank any signal-based candidate in the BUY ordering below.
+  const targets = computeTargetWeights(eliteResult.picks);
+  const targetByTicker = targetDollars(targets, equity);
+  for (const t of targets) {
+    const ticker = t.ticker;
+    const price = priceByTicker.get(ticker);
+    if (!price) continue;
+    const pos = positionsByTicker.get(ticker);
+    const posValue = pos ? Math.abs(parseFloat(pos.market_value) || 0) : 0;
+    const targetValue = targetByTicker.get(ticker) ?? 0;
+    if (targetValue <= 0) continue;
+
+    // Trim if running well past target (lock in gains, free cash for
+    // names that drifted underweight).
+    if (
+      posValue > targetValue * RISK.REBALANCE_OVERWEIGHT &&
+      pos &&
+      parseFloat(pos.qty) >= 1
+    ) {
+      const trimDollars = (posValue - targetValue) * RISK.REBALANCE_CONVERGENCE;
+      const trimQty = Math.floor(trimDollars / price);
+      if (trimQty >= 1) {
+        result.sellSignals.push({
+          ticker, amount: trimQty, price,
+          reason: `TRIM toward ${(t.weight * 100).toFixed(1)}% target (rank ${t.rank}, score ${t.score.toFixed(1)})`,
+          priority: 60, signalType: 'REBALANCE_TRIM',
+        });
+      }
+      continue;
+    }
+
+    // Skip BUYs when an event vetoes this ticker.
+    if (earningsBlockSet.has(ticker)) continue;
+    const sectorKey = SYMBOL_TO_SECTOR[ticker];
+    const newsSectorMul = sectorMultiplierFromIntel(newsIntel, sectorKey);
+    const newsTickerMul = tickerEventMultiplierFromIntel(newsIntel, ticker);
+    if (newsTickerMul <= 0.05) continue;
+
+    if (posValue < targetValue * RISK.REBALANCE_UNDERWEIGHT) {
+      const gap = targetValue - posValue;
+      // Apply the same risk multipliers the signal-based pass uses, so
+      // the rebalance respects VIX regime, news bias, and extended-hours
+      // sizing. We DO NOT scale by news/VIX < 1 below 0.5 — rebalance is
+      // strategic; we still want to deploy in moderate risk-off, just
+      // smaller bites per tick.
+      const composite = Math.max(
+        0.5,
+        sessionSizeFactor * vixFactor * newsBuyFactor * newsSectorMul * newsTickerMul,
+      );
+      const buyDollars = gap * RISK.REBALANCE_CONVERGENCE * composite;
+      const tickerCapValue = equity * (MAX_PER_TICKER_PCT / 100);
+      const headroom = tickerCapValue - posValue;
+      const cappedDollars = Math.min(buyDollars, headroom);
+      const amount = Math.floor(cappedDollars / price);
+      if (amount >= 1) {
+        result.buyCandidates.push({
+          ticker, amount, price,
+          reason: `REBALANCE → ${(t.weight * 100).toFixed(1)}% target (rank ${t.rank}, score ${t.score.toFixed(1)})`,
+          score: 1000 + (t.score * 10) + (10 - t.rank), // dominates signal-based scores
+          signalType: 'REBALANCE_BUY',
+        });
+      }
+    }
+  }
+
   // ── BUY signals across the full 102 universe ─────────────────────────
   for (const ticker of WATCHLIST) {
     const price = priceByTicker.get(ticker);
@@ -513,8 +583,20 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     }
   }
 
-  // ── Apply HOLDINGS_CAP ────────────────────────────────────────────────
+  // ── Dedupe by ticker (rebalance + signal can both fire on same name) ─
+  // Sort by score desc, then keep only the first candidate per ticker.
   result.buyCandidates.sort((a, b) => b.score - a.score);
+  const seenTickers = new Set<string>();
+  const dedupedBuys: BuyCandidate[] = [];
+  for (const c of result.buyCandidates) {
+    const key = c.ticker.toUpperCase();
+    if (seenTickers.has(key)) continue;
+    seenTickers.add(key);
+    dedupedBuys.push(c);
+  }
+  result.buyCandidates = dedupedBuys;
+
+  // ── Apply HOLDINGS_CAP ────────────────────────────────────────────────
   let freshSlots = Math.max(0, HOLDINGS_CAP - heldCount);
   for (const c of result.buyCandidates) {
     if (heldTickers.has(c.ticker)) {
