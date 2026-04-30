@@ -33,12 +33,23 @@ import { getLatestNewsIntel } from './news-intelligence';
 import { createAdminClient } from '@/utils/supabase/admin';
 
 const xai = createXai({ apiKey: process.env.XAI_API_KEY || '' });
-// Note: "Grok Heavy mode" is a UI feature on x.com/grok.com (multi-agent
-// reasoning), not an API model. Use the underlying model name. Common
-// valid names: 'grok-4', 'grok-4-fast-reasoning', 'grok-4-0709', 'grok-3'.
-// Override with GROK_MODEL env var.
-const MODEL_NAME = process.env.GROK_MODEL || 'grok-4';
-const grokModel = xai(MODEL_NAME);
+// Portfolio selection is the highest-stakes Grok call we make — it picks
+// the 8 elite tickers the trading engine will trade against for the next
+// 15 min. Defaults to grok-4.20-multi-agent-0309, the API equivalent of
+// "Grok Heavy mode" (parallel reasoning agents). Falls back to legacy
+// GROK_MODEL env var, then to the canonical model name. Override with
+// GROK_MODEL_PORTFOLIO on Vercel for any other variant.
+export const PORTFOLIO_MODEL_NAME =
+  process.env.GROK_MODEL_PORTFOLIO ||
+  process.env.GROK_MODEL ||
+  'grok-4.20-multi-agent-0309';
+const grokModel = xai(PORTFOLIO_MODEL_NAME);
+
+// Multi-agent models can take 60-120s. Vercel cron has a 60s budget; if
+// the call doesn't complete in time the function gets killed mid-execution.
+// Abort just inside the 60s window so the fallback path runs and persists
+// rather than the lambda being terminated.
+const PORTFOLIO_AI_TIMEOUT_MS = 55_000;
 
 const ELITE_SIZE = 8;
 const MAX_PER_SECTOR = 3;
@@ -247,13 +258,16 @@ export async function selectEliteWithAI(creds: AlpacaCreds): Promise<AiSelection
   let rawResponse: unknown = null;
   let errorMessage: string | undefined;
   const tGrok = Date.now();
+  const abortController = new AbortController();
+  const abortTimer = setTimeout(() => abortController.abort(), PORTFOLIO_AI_TIMEOUT_MS);
   try {
-    console.log('[AI-PORTFOLIO] calling Grok...');
+    console.log(`[AI-PORTFOLIO] calling ${PORTFOLIO_MODEL_NAME}...`);
     const r = await generateObject({
       model: grokModel,
       schema: AiPortfolioSchema,
       prompt: buildPrompt(stats, newsIntel),
       temperature: 0.4,
+      abortSignal: abortController.signal,
     });
     aiResult = r.object;
     rawResponse = r.object;
@@ -290,6 +304,8 @@ export async function selectEliteWithAI(creds: AlpacaCreds): Promise<AiSelection
       `[AI-PORTFOLIO] Grok call failed in ${Date.now() - tGrok}ms:`,
       errorMessage,
     );
+  } finally {
+    clearTimeout(abortTimer);
   }
 
   if (!aiResult) {

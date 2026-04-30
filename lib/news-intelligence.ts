@@ -29,9 +29,15 @@ import {
 } from './blueprint';
 
 const xai = createXai({ apiKey: process.env.XAI_API_KEY || '' });
-// "Grok Heavy mode" is a UI feature, not an API model — use the underlying
-// model name. Override with GROK_MODEL env var.
-const grokModel = xai(process.env.GROK_MODEL || 'grok-4');
+// News scanning is fact-extraction + categorisation — the heavy reasoning
+// modes are overkill. Default to a fast non-reasoning Grok 4.1 variant
+// (~3-5× cheaper than reasoning models, response in 5-15s instead of
+// 30-60s). Override with GROK_MODEL_NEWS for any other variant.
+export const NEWS_MODEL_NAME =
+  process.env.GROK_MODEL_NEWS ||
+  process.env.GROK_MODEL ||
+  'grok-4-1-fast-non-reasoning';
+const grokModel = xai(NEWS_MODEL_NAME);
 
 const SECTOR_KEYS = Object.keys(SECTORS) as SectorKey[];
 

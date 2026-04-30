@@ -52,29 +52,50 @@ export async function GET() {
     };
     const models = (parsed.data ?? []).map((m) => m.id).sort();
 
-    // Suggest the most appropriate model for our use cases based on what's
-    // actually available. Heavy reasoning > fast reasoning > base > older.
-    const preferenceOrder = [
+    // Recommendations for the two roles we use Grok in:
+    // - Portfolio selection: highest-quality reasoning (Heavy/multi-agent
+    //   if available, else top-tier reasoning model)
+    // - News scan: fast non-reasoning (fact extraction doesn't need
+    //   chain-of-thought; cheaper + faster)
+    const portfolioPreference = [
+      'grok-4.20-multi-agent-0309',
       'grok-4-heavy',
-      'grok-4-heavy-latest',
-      'grok-4',
-      'grok-4-latest',
+      'grok-4.20-0309-reasoning',
+      'grok-4-1-fast-reasoning',
       'grok-4-fast-reasoning',
       'grok-4-0709',
+      'grok-4',
       'grok-3',
-      'grok-3-latest',
     ];
-    const recommended = preferenceOrder.find((p) => models.includes(p)) ?? models[0] ?? null;
+    const newsPreference = [
+      'grok-4-1-fast-non-reasoning',
+      'grok-4-fast-non-reasoning',
+      'grok-4.20-0309-non-reasoning',
+      'grok-3-mini',
+      'grok-3',
+    ];
+    const recommendedPortfolio = portfolioPreference.find((p) => models.includes(p)) ?? null;
+    const recommendedNews = newsPreference.find((p) => models.includes(p)) ?? null;
 
     return NextResponse.json({
       ok: true,
-      currentlyConfigured: process.env.GROK_MODEL ?? '(default: grok-4)',
+      currentlyConfigured: {
+        GROK_MODEL_PORTFOLIO:
+          process.env.GROK_MODEL_PORTFOLIO ??
+          (process.env.GROK_MODEL ? `(via legacy GROK_MODEL: ${process.env.GROK_MODEL})` : '(default: grok-4.20-multi-agent-0309)'),
+        GROK_MODEL_NEWS:
+          process.env.GROK_MODEL_NEWS ??
+          (process.env.GROK_MODEL ? `(via legacy GROK_MODEL: ${process.env.GROK_MODEL})` : '(default: grok-4-1-fast-non-reasoning)'),
+      },
       availableModels: models,
       totalCount: models.length,
-      recommendedForGROK_MODEL: recommended,
-      note: recommended
-        ? `Set GROK_MODEL=${recommended} on Vercel for the highest-tier model your key can call.`
-        : 'No models returned — verify the API key on console.x.ai.',
+      recommendations: {
+        GROK_MODEL_PORTFOLIO: recommendedPortfolio,
+        GROK_MODEL_NEWS: recommendedNews,
+      },
+      note: recommendedPortfolio
+        ? `Optimal split: GROK_MODEL_PORTFOLIO=${recommendedPortfolio} GROK_MODEL_NEWS=${recommendedNews ?? '(none found)'}`
+        : 'No portfolio-grade reasoning model available — verify API key.',
       raw: parsed.data ?? [],
     });
   } catch (e) {

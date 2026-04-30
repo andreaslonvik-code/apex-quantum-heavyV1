@@ -147,7 +147,12 @@ export async function GET() {
           }"`,
     envCheck: {
       XAI_API_KEY: process.env.XAI_API_KEY ? `set (${(process.env.XAI_API_KEY as string).slice(0, 8)}...)` : 'MISSING',
-      GROK_MODEL: process.env.GROK_MODEL ?? '(default: grok-4)',
+      GROK_MODEL_PORTFOLIO:
+        process.env.GROK_MODEL_PORTFOLIO ??
+        (process.env.GROK_MODEL ? `(via legacy GROK_MODEL: ${process.env.GROK_MODEL})` : '(default: grok-4.20-multi-agent-0309)'),
+      GROK_MODEL_NEWS:
+        process.env.GROK_MODEL_NEWS ??
+        (process.env.GROK_MODEL ? `(via legacy GROK_MODEL: ${process.env.GROK_MODEL})` : '(default: grok-4-1-fast-non-reasoning)'),
       ALPACA_DATA_BASE: process.env.ALPACA_DATA_URL ?? '(default)',
     },
     alpacaBarsTest: barsTest,
