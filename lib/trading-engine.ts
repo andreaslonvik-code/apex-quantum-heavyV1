@@ -123,6 +123,29 @@ function firstSeenKey(clerkUserId: string, ticker: string): string {
   return `${clerkUserId}:${ticker.toUpperCase()}`;
 }
 
+// Per-(user, ticker) re-entry cooldown after a STOPLOSS fires. Prevents
+// the whipsaw loop where a stop-out is followed by a fresh BUY a few
+// minutes later, which gets stopped out again. 60 min gives the price
+// time to settle into either a continuation or reversal pattern.
+const stoplossCooldown: Map<string, number> = new Map();
+const STOPLOSS_COOLDOWN_MS = 60 * 60 * 1000;
+
+function inStoplossCooldown(clerkUserId: string, ticker: string): boolean {
+  const ts = stoplossCooldown.get(firstSeenKey(clerkUserId, ticker));
+  if (!ts) return false;
+  return Date.now() - ts < STOPLOSS_COOLDOWN_MS;
+}
+
+function recordStoploss(clerkUserId: string, ticker: string): void {
+  stoplossCooldown.set(firstSeenKey(clerkUserId, ticker), Date.now());
+}
+
+// Sector-bias hard veto threshold. When the news scanner reports a
+// sectorBias more bearish than this, no new BUYs in that sector regardless
+// of what the AI elite selector picked. Catches the case where Sharpe
+// momentum is high but a sector-wide shock is breaking.
+const SECTOR_VETO_BIAS = -0.4;
+
 function hwmKey(clerkUserId: string, ticker: string): string {
   return `${clerkUserId}:${ticker.toUpperCase()}`;
 }
@@ -581,10 +604,25 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
 
     // Skip BUYs when an event vetoes this ticker.
     if (earningsBlockSet.has(ticker)) { rebalanceSkipReason.earningsVeto++; continue; }
+    if (inStoplossCooldown(clerkUserId, ticker)) {
+      rebalanceSkipReason.newsVeto++; // reuse counter; logging only
+      continue;
+    }
     const sectorKey = SYMBOL_TO_SECTOR[ticker];
     const newsSectorMul = sectorMultiplierFromIntel(newsIntel, sectorKey);
     const newsTickerMul = tickerEventMultiplierFromIntel(newsIntel, ticker);
     if (newsTickerMul <= 0.05) { rebalanceSkipReason.newsVeto++; continue; }
+    // Hard sector veto: if the news scanner flags a sector-wide bearish
+    // signal, refuse to add to that sector regardless of per-ticker
+    // momentum. Closes the "AI picks AMD on Sharpe but semis is breaking"
+    // case.
+    if (sectorKey && newsIntel) {
+      const sectorBias = newsIntel.sectorBias[sectorKey] ?? 0;
+      if (sectorBias <= SECTOR_VETO_BIAS) {
+        rebalanceSkipReason.newsVeto++;
+        continue;
+      }
+    }
 
     if (posValue < targetValue * RISK.REBALANCE_UNDERWEIGHT) {
       const gap = targetValue - posValue;
@@ -648,6 +686,9 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     // entirely — this is binary risk we don't want to take.
     if (earningsBlockSet.has(ticker)) continue;
 
+    // Re-entry cooldown after a stop-out — prevents whipsaw.
+    if (inStoplossCooldown(clerkUserId, ticker)) continue;
+
     // News-driven multipliers (1.0 when no intel / low confidence).
     const sectorKey = SYMBOL_TO_SECTOR[ticker];
     const newsSectorMul = sectorMultiplierFromIntel(newsIntel, sectorKey);
@@ -655,6 +696,11 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     // tickerEventMultiplier returns 0 when bearish events are strong enough
     // to neutralise the buy — treat as a hard veto on this ticker.
     if (newsTickerMul <= 0.05) continue;
+    // Hard sector veto on strongly bearish sector bias.
+    if (sectorKey && newsIntel) {
+      const sectorBias = newsIntel.sectorBias[sectorKey] ?? 0;
+      if (sectorBias <= SECTOR_VETO_BIAS) continue;
+    }
 
     // Combined buy multiplier: news regime × sector tilt × per-ticker event
     // × VIX regime. VIX is global so it scales every BUY uniformly.
@@ -853,6 +899,11 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
       // Decrement remaining sellable so the next SELL signal for this
       // same ticker sees the reduced qty and can't oversell.
       remainingSellable.set(tickerKey, have - amount);
+      // Stamp re-entry cooldown when the exit was a stop — protects
+      // against whipsaw in the BUY pass below and on subsequent ticks.
+      if (sig.signalType === 'STOPLOSS' || sig.signalType === 'TRAILING' || sig.signalType === 'BREAKEVEN') {
+        recordStoploss(clerkUserId, sig.ticker);
+      }
       result.executedTrades.push({
         ticker: sig.ticker, symbol: sig.ticker, action: 'SELL',
         amount, price: sig.price, value: tradeValue,
