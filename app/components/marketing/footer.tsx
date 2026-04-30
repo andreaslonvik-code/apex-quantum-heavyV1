@@ -1,6 +1,10 @@
 'use client';
 
+import Link from 'next/link';
 import type { Lang } from './types';
+
+type Item = readonly [label: string, href: string];
+type Col = readonly [heading: string, items: readonly Item[]];
 
 export function MFooter({ lang }: { lang: Lang }) {
   const t =
@@ -8,20 +12,52 @@ export function MFooter({ lang }: { lang: Lang }) {
       ? {
           disc: 'Apex Quantum er en AI-drevet analyseplattform. Handel innebærer risiko. Tidligere resultater er ingen garanti for fremtidige resultater.',
           rights: 'Alle rettigheter forbeholdt.',
+          orgLabel: 'Org.nr',
           cols: [
-            ['Produkt', ['Funksjoner', 'Live cockpit', 'Sikkerhet', 'Pris']],
-            ['Selskap', ['Om oss', 'Blogg', 'Kontakt', 'Status']],
-            ['Juridisk', ['Personvern', 'Vilkår', 'Risikofaktorer', 'Cookies']],
-          ] as const,
+            ['Produkt', [
+              ['Funksjoner', '/#features'],
+              ['Live cockpit', '/#live'],
+              ['Sikkerhet', '/#sikkerhet'],
+              ['Pris', '/pris'],
+            ]],
+            ['Selskap', [
+              ['Om oss', '/om-oss'],
+              ['Blogg', '/blogg'],
+              ['Kontakt', '/kontakt'],
+              ['Status', '/status'],
+            ]],
+            ['Juridisk', [
+              ['Personvern', '/personvern'],
+              ['Vilkår', '/vilkar'],
+              ['Risikofaktorer', '/risikofaktorer'],
+              ['Cookies', '/cookies'],
+            ]],
+          ] as readonly Col[],
         }
       : {
           disc: 'Apex Quantum is an AI-powered analysis platform. Trading involves risk. Past performance is not a guarantee of future results.',
           rights: 'All rights reserved.',
+          orgLabel: 'Org. no',
           cols: [
-            ['Product', ['Features', 'Live cockpit', 'Security', 'Pricing']],
-            ['Company', ['About', 'Blog', 'Contact', 'Status']],
-            ['Legal', ['Privacy', 'Terms', 'Risk factors', 'Cookies']],
-          ] as const,
+            ['Product', [
+              ['Features', '/#features'],
+              ['Live cockpit', '/#live'],
+              ['Security', '/#sikkerhet'],
+              ['Pricing', '/pris'],
+            ]],
+            ['Company', [
+              ['About', '/om-oss'],
+              ['Blog', '/blogg'],
+              ['Contact', '/kontakt'],
+              ['Status', '/status'],
+            ]],
+            ['Legal', [
+              ['Privacy', '/personvern'],
+              ['Terms', '/vilkar'],
+              ['Risk factors', '/risikofaktorer'],
+              ['Cookies', '/cookies'],
+            ]],
+          ] as readonly Col[],
         };
   return (
     <footer className="m-footer">
@@ -50,9 +86,9 @@ export function MFooter({ lang }: { lang: Lang }) {
             <div key={h}>
               <div className="cap-sm">{h}</div>
               <ul>
-                {items.map((x) => (
-                  <li key={x}>
-                    <a href="#">{x}</a>
+                {items.map(([label, href]) => (
+                  <li key={href}>
+                    <Link href={href}>{label}</Link>
                   </li>
                 ))}
               </ul>
@@ -61,7 +97,9 @@ export function MFooter({ lang }: { lang: Lang }) {
         </div>
       </div>
       <div className="m-footer-base">
-        <span>© {new Date().getFullYear()} Apex Quantum AS. {t.rights}</span>
+        <span>
+          © {new Date().getFullYear()} Apex Quantum AS · {t.orgLabel} 921 269 962 · {t.rights}
+        </span>
         <span className="aq-mono">apex-quantum.com</span>
       </div>
     </footer>

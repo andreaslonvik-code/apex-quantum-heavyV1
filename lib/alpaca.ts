@@ -464,6 +464,35 @@ function barsWindowMs(
   }
 }
 
+// ============ PORTFOLIO HISTORY ============
+export interface AlpacaPortfolioHistory {
+  timestamp: number[];        // unix seconds
+  equity: (number | null)[];  // equity at each tick
+  profit_loss: (number | null)[];
+  profit_loss_pct: (number | null)[];
+  base_value: number;
+  timeframe: string;
+}
+
+/**
+ * Fetch the user's portfolio equity curve from Alpaca. Drives the marketing
+ * `/api/marketing/top-trader` chart + Sharpe computation.
+ *
+ * `period`: e.g. '1D', '1W', '1M', '3M', '1A', 'all'
+ * `timeframe`: '1Min' (only with period <= 1D), '5Min', '15Min', '1H', '1D'
+ */
+export function getPortfolioHistory(
+  creds: AlpacaCreds,
+  opts: { period?: string; timeframe?: string; extended_hours?: boolean } = {}
+): Promise<AlpacaResult<AlpacaPortfolioHistory>> {
+  const qs = new URLSearchParams();
+  if (opts.period) qs.set('period', opts.period);
+  if (opts.timeframe) qs.set('timeframe', opts.timeframe);
+  if (opts.extended_hours) qs.set('extended_hours', 'true');
+  const url = `${getTradingBase(creds.env)}/account/portfolio/history${qs.toString() ? `?${qs}` : ''}`;
+  return alpacaFetch<AlpacaPortfolioHistory>(url, creds);
+}
+
 /** Get latest trade for a symbol — falls back to latest quote if trade isn't available. */
 export async function getLatestPrice(
   creds: AlpacaCreds,

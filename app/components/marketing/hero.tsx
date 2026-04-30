@@ -20,7 +20,7 @@ const HERO = {
     ],
     cta: 'Koble til Alpaca',
     cta2: 'Les mer',
-    foot: ['Fra 499 kr/mnd', '30 dagers risikofri prøveperiode', 'Krypterte Alpaca-nøkler'],
+    foot: ['Fra 4 990 kr/mnd', '30 dagers risikofri prøveperiode', 'Krypterte Alpaca-nøkler'],
   },
   en: {
     badge: 'Autonomous AI Trading on Alpaca',
@@ -37,7 +37,7 @@ const HERO = {
     ],
     cta: 'Connect Alpaca',
     cta2: 'Learn More',
-    foot: ['From $49/month', '30-day risk-free trial', 'Encrypted Alpaca keys'],
+    foot: ['From $499/month', '30-day risk-free trial', 'Encrypted Alpaca keys'],
   },
 } as const;
 

@@ -9,6 +9,16 @@ const isPublicRoute = createRouteMatcher([
   '/api/apex/saxo-token',  // called from callback page; auth checked inside handler
   '/api/inngest(.*)',      // Inngest webhooks
   '/api/cron(.*)',         // Vercel cron jobs
+  '/api/marketing(.*)',    // Public landing-page endpoints (no PII leaked)
+  '/om-oss',
+  '/kontakt',
+  '/blogg',
+  '/status',
+  '/personvern',
+  '/vilkar',
+  '/risikofaktorer',
+  '/cookies',
+  '/pris',
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

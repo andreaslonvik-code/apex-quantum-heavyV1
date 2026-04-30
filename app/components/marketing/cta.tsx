@@ -13,7 +13,7 @@ export function CTA({ lang }: { lang: Lang }) {
           sub: 'Lim inn dine egne Alpaca-nøkler. Vi krypterer dem AES-256-GCM. Du beholder full kontroll — koble fra når som helst.',
           cta: 'Koble til Alpaca',
           cta2: 'Book demo',
-          foot: ['Fra 499 kr/mnd', '30 dagers risikofri prøveperiode', 'Avslutt når du vil'],
+          foot: ['Fra 4 990 kr/mnd', '30 dagers risikofri prøveperiode', 'Avslutt når du vil'],
         }
       : {
           eye: 'GET STARTED',
@@ -21,7 +21,7 @@ export function CTA({ lang }: { lang: Lang }) {
           sub: 'Paste your own Alpaca keys. We encrypt them AES-256-GCM. You keep full control — disconnect anytime.',
           cta: 'Connect Alpaca',
           cta2: 'Book a demo',
-          foot: ['From $49/month', '30-day risk-free trial', 'Cancel anytime'],
+          foot: ['From $499/month', '30-day risk-free trial', 'Cancel anytime'],
         };
   return (
     <section id="pris" className="m-cta">
