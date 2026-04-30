@@ -921,5 +921,29 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     }
   }
 
+  // ── Post-execution safety invariants ──────────────────────────────────
+  // Re-fetch the account state and verify no short positions opened on
+  // this scan. The engine + Alpaca position_intent layers should make
+  // this impossible — but a CRITICAL log here means a future regression
+  // would be visible in the cron output instead of silently bleeding
+  // into a $300k short book like before. Failure mode is logging only;
+  // we don't try to auto-cover, that's a manual action.
+  if (result.executedTrades.length > 0) {
+    const postScanPositions = await getPositions(creds);
+    if (postScanPositions.success) {
+      const shorts = postScanPositions.data.filter(
+        (p) => p.side === 'short' || (parseFloat(p.qty) || 0) < 0,
+      );
+      if (shorts.length > 0) {
+        const summary = shorts
+          .map((p) => `${p.symbol}:${p.qty}@$${p.market_value}`)
+          .join(', ');
+        const msg = `CRITICAL invariant violation: short positions detected after scan — ${summary}`;
+        console.error(`[SAFETY] ${clerkUserId} ${msg}`);
+        result.errors.push(msg);
+      }
+    }
+  }
+
   return result;
 }
