@@ -120,14 +120,29 @@ async function gatherTickerStats(creds: AlpacaCreds): Promise<TickerStats[]> {
   return stats;
 }
 
+/**
+ * Composite ranking score that prioritises raw momentum over Sharpe.
+ * Pure Sharpe favours low-vol "quality" names (INTC, JNJ) — fine for
+ * a stable book but the wrong objective when the user is explicitly
+ * asking for asymmetric upside in trending markets. Weighting:
+ *   70 % raw 30-day return + 30 % Sharpe
+ * Sharpe still keeps a leash on pure-noise picks (illiquid garbage
+ * with crazy returns and crazy vol gets penalised), but a name with
+ * +60 % at 50 % vol now beats a name with +5 % at 12 % vol.
+ */
+function momentumScore(s: TickerStats): number {
+  return 0.7 * s.return30d + 0.3 * s.sharpe;
+}
+
 function sharpeFallback(stats: TickerStats[]): AiSelectionResult {
-  // Math fallback: same greedy-top-N + sector cap as the original optimizer.
-  const sorted = [...stats].sort((a, b) => b.sharpe - a.sharpe);
+  // Math fallback: rank by momentum-weighted score, sector-cap, top-N.
+  const sorted = [...stats].sort((a, b) => momentumScore(b) - momentumScore(a));
   const sectorCount = new Map<SectorKey, number>();
   const selected: TickerStats[] = [];
   for (const s of sorted) {
     if (selected.length >= ELITE_SIZE) break;
-    if (s.sharpe <= 0) break;
+    // Refuse picks with negative momentum — we want winners, not catches.
+    if (s.return30d <= 0) break;
     const sector = SYMBOL_TO_SECTOR[s.ticker];
     if (sector) {
       const cnt = sectorCount.get(sector) || 0;
@@ -137,31 +152,31 @@ function sharpeFallback(stats: TickerStats[]): AiSelectionResult {
     selected.push(s);
   }
   const tickers = new Set(selected.map((s) => s.ticker));
-  // Map Sharpe rank → 0-10 score so the allocation layer can compute weights
-  // from the same field whether Grok or fallback ran. Top Sharpe in cohort →
-  // 9.5; bottom of cohort → 7.5. Linear interpolation.
-  const topSharpe = selected[0]?.sharpe ?? 0;
-  const bottomSharpe = selected[selected.length - 1]?.sharpe ?? 0;
-  const sharpeRange = Math.max(topSharpe - bottomSharpe, 1e-6);
+  // Map composite-score rank → 0-10 conviction score for the allocation
+  // layer. Top of cohort → 9.5, bottom → 7.5.
+  const topScore = momentumScore(selected[0] ?? { return30d: 0, vol30d: 1, sharpe: 0, ticker: '' });
+  const bottomScore = momentumScore(selected[selected.length - 1] ?? { return30d: 0, vol30d: 1, sharpe: 0, ticker: '' });
+  const scoreRange = Math.max(topScore - bottomScore, 1e-6);
   const picks: AiPortfolioPick[] = selected.map((s) => ({
     ticker: s.ticker,
-    reasoning: `Sharpe ${s.sharpe.toFixed(2)} (30d return ${(s.return30d * 100).toFixed(1)}%, vol ${(s.vol30d * 100).toFixed(0)}%)`,
-    score: 7.5 + 2.0 * ((s.sharpe - bottomSharpe) / sharpeRange),
+    reasoning: `30d ret ${(s.return30d * 100).toFixed(1)}% (Sharpe ${s.sharpe.toFixed(2)}, vol ${(s.vol30d * 100).toFixed(0)}%)`,
+    score: 7.5 + 2.0 * ((momentumScore(s) - bottomScore) / scoreRange),
   }));
   return {
     tickers,
     source: 'sharpe-fallback',
     picks,
-    thesis: 'Math fallback (Grok unavailable or returned invalid picks). Top-8 by 30-day risk-adjusted momentum with per-sector cap.',
+    thesis: 'Math fallback. Top-8 by momentum-weighted score (70% raw return + 30% Sharpe) with per-sector cap.',
     riskRead: 'normal',
     confidence: 0.5,
   };
 }
 
 function buildPrompt(stats: TickerStats[], newsIntel: Awaited<ReturnType<typeof getLatestNewsIntel>>): string {
-  // Compact per-ticker brief — sorted by Sharpe so the strongest math picks
-  // surface to the top of Grok's context window.
-  const sorted = [...stats].sort((a, b) => b.sharpe - a.sharpe);
+  // Compact per-ticker brief — sorted by momentum-weighted score (70 %
+  // raw return + 30 % Sharpe) so the strongest momentum picks surface
+  // to the top of Grok's context window.
+  const sorted = [...stats].sort((a, b) => momentumScore(b) - momentumScore(a));
   const tickerLines = sorted.map((s) => {
     const sector = SYMBOL_TO_SECTOR[s.ticker] ?? 'misc';
     return `${s.ticker} (${sector}): ret30d ${(s.return30d * 100).toFixed(1)}%, vol ${(s.vol30d * 100).toFixed(0)}%, sharpe ${s.sharpe.toFixed(2)}`;
@@ -186,17 +201,18 @@ ${newsBlock}
 # Dine valg
 Velg 8 tickere for porteføljen. Prinsipper:
 
-1. **Math er førsteinntrykket, ikke fasit.** Sharpe-rangeringen over er nyttig, men den ser ikke nyheter, geopolitikk, eller sektor-temaer. Du gjør det.
-2. **Integrer nyhets-kontekst.** Hvis Hormuz-spenninger eller olje-rally i nyhetsbildet → vurder energi-tickere selv om de ikke er topp-Sharpe. Hvis AI-boble-frykt → vær mer forsiktig med semis-konsentrasjon.
+1. **Optimaliser for ASYMMETRISK UPSIDE, ikke for stabil avkastning.**
+   Vi vil ha aksjer som kan løpe +30 til +100 % på 1-3 måneder, ikke aksjer som driver +5 % stabilt. Det betyr: prioriter HØY 30-dagers return selv om volatiliteten er høy. AMD/NVDA/AVGO/MU på +40 % vol er bedre enn JNJ/INTC på +12 % vol — vi vil ri trender, ikke samle utbytte.
+2. **Integrer nyhets-kontekst.** Hvis Hormuz-spenninger eller olje-rally i nyhetsbildet → vurder energi-tickere selv om de ikke er topp-momentum. Hvis AI-boble-frykt → vær mer forsiktig med semis-konsentrasjon.
 3. **Sektor-spredning.** Maks 3 picks fra samme sektor — unngå konsentrasjons-risiko.
-4. **Kun positive momentum eller klart fundamentalt drevet.** Ingen "fallende kniver".
-5. **Hver pick må ha begrunnelse.** En setning som forklarer *hvorfor* — ikke generic "sterk Sharpe".
-6. **Score 0-10 per pick** — driver konsentrert allokering. Skala:
-   - 9.5-10: top conviction, vil drive 25-35 % av porteføljen (få nyhet + sterk Sharpe + tema-tailwind)
-   - 8.5-9.4: sterk overbevisning, 12-20 %
-   - 7.5-8.4: solid satellitt, 4-10 %
-   - Under 7.5: ikke pick (vi vil ha kvalitet, ikke fyll)
-   Differensier scorene — hvis alle 8 får 9.0 mister du allokerings-edge.
+4. **Kun positive momentum eller klart fundamentalt drevet.** Ingen "fallende kniver" (return30d < 0 = ikke pick).
+5. **Hver pick må ha begrunnelse.** En setning som forklarer *hvorfor* — ikke generic "høy momentum".
+6. **Score 0-10 per pick** — driver konsentrert allokering (45 % i top-pick). Skala:
+   - 9.5-10: top conviction, eksplosiv momentum + tema-tailwind + ingen åpenbare bremser
+   - 8.5-9.4: sterk momentum, ride the trend
+   - 7.5-8.4: solid satellitt, momentum tilstede men mindre eksplosiv
+   - Under 7.5: ikke pick (vi vil ha brennende navn, ikke stabile)
+   Differensier scorene — hvis alle 5 får 9.0 mister du allokerings-edge.
 
 # Risk read
 - 'crash-warning' BARE ved ekstreme makro-signaler (bank-failures, sovereign default, krigsutbrudd)
