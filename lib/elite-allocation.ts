@@ -17,26 +17,36 @@
 import type { AiPortfolioPick } from './ai-portfolio';
 
 /** Tier weights — sum to 1.00. Sorted by score desc, slot-1 gets index 0.
- *  5 slots, heavy top-tier — concentration is the engine of asymmetric
- *  upside on this strategy. Top conviction holds 50 % of the book to
- *  approach the user's manual 60 %-style concentration without quite
- *  hitting the absolute cap. */
+ *  Supports 3-8 picks per v6.1 spec. Variable slate size is handled by
+ *  computeTargetWeights' tierScale: fewer picks = automatically more
+ *  concentration on top names, more picks = broader spread. Weights
+ *  are heavy-headed with a long lotto tail for IONQ/HELP/RKLB-class
+ *  catalyst plays. */
 export const ELITE_TIER_WEIGHTS: readonly number[] = [
-  0.50,  // 1st conviction
-  0.25,  // 2nd
-  0.13,  // 3rd
-  0.08,  // 4th
-  0.04,  // 5th
+  0.25,  // 1st conviction (kjerne)
+  0.22,  // 2nd
+  0.19,  // 3rd
+  0.14,  // 4th
+  0.12,  // 5th
+  0.04,  // 6th (lotto)
+  0.02,  // 7th (lotto)
+  0.02,  // 8th (lotto)
 ];
 
 /** Hold this much of equity in cash for slippage + intraday frictions. */
 export const CASH_BUFFER_PCT = 0.01;
 
-/** Hard floor — picks below this score get zero weight. */
-export const MIN_PICK_SCORE = 7.5;
+/** Hard floor — picks below this score get zero weight. 9.0 lets the
+ *  lotto-tier (rank 6-8 catalyst plays at 9.0-9.4) through while still
+ *  excluding mediocre fillers. computeTargetWeights falls back to top-N
+ *  by score if the filter empties the slate, so we don't go to 100 %
+ *  cash on a quiet day. */
+export const MIN_PICK_SCORE = 9.0;
 
-/** Per-ticker hard ceiling regardless of tier (sanity guardrail). */
-export const ABSOLUTE_TICKER_CAP = 0.50;
+/** Per-ticker hard ceiling regardless of tier (sanity guardrail). Top
+ *  tier is now 35 %; 40 % gives a small headroom for price appreciation
+ *  before the per-ticker cap kicks in on rebalance buys. */
+export const ABSOLUTE_TICKER_CAP = 0.40;
 
 export interface AllocationTarget {
   ticker: string;
@@ -55,9 +65,17 @@ export interface AllocationTarget {
  * weak conviction.
  */
 export function computeTargetWeights(picks: AiPortfolioPick[]): AllocationTarget[] {
-  const filtered = picks
+  let filtered = picks
     .filter((p) => p.score >= MIN_PICK_SCORE)
     .sort((a, b) => b.score - a.score);
+
+  // Fallback: if no pick clears the 9.5 threshold but we got picks back,
+  // use the top-3 anyway. Better to deploy with slightly lower-conviction
+  // names than to sit in cash through what may be the entry day for the
+  // next high-conviction setup.
+  if (filtered.length === 0 && picks.length > 0) {
+    filtered = [...picks].sort((a, b) => b.score - a.score).slice(0, 3);
+  }
 
   if (filtered.length === 0) return [];
 

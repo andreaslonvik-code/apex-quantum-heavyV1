@@ -158,17 +158,19 @@ export const REBALANCE = {
 export const RISK = {
   /** Hard cap on simultaneous holdings. Matches elite slate size. */
   MAX_POSITIONS: 5,
-  /** % of equity any single ticker may occupy. Matches top tier-cap. */
-  MAX_PER_TICKER_PCT: 50,
-  /** % of equity any single sector may occupy. Loose enough that the
-   *  top-tier pick (45 %) plus a same-sector secondary (25 %) can both
-   *  land — common when the AI selector has strong conviction in a
-   *  theme like AI/semis. */
-  MAX_PER_SECTOR_PCT: 75,
+  /** % of equity any single ticker may occupy. Matches top tier-cap
+   *  (35 %) with small headroom for price appreciation. */
+  MAX_PER_TICKER_PCT: 40,
+  /** % of equity any single sector may occupy. Top-tier (35 %) +
+   *  same-sector secondary (25 %) = 60 % at max — that's the cap. */
+  MAX_PER_SECTOR_PCT: 60,
   /** Base BUY size as a % of cash before signal/vol/trend multipliers. */
   POSITION_SIZE_PCT: 0.08,
-  /** Halt for the day at -3 % unrealised. */
-  DAILY_LOSS_LIMIT: -0.03,
+  /** Halt for the day at -2 % unrealised. v6.1 blueprint tightens the
+   *  daily loss limit so a single bad regime day can't compound past
+   *  the recovery window. Tradeoff: more "kill-switch fired" days,
+   *  faster reset to flat. */
+  DAILY_LOSS_LIMIT: -0.02,
   /** Max trades placed per scan (BUY + SELL combined). Sized so a full
    *  rotation (8 non-elite exits + 8 elite entries) fits in one tick. */
   MAX_TRADES_PER_SCAN: 20,

@@ -53,9 +53,12 @@ const grokModel = xai(PORTFOLIO_MODEL_NAME);
 // from the DB cache without paying any AI cost at all.
 const PORTFOLIO_AI_TIMEOUT_MS = 25_000;
 
+// v6.1 blueprint: 3-8 picks based on what gives the best return profile.
+// Fewer picks = automatically more concentration via tierScale; more
+// picks = broader spread + lotto-tier exposure on catalyst names.
 const ELITE_SIZE = 8;
-const MAX_PER_SECTOR = 3;
-const MIN_VALID_PICKS = 5;
+const MAX_PER_SECTOR = 4;
+const MIN_VALID_PICKS = 3;
 const STAT_FETCH_CONCURRENCY = 12;
 const TRADING_DAYS = 252;
 
@@ -77,7 +80,9 @@ const PickSchema = z.object({
 const AiPortfolioSchema = z.object({
   thesis: z.string().max(800),
   riskRead: z.enum(['normal', 'risk-on', 'risk-off', 'crash-warning']),
-  picks: z.array(PickSchema).min(5).max(8),
+  // 3-8 picks per v6.1: pick the count that gives the best return given
+  // current opportunity set, not a fixed number.
+  picks: z.array(PickSchema).min(3).max(8),
   confidence: z.number().min(0).max(1),
 });
 
@@ -192,14 +197,14 @@ function buildPrompt(stats: TickerStats[], newsIntel: Awaited<ReturnType<typeof 
 `
     : '\n\n# Aktuelt nyhetsbilde: ingen ferskt skann tilgjengelig — bruk dine egne kunnskaper om generell makro.\n';
 
-  return `Du er APEX QUANTUM sin AI portfolio manager. Du velger 8 aksjer for porteføljen for neste time.
+  return `Du er APEX QUANTUM sin AI portfolio manager. Du velger 3-8 high-conviction aksjer for porteføljen for neste time. Antallet skal velges ut fra hva som gir best avkastning — færre når kun 3-4 navn klart skiller seg ut, flere når det finnes 6-8 sterke navn med differensiert exposure (semis + power + biotech + quantum). Score 9.5+ er foretrukket for kjerne-picks; lotto-tier (rank 6-8) kan ha 9.0+ for high-asymmetry catalyst names.
 
 # Univers (${WATCHLIST.length} tickere) — sortert etter 30-dagers risk-adjusted momentum
 ${tickerLines}
 ${newsBlock}
 
 # Dine valg
-Velg 8 tickere for porteføljen. Prinsipper:
+Velg 3-8 tickere. Antallet bestemmes av hva slags book som gir best forventet avkastning. Prinsipper:
 
 1. **Optimaliser for ASYMMETRISK UPSIDE, ikke for stabil avkastning.**
    Vi vil ha aksjer som kan løpe +30 til +100 % på 1-3 måneder, ikke aksjer som driver +5 % stabilt. Det betyr: prioriter HØY 30-dagers return selv om volatiliteten er høy. AMD/NVDA/AVGO/MU på +40 % vol er bedre enn JNJ/INTC på +12 % vol — vi vil ri trender, ikke samle utbytte.
@@ -207,12 +212,12 @@ Velg 8 tickere for porteføljen. Prinsipper:
 3. **Sektor-spredning.** Maks 3 picks fra samme sektor — unngå konsentrasjons-risiko.
 4. **Kun positive momentum eller klart fundamentalt drevet.** Ingen "fallende kniver" (return30d < 0 = ikke pick).
 5. **Hver pick må ha begrunnelse.** En setning som forklarer *hvorfor* — ikke generic "høy momentum".
-6. **Score 0-10 per pick** — driver konsentrert allokering (45 % i top-pick). Skala:
-   - 9.5-10: top conviction, eksplosiv momentum + tema-tailwind + ingen åpenbare bremser
-   - 8.5-9.4: sterk momentum, ride the trend
-   - 7.5-8.4: solid satellitt, momentum tilstede men mindre eksplosiv
-   - Under 7.5: ikke pick (vi vil ha brennende navn, ikke stabile)
-   Differensier scorene — hvis alle 5 får 9.0 mister du allokerings-edge.
+6. **Score 0-10 per pick** — driver konsentrert allokering via tier-cap. Skala:
+   - 9.8-10: top conviction kjerne (rank 1, ~25 % vekt 8-pick / ~37 % vekt 3-pick) — eksplosiv momentum + tema-tailwind + verifisert katalysator
+   - 9.5-9.7: sterke satellitter (rank 2-5)
+   - 9.0-9.4: lotto-tier (rank 6-8, 2-4 % vekt) — kun for high-asymmetry catalyst plays (IONQ/HELP/RKLB-class)
+   - Under 9.0: IKKE PICK — bedre å levere 3 picks enn å fylle med svake navn
+   Differensier scorene — hvis alle får 9.6 mister du allokerings-edge.
 
 # Risk read
 - 'crash-warning' BARE ved ekstreme makro-signaler (bank-failures, sovereign default, krigsutbrudd)
