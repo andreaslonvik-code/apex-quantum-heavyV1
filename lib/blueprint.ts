@@ -32,6 +32,22 @@ export type SectorKey = keyof typeof SECTORS;
 
 export const WATCHLIST: readonly string[] = Object.values(SECTORS).flat();
 
+// Asymmetric-upside conviction list. Signal-based BUYs on these tickers
+// get a size multiplier (EXTREME_CONVICTION_BOOST) and lower thresholds —
+// they're the names where we want oversized exposure when entries appear.
+// Curated for: AI silicon (AVGO, TSM, MU), datacenter/power (VRT, ETN,
+// OKLO), commercial AI (PLTR), biotech catalyst (HELP), quantum (IONQ),
+// space/defense (RKLB).
+export const EXTREME_CONVICTION_TICKERS: ReadonlySet<string> = new Set([
+  'AVGO', 'TSM', 'MU',
+  'VRT', 'ETN', 'OKLO',
+  'PLTR',
+  'HELP', 'IONQ', 'RKLB',
+]);
+
+/** Size multiplier on signal-based BUYs for EXTREME_CONVICTION_TICKERS. */
+export const EXTREME_CONVICTION_BOOST = 1.5;
+
 export const SYMBOL_TO_SECTOR: Readonly<Record<string, SectorKey>> = (() => {
   const out: Record<string, SectorKey> = {};
   for (const [sector, syms] of Object.entries(SECTORS) as [SectorKey, readonly string[]][]) {
@@ -170,12 +186,14 @@ export const RISK = {
 } as const;
 
 export const SIGNAL = {
-  /** Min drop from local high to fire DIP. 0.5 % is past noise floor. */
-  DIP_THRESHOLD: 0.005,
+  /** Min drop from local high to fire DIP. 0.3 % gives more frequent
+   *  entries on the asymmetric-upside names while still being above
+   *  most quote noise. */
+  DIP_THRESHOLD: 0.003,
   /** Min rise from local low to fire PEAK. */
-  PEAK_THRESHOLD: 0.005,
-  RSI_OVERSOLD: 48,
-  RSI_OVERBOUGHT: 52,
+  PEAK_THRESHOLD: 0.003,
+  RSI_OVERSOLD: 50,
+  RSI_OVERBOUGHT: 50,
   /** Profit % at which we trim 25 % to lock in some gain. */
   PROFIT_TAKE_THRESHOLD: 0.03,
   /** Static fallback stop (loss as a fraction of entry). ATR stop usually

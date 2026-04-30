@@ -36,7 +36,7 @@ import {
   type AlpacaCreds,
   type AlpacaPosition,
 } from './alpaca';
-import { WATCHLIST, RISK, SIGNAL, SYMBOL_TO_SECTOR } from './blueprint';
+import { WATCHLIST, RISK, SIGNAL, SYMBOL_TO_SECTOR, EXTREME_CONVICTION_TICKERS, EXTREME_CONVICTION_BOOST } from './blueprint';
 import { computeEliteTickers } from './portfolio-optimizer';
 import { computeTargetWeights, targetDollars } from './elite-allocation';
 import {
@@ -546,6 +546,9 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     const dropFromHigh = m.localHigh > 0 ? (m.localHigh - price) / m.localHigh : 0;
     const buyMul = buyTrendBoost(m.trend);
     const eliteBonus = eliteSet.has(ticker) ? ELITE_SCORE_BONUS : 1.0;
+    // Asymmetric-upside conviction names get a size boost on every signal.
+    const convictionBoost = EXTREME_CONVICTION_TICKERS.has(ticker)
+      ? EXTREME_CONVICTION_BOOST : 1.0;
 
     // Earnings veto: never enter a new BUY on a ticker reporting earnings
     // in the next 24 h. Pre-market gap on bad print bypasses our STOPLOSS
@@ -575,7 +578,7 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     ) {
       const gapStrength = Math.min(5, gap / GAP_UP_THRESHOLD);
       const buyValue =
-        equity * 0.01 * gapStrength * buyMul * eliteBonus *
+        equity * 0.01 * gapStrength * buyMul * eliteBonus * convictionBoost *
         sessionSizeFactor * newsBuyMul *
         multiplierFor('GAP_UP', multipliers);
       const cappedValue = Math.min(buyValue, tickerCapValue - posValue);
@@ -593,7 +596,7 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     if (dropFromHigh >= SIGNAL.DIP_THRESHOLD && m.trend !== 'DOWN') {
       const dipStrength = Math.min(5, dropFromHigh / SIGNAL.DIP_THRESHOLD);
       const buyValue =
-        equity * 0.005 * dipStrength * buyMul * eliteBonus *
+        equity * 0.005 * dipStrength * buyMul * eliteBonus * convictionBoost *
         sessionSizeFactor * newsBuyMul *
         multiplierFor('DIP', multipliers);
       const cappedValue = Math.min(buyValue, tickerCapValue - posValue);
@@ -611,7 +614,7 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     if (m.rsi < SIGNAL.RSI_OVERSOLD && m.trend !== 'DOWN') {
       const oversoldDepth = SIGNAL.RSI_OVERSOLD - m.rsi;
       const buyValue =
-        equity * 0.01 * buyMul * eliteBonus *
+        equity * 0.01 * buyMul * eliteBonus * convictionBoost *
         sessionSizeFactor * newsBuyMul *
         multiplierFor('RSI_LOW', multipliers);
       const cappedValue = Math.min(buyValue, tickerCapValue - posValue);
@@ -622,6 +625,43 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
           reason: `RSI LOW (${m.rsi.toFixed(0)})`,
           score: 15 * oversoldDepth * buyMul * eliteBonus * newsTickerMul,
           signalType: 'RSI_LOW',
+        });
+      }
+    }
+  }
+
+  // ── CATALYST signal — Grok-flagged bullish events on conviction names ─
+  // Fires when news intel surfaces a strong-conviction bullish event
+  // (weight ≥ 0.6) on one of the asymmetric-upside tickers — e.g. HELP
+  // phase-3 readout, IONQ quantum announcement, RKLB DARPA contract.
+  // Sized at 4 % of equity per event before multipliers, on top of any
+  // DIP/RSI signal that may also fire for the same name (dedup keeps
+  // highest-scoring candidate).
+  if (newsIntel) {
+    for (const ev of newsIntel.tickerEvents) {
+      const ticker = ev.ticker.toUpperCase();
+      if (!EXTREME_CONVICTION_TICKERS.has(ticker)) continue;
+      if (ev.direction !== 'bullish') continue;
+      if (ev.weight < 0.6) continue;
+      const price = priceByTicker.get(ticker);
+      if (!price) continue;
+      if (earningsBlockSet.has(ticker)) continue;
+
+      const pos = positionsByTicker.get(ticker);
+      const posValue = pos ? Math.abs(parseFloat(pos.market_value) || 0) : 0;
+      const tickerCapValue = equity * (MAX_PER_TICKER_PCT / 100);
+      const headroom = tickerCapValue - posValue;
+      if (headroom <= 0) continue;
+
+      const buyValue = equity * 0.04 * ev.weight * sessionSizeFactor * vixFactor;
+      const cappedValue = Math.min(buyValue, headroom);
+      const amount = Math.floor(cappedValue / price);
+      if (amount >= 1) {
+        result.buyCandidates.push({
+          ticker, amount, price,
+          reason: `CATALYST ${ev.source}/${(ev.weight * 100).toFixed(0)}% — ${ev.reason.slice(0, 80)}`,
+          score: 80 * ev.weight, // higher than typical signal scores
+          signalType: 'CATALYST',
         });
       }
     }
