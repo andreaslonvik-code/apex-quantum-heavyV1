@@ -10,15 +10,14 @@ const FEAT = {
     title: 'Kraftige funksjoner',
     sub: 'Alt du trenger for autonom aksjehandel via Alpaca',
     feats: [
-      { ic: 'chart' as const,    em: '🇺🇸', t: 'US Equities',          d: 'Apex Quantum handler aksjer på NASDAQ, NYSE, ARCA og AMEX gjennom Alpaca Trading API.' },
-      { ic: 'stock' as const,    em: '📊', t: 'Kun aksjehandel',       d: 'Fokusert på aksjer (equities). Ingen CFD, futures, options eller andre derivater.' },
-      { ic: 'ai' as const,       em: '🤖', t: 'Grok-4-Heavy AI',       d: 'Bruker xAI Grok-4-Heavy for markedsanalyse, signaldeteksjon og porteføljoptimalisering.' },
-      { ic: 'speed' as const,    em: '⚡', t: 'Automatisk handling',   d: 'Handler hvert 2. sekund med optimaliserte strategier og risikostyring.' },
-      { ic: 'graph' as const,    em: '📈', t: 'Porteføljegraf',        d: 'Se porteføljeverdi over tid, avkastning i % og USD, live P&L per posisjon.' },
-      { ic: 'withdraw' as const, em: '💰', t: 'Ta ut avkastning',      d: 'Realisér gevinster på ett klikk. Selg posisjoner og sett kontoen tilbake til startkapital.' },
+      { ic: 'chart' as const,    t: 'US Equities',          d: 'Apex Quantum handler aksjer på NASDAQ, NYSE, ARCA og AMEX gjennom Alpaca Trading API.' },
+      { ic: 'stock' as const,    t: 'Kun aksjehandel',       d: 'Fokusert på aksjer (equities). Ingen CFD, futures, options eller andre derivater.' },
+      { ic: 'ai' as const,       t: 'Grok-4-Heavy AI',       d: 'Bruker xAI Grok-4-Heavy for markedsanalyse, signaldeteksjon og porteføljoptimalisering.' },
+      { ic: 'speed' as const,    t: 'Automatisk handling',   d: 'Handler hvert 2. sekund med optimaliserte strategier og risikostyring.' },
+      { ic: 'graph' as const,    t: 'Porteføljegraf',        d: 'Se porteføljeverdi over tid, avkastning i % og USD, live P&L per posisjon.' },
+      { ic: 'withdraw' as const, t: 'Ta ut avkastning',      d: 'Realisér gevinster på ett klikk. Selg posisjoner og sett kontoen tilbake til startkapital.' },
     ],
     secLeft: 'Sikkert og sertifisert',
-    secLeftEm: '🛡️',
     secLeftItems: [
       'Per-bruker Alpaca API-nøkler kryptert med AES-256-GCM',
       'Rate-limiting og DDoS-beskyttelse',
@@ -26,7 +25,6 @@ const FEAT = {
       'Legale ansvarsfraskrivelser inkludert',
     ],
     secRight: 'Åpenhet og kontroll',
-    secRightEm: '📊',
     secRightItems: [
       'Live dashboard med porteføljeoversikt',
       'Handelslogg og performance-metrikker',
@@ -39,15 +37,14 @@ const FEAT = {
     title: 'Powerful features',
     sub: 'Everything you need for autonomous equity trading via Alpaca',
     feats: [
-      { ic: 'chart' as const,    em: '🇺🇸', t: 'US Equities',         d: 'Apex Quantum trades stocks on NASDAQ, NYSE, ARCA, and AMEX through the Alpaca Trading API.' },
-      { ic: 'stock' as const,    em: '📊', t: 'Equities Only',        d: 'Focused on stocks (equities). No CFD, futures, options or other derivatives.' },
-      { ic: 'ai' as const,       em: '🤖', t: 'Grok-4-Heavy AI',      d: 'Uses xAI Grok-4-Heavy for market analysis, signal detection and portfolio optimization.' },
-      { ic: 'speed' as const,    em: '⚡', t: 'Autonomous Trading',   d: 'Trades every 2 seconds with optimized strategies and risk management.' },
-      { ic: 'graph' as const,    em: '📈', t: 'Portfolio Chart',      d: 'See portfolio value over time, returns in % and USD, live P&L per position.' },
-      { ic: 'withdraw' as const, em: '💰', t: 'Withdraw Profits',     d: 'Realize gains with one click. Sell positions and reset to starting capital.' },
+      { ic: 'chart' as const,    t: 'US Equities',         d: 'Apex Quantum trades stocks on NASDAQ, NYSE, ARCA, and AMEX through the Alpaca Trading API.' },
+      { ic: 'stock' as const,    t: 'Equities Only',        d: 'Focused on stocks (equities). No CFD, futures, options or other derivatives.' },
+      { ic: 'ai' as const,       t: 'Grok-4-Heavy AI',      d: 'Uses xAI Grok-4-Heavy for market analysis, signal detection and portfolio optimization.' },
+      { ic: 'speed' as const,    t: 'Autonomous Trading',   d: 'Trades every 2 seconds with optimized strategies and risk management.' },
+      { ic: 'graph' as const,    t: 'Portfolio Chart',      d: 'See portfolio value over time, returns in % and USD, live P&L per position.' },
+      { ic: 'withdraw' as const, t: 'Withdraw Profits',     d: 'Realize gains with one click. Sell positions and reset to starting capital.' },
     ],
     secLeft: 'Secure & Certified',
-    secLeftEm: '🛡️',
     secLeftItems: [
       'Per-user Alpaca API keys encrypted with AES-256-GCM',
       'Rate-limiting and DDoS protection',
@@ -55,7 +52,6 @@ const FEAT = {
       'Legal disclaimers included',
     ],
     secRight: 'Transparency & Control',
-    secRightEm: '📊',
     secRightItems: [
       'Live dashboard with portfolio overview',
       'Trade log and performance metrics',
@@ -121,20 +117,14 @@ export function Features({ lang }: { lang: Lang }) {
           {t.feats.map((f, i) => (
             <div key={i} className="m-feat-card">
               <div className="m-feat-icbox">{ICON[f.ic]}</div>
-              <h3 className="m-feat-t">
-                <span className="m-feat-em">{f.em}</span>
-                {f.t}
-              </h3>
+              <h3 className="m-feat-t">{f.t}</h3>
               <p className="m-feat-d">{f.d}</p>
             </div>
           ))}
         </div>
         <div id="sikkerhet" className="m-trust-row">
           <div className="m-trust">
-            <h3 className="m-trust-t">
-              <span className="m-feat-em">{t.secLeftEm}</span>
-              {t.secLeft}
-            </h3>
+            <h3 className="m-trust-t">{t.secLeft}</h3>
             <ul className="m-trust-list">
               {t.secLeftItems.map((it, i) => (
                 <li key={i}>
@@ -145,10 +135,7 @@ export function Features({ lang }: { lang: Lang }) {
             </ul>
           </div>
           <div className="m-trust">
-            <h3 className="m-trust-t">
-              <span className="m-feat-em">{t.secRightEm}</span>
-              {t.secRight}
-            </h3>
+            <h3 className="m-trust-t">{t.secRight}</h3>
             <ul className="m-trust-list">
               {t.secRightItems.map((it, i) => (
                 <li key={i}>

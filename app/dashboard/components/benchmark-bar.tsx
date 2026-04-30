@@ -69,7 +69,7 @@ export function BenchmarkBar({ lang, data }: Props) {
             <div className="bench-pct">{fmtPct(c.pct)}</div>
             {isApex && hasData && apexBeating && (
               <div className="bench-tag">
-                {lang === 'no' ? '🏆 SLÅR BØRSEN' : '🏆 BEATING MARKET'}
+                {lang === 'no' ? 'LEDER MARKEDET' : 'LEADING MARKET'}
               </div>
             )}
             {isApex && hasData && !apexBeating && data?.apexPct !== undefined && (

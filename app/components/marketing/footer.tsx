@@ -33,7 +33,8 @@ export function MFooter({ lang }: { lang: Lang }) {
               <img src="/aq-logo.png" alt="" />
             </div>
             <span className="m-brand-wm">
-              APEX <span className="grad">QUANTUM</span>
+              <span style={{ color: 'rgba(255,255,255,0.55)' }}>APEX</span>{' '}
+              <span style={{ color: 'var(--aq-cyan)' }}>QUANTUM</span>
             </span>
           </div>
           <p className="m-disc">{t.disc}</p>

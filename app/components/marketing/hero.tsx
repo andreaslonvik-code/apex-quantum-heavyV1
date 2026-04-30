@@ -6,38 +6,38 @@ import type { Lang } from './types';
 
 const HERO = {
   no: {
-    badge: '🤖 Autonom AI-trading på Alpaca',
+    badge: 'Autonom AI-trading på Alpaca',
     title: 'Apex Quantum',
     accent: 'Din AI-trader på US-aksjemarkedet',
-    desc: 'Apex Quantum analyserer markedsdynamikk og utfører aksjehandel fullt automatisk på dine vegne via Alpaca. Handler US equities (NASDAQ, NYSE, ARCA, AMEX) med Grok-4-Heavy AI. Lim inn dine egne Alpaca API-nøkler — vi lagrer dem kryptert (AES-256-GCM) og handler kun på din konto.',
+    desc: 'Apex Quantum analyserer markedsdynamikk og utfører aksjehandel fullt automatisk på dine vegne via Alpaca. Handler US equities (NASDAQ, NYSE, ARCA, AMEX) med Grok-4-Heavy AI. Lim inn dine egne Alpaca API-nøkler. Vi lagrer dem kryptert (AES-256-GCM) og handler kun på din konto.',
     feats: [
-      ['📊', 'Analyserer US equities (NASDAQ, NYSE, ARCA, AMEX)'],
-      ['🔐', 'Krypterte API-nøkler (AES-256-GCM)'],
-      ['⚡', 'Handler hvert 2. sekund automatisk'],
-      ['🛡️', 'Per-bruker isolasjon — Clerk auth'],
-      ['📈', 'Porteføljegraf & live P&L'],
-      ['💰', 'Ta ut avkastning på ett klikk'],
+      ['→', 'Analyserer US equities (NASDAQ, NYSE, ARCA, AMEX)'],
+      ['→', 'Krypterte API-nøkler (AES-256-GCM)'],
+      ['→', 'Handler hvert 2. sekund automatisk'],
+      ['→', 'Per-bruker isolasjon, Clerk auth'],
+      ['→', 'Porteføljegraf og live P&L'],
+      ['→', 'Ta ut avkastning på ett klikk'],
     ],
     cta: 'Koble til Alpaca',
     cta2: 'Les mer',
-    foot: ['Fra 499 kr/mnd', '30 dagers risikofri prøveperiode', '🔐 Krypterte Alpaca-nøkler'],
+    foot: ['Fra 499 kr/mnd', '30 dagers risikofri prøveperiode', 'Krypterte Alpaca-nøkler'],
   },
   en: {
-    badge: '🤖 Autonomous AI Trading on Alpaca',
+    badge: 'Autonomous AI Trading on Alpaca',
     title: 'Apex Quantum',
     accent: 'Your AI Trader on US Equities',
-    desc: 'Apex Quantum analyzes market dynamics and executes equity trading fully automatically via Alpaca. Trades US equities (NASDAQ, NYSE, ARCA, AMEX) with Grok-4-Heavy AI. Paste your own Alpaca API keys — we store them encrypted (AES-256-GCM) and trade only on your account.',
+    desc: 'Apex Quantum analyzes market dynamics and executes equity trading fully automatically via Alpaca. Trades US equities (NASDAQ, NYSE, ARCA, AMEX) with Grok-4-Heavy AI. Paste your own Alpaca API keys. We store them encrypted (AES-256-GCM) and trade only on your account.',
     feats: [
-      ['📊', 'Analyzes US equities (NASDAQ, NYSE, ARCA, AMEX)'],
-      ['🔐', 'Encrypted API keys (AES-256-GCM)'],
-      ['⚡', 'Trades every 2 seconds automatically'],
-      ['🛡️', 'Per-user isolation — Clerk auth'],
-      ['📈', 'Portfolio chart & live P&L'],
-      ['💰', 'Withdraw profits with one click'],
+      ['→', 'Analyzes US equities (NASDAQ, NYSE, ARCA, AMEX)'],
+      ['→', 'Encrypted API keys (AES-256-GCM)'],
+      ['→', 'Trades every 2 seconds automatically'],
+      ['→', 'Per-user isolation, Clerk auth'],
+      ['→', 'Portfolio chart and live P&L'],
+      ['→', 'Withdraw profits with one click'],
     ],
     cta: 'Connect Alpaca',
     cta2: 'Learn More',
-    foot: ['From $49/month', '30-day risk-free trial', '🔐 Encrypted Alpaca keys'],
+    foot: ['From $49/month', '30-day risk-free trial', 'Encrypted Alpaca keys'],
   },
 } as const;
 
@@ -95,7 +95,7 @@ function HeroEmblem() {
         <defs>
           <linearGradient id="hg-cy" x1="0" x2="1" y1="0" y2="1">
             <stop offset="0%" stopColor="#00F5FF" />
-            <stop offset="100%" stopColor="#C026D3" />
+            <stop offset="100%" stopColor="#0088A8" />
           </linearGradient>
           <linearGradient id="hg-chrome" x1="0" x2="0" y1="0" y2="1">
             <stop offset="0%" stopColor="#E9F8FF" />

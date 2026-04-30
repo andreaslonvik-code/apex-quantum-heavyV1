@@ -40,7 +40,7 @@ export function RecentOrders({ lang, orders, onSeeAll }: Props) {
     <div className="panel">
       <div className="panel-head">
         <div>
-          <div className="cap">📋 {t.ordersTitle}</div>
+          <div className="cap">{t.ordersTitle}</div>
           <div className="panel-sub">
             {t.ordersSub} {orders.length}
           </div>

@@ -87,7 +87,7 @@ export function NewsFeed({ lang, feed }: Props) {
     <div className="panel news-panel">
       <div className="panel-head">
         <div>
-          <div className="cap">📰 {lang === 'no' ? 'NYHETER & X-SENTIMENT' : 'NEWS & X SENTIMENT'}</div>
+          <div className="cap">{lang === 'no' ? 'NYHETER & X-SENTIMENT' : 'NEWS & X SENTIMENT'}</div>
           <div className="panel-sub">
             {lang === 'no' ? 'Grok-4-Heavy skann hver time' : 'Grok-4-Heavy hourly scan'}
             {hasFeed && ` · ${formatScannedAt(feed!.scannedAt, lang)}`}
@@ -116,7 +116,7 @@ export function NewsFeed({ lang, feed }: Props) {
             <div className="ai-thesis">
               <div className="ai-thesis-head">
                 <span className="ai-thesis-label">
-                  🧠 {lang === 'no' ? 'AI-VURDERING' : 'AI THESIS'}
+                  {lang === 'no' ? 'AI-VURDERING' : 'AI THESIS'}
                 </span>
                 <span className="ai-thesis-meta aq-mono">
                   {feed!.aiThesis.source}

@@ -45,7 +45,7 @@ export function CTA({ lang }: { lang: Lang }) {
         <div className="m-foot-strip">
           {t.foot.map((s, i) => (
             <Fragment key={i}>
-              <span>🔐 {s}</span>
+              <span>{s}</span>
               {i < t.foot.length - 1 && <span className="m-foot-sep">•</span>}
             </Fragment>
           ))}

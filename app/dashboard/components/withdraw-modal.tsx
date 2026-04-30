@@ -48,20 +48,33 @@ export function WithdrawModal({ open, lang, startVal, currentVal, currency, stat
           </div>
         ) : status === 'error' ? (
           <div className="wd-empty">
-            <div className="wd-empty-icon">⚠️</div>
+            <div className="wd-empty-glyph wd-empty-glyph-err">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10" />
+                <line x1="12" y1="8" x2="12" y2="13" />
+                <line x1="12" y1="16.5" x2="12" y2="16.501" />
+              </svg>
+            </div>
             <h2 className="wd-t">{errorMessage || 'Error'}</h2>
             <button className="btn-ghost-v8 btn-lg" onClick={onClose}>{t.withdrawCancel}</button>
           </div>
         ) : !profitable ? (
           <div className="wd-empty">
-            <div className="wd-empty-icon">📊</div>
+            <div className="wd-empty-glyph">
+              <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="3" y1="20" x2="21" y2="20" />
+                <line x1="6" y1="16" x2="6" y2="13" />
+                <line x1="11" y1="16" x2="11" y2="9" />
+                <line x1="16" y1="16" x2="16" y2="6" />
+              </svg>
+            </div>
             <h2 className="wd-t">{t.withdrawNothing}</h2>
             <p className="wd-sub">{t.emptySub}</p>
             <button className="btn-ghost-v8 btn-lg" onClick={onClose}>{t.withdrawCancel}</button>
           </div>
         ) : (
           <>
-            <div className="cap wd-eye">💰 {t.withdraw.toUpperCase()}</div>
+            <div className="cap wd-eye">{t.withdraw.toUpperCase()}</div>
             <h2 className="wd-t">{t.withdrawAmount}</h2>
             <div className="wd-amount aq-mono">
               +{fmtMoney(profit, lang)} <span className="wd-cur">{moneySuffix(lang, currency)}</span>

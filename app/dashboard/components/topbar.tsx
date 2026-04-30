@@ -34,7 +34,8 @@ export function Topbar({ lang, setLang, mode, balance, currency, accountId, botR
           <img src="/aq-logo.png" alt="" />
         </div>
         <div className="aq-word">
-          APEX <span className="grad">QUANTUM</span>
+          <span style={{ color: 'rgba(255,255,255,0.55)' }}>APEX</span>{' '}
+          <span style={{ color: 'var(--aq-cyan)' }}>QUANTUM</span>
         </div>
         <div className="mode-toggle-v8">
           <span className={`mode-opt-v8 ${mode === 'sim' ? 'is-active' : ''}`}>

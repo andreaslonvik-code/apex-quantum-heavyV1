@@ -39,7 +39,7 @@ export function Watchlist({ lang, rows }: Props) {
     <div className="panel">
       <div className="panel-head">
         <div>
-          <div className="cap">📡 {t.watchlistTitle}</div>
+          <div className="cap">{t.watchlistTitle}</div>
           <div className="panel-sub">{t.watchlistSub}</div>
         </div>
         <div className="panel-head-r">
