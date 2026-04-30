@@ -15,8 +15,15 @@
 // errors, we return neutral values (VIX=15, no upcoming earnings) and
 // trading proceeds normally rather than freezing.
 
-import yahooFinance from 'yahoo-finance2';
+import YahooFinance from 'yahoo-finance2';
 import { createAdminClient } from '@/utils/supabase/admin';
+
+// yahoo-finance2 v3 requires instantiation — `import yahooFinance` was
+// the v2 pattern and silently throws "Call `const yahooFinance = new
+// YahooFinance()` first" at runtime in v3. Pre-2026-04-30 every quote
+// call here failed into the catch block and returned the fallback:
+// VIX = 15 always, no real earnings detection, snapshot all-null.
+const yahooFinance = new YahooFinance({ suppressNotices: ['yahooSurvey'] });
 
 // yahoo-finance2's quote/quoteSummary overloads don't narrow nicely without
 // explicit casts — these types capture just the fields we actually read.
