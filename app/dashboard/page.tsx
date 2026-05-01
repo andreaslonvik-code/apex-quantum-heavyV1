@@ -37,9 +37,20 @@ interface AccountInfo {
 }
 
 interface PerformancePayload {
-  current: { totalValue: number; pnl: number; pnlPercent: number; initialValue: number; balance: number; positionsValue: number };
+  tf?: Timeframe;
+  current: {
+    totalValue: number;
+    pnl: number;
+    pnlPercent: number;
+    initialValue: number;
+    balance: number;
+    positionsValue: number;
+    sinceInceptionPnl?: number;
+    sinceInceptionPnlPct?: number;
+  };
   session: { peak: number; maxDrawdown: number };
-  chartData: Array<{ time: string; value: number }>;
+  chartData: Array<{ timestamp?: number; value: number }>;
+  xTicks?: string[];
   benchmark?: { symbol: string; values: number[]; pct: number | null; vsBenchPct: number | null };
   benchmarkBar?: BenchmarkBarPayload;
 }
@@ -78,7 +89,7 @@ export default function DashboardPage() {
   const refreshAll = useCallback(async () => {
     try {
       const [perfRes, posRes, ordRes] = await Promise.all([
-        fetch('/api/apex/performance', { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)),
+        fetch(`/api/apex/performance?tf=${encodeURIComponent(tf)}`, { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)),
         fetch('/api/apex/positions', { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)),
         fetch('/api/apex/recent-orders', { credentials: 'include' }).then((r) => (r.ok ? r.json() : null)),
       ]);
@@ -88,7 +99,7 @@ export default function DashboardPage() {
     } catch {
       /* soft-fail; next tick will retry */
     }
-  }, []);
+  }, [tf]);
 
   // News intel only updates hourly — poll on a slower cadence than the
   // 3 s trading-state poll so we don't hammer Alpaca / Supabase for free.
@@ -140,6 +151,9 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (!isConnected) return;
+    // refreshAll's identity flips whenever `tf` changes — fire once immediately
+    // so the chart redraws without waiting for the next 3 s tick.
+    refreshAll();
     tickerRef.current = setInterval(refreshAll, 3000);
     return () => {
       if (tickerRef.current) clearInterval(tickerRef.current);
@@ -204,6 +218,7 @@ export default function DashboardPage() {
   }, [performance]);
 
   const benchPoints = performance?.benchmark?.values ?? undefined;
+  const chartTicks = performance?.xTicks && performance.xTicks.length > 0 ? performance.xTicks : undefined;
 
   // First failed order, deduplicated by orderId/time. User can dismiss it.
   const failedOrder = useMemo(() => {
@@ -335,7 +350,7 @@ export default function DashboardPage() {
               mode={mode}
               currency={accountInfo?.currency ?? null}
             />
-            <ReturnsChart points={equityPoints} benchPoints={benchPoints} />
+            <ReturnsChart points={equityPoints} benchPoints={benchPoints} xTicks={chartTicks} />
             <ChartSummary
               lang={lang}
               current={currentVal}

@@ -22,7 +22,7 @@ export function PortfolioHeader({ lang, tf, onTf, profit, profitPct, mode, curre
     <>
       <div className="ph">
         <div className="ph-l">
-          <div className="cap">{t.eyebrow}</div>
+          <div className="cap">{t.eyebrowByTf[tf] ?? t.eyebrow}</div>
           <div className="ph-row">
             <h1 className={`ph-num ${profit >= 0 ? 'up' : 'dn'}`}>
               {profit >= 0 ? '+' : '−'}

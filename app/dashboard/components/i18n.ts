@@ -18,6 +18,15 @@ export const I18N = {
 
     // Portfolio header
     eyebrow: 'AVKASTNING SIDEN START',
+    eyebrowByTf: {
+      '1H': 'AVKASTNING SISTE TIME',
+      '24H': 'AVKASTNING SISTE 24 TIMER',
+      '7D': 'AVKASTNING SISTE 7 DAGER',
+      '30D': 'AVKASTNING SISTE 30 DAGER',
+      MTD: 'AVKASTNING DENNE MÅNEDEN',
+      YTD: 'AVKASTNING HITTIL I ÅR',
+      ALL: 'AVKASTNING SIDEN START',
+    },
     simCaveat: 'Sim · 1 dag · ikke representativt for live',
     liveCaveat: 'Live · ekte penger',
     liveTag: 'LIVE',
@@ -123,6 +132,15 @@ export const I18N = {
     stopAll: 'Halt all trading',
 
     eyebrow: 'RETURNS SINCE INCEPTION',
+    eyebrowByTf: {
+      '1H': 'RETURNS · LAST HOUR',
+      '24H': 'RETURNS · LAST 24 HOURS',
+      '7D': 'RETURNS · LAST 7 DAYS',
+      '30D': 'RETURNS · LAST 30 DAYS',
+      MTD: 'RETURNS · MONTH TO DATE',
+      YTD: 'RETURNS · YEAR TO DATE',
+      ALL: 'RETURNS SINCE INCEPTION',
+    },
     simCaveat: 'Sim · 1 day · not representative for live',
     liveCaveat: 'Live · real capital',
     liveTag: 'LIVE',

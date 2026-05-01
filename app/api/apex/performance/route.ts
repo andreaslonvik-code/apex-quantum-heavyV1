@@ -1,24 +1,60 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getRequestCreds } from '@/lib/get-request-creds';
-import { getAccount, getPositions, getStockBars } from '@/lib/alpaca';
+import {
+  getAccount,
+  getPositions,
+  getPortfolioHistory,
+  getStockBars,
+  type AlpacaCreds,
+  type AlpacaPortfolioHistory,
+  type AlpacaResult,
+} from '@/lib/alpaca';
 
-// Lightweight in-process cache per benchmark symbol — refreshes every 60 s.
-// Keeps the dashboard's 3-second poll loop from hammering the data API. SPY
-// powers the chart overlay + "vs S&P 500" delta; QQQ powers the NASDAQ card
-// in the top BenchmarkBar.
+type Tf = '1H' | '24H' | '7D' | '30D' | 'MTD' | 'YTD' | 'ALL';
+
+type BenchTf = '1Min' | '5Min' | '15Min' | '1Hour' | '1Day';
+
+interface TfCfg {
+  period: string;
+  timeframe: string;
+  benchTf: BenchTf;
+  benchLimit: number;
+  sliceLast?: number;
+  sliceMode?: 'MTD' | 'YTD';
+  tickFormat: 'time' | 'date' | 'month';
+}
+
+// Maps each UI timeframe → Alpaca portfolio_history params + matching SPY bar
+// fetch + a tick-formatting hint. `sliceLast` clips a sub-day window from a
+// 1D series; `sliceMode` clips from month/year start in ET.
+const TF_MAP: Record<Tf, TfCfg> = {
+  '1H':  { period: '1D',  timeframe: '5Min',  benchTf: '5Min',  benchLimit: 13,   sliceLast: 12,   tickFormat: 'time'  },
+  '24H': { period: '1D',  timeframe: '5Min',  benchTf: '5Min',  benchLimit: 80,                    tickFormat: 'time'  },
+  '7D':  { period: '1W',  timeframe: '15Min', benchTf: '15Min', benchLimit: 130,                   tickFormat: 'date'  },
+  '30D': { period: '1M',  timeframe: '1H',    benchTf: '1Hour', benchLimit: 200,                   tickFormat: 'date'  },
+  'MTD': { period: '1M',  timeframe: '1H',    benchTf: '1Hour', benchLimit: 200,  sliceMode: 'MTD', tickFormat: 'date'  },
+  'YTD': { period: '1A',  timeframe: '1D',    benchTf: '1Day',  benchLimit: 260,  sliceMode: 'YTD', tickFormat: 'month' },
+  'ALL': { period: 'all', timeframe: '1D',    benchTf: '1Day',  benchLimit: 1000,                   tickFormat: 'month' },
+};
+
+// Per (symbol, timeframe, limit) cache — refreshes every 60 s. Keeps the
+// dashboard's 3 s poll loop from re-hitting Alpaca for benchmark bars.
 const benchCache: Map<string, { fetchedAt: number; values: number[] }> = new Map();
 const BENCH_TTL_MS = 60_000;
 
 async function fetchBenchmark(
-  creds: { apiKey: string; apiSecret: string; env: 'paper' | 'live' },
+  creds: AlpacaCreds,
   symbol: string,
+  timeframe: BenchTf,
+  limit: number,
 ): Promise<number[]> {
-  const cached = benchCache.get(symbol);
+  const key = `${symbol}:${timeframe}:${limit}`;
+  const cached = benchCache.get(key);
   if (cached && Date.now() - cached.fetchedAt < BENCH_TTL_MS) return cached.values;
-  const r = await getStockBars(creds, symbol, { timeframe: '15Min', limit: 30 });
+  const r = await getStockBars(creds, symbol, { timeframe, limit });
   if (!r.success) return cached?.values ?? [];
   const values = r.data.map((b) => b.c);
-  benchCache.set(symbol, { fetchedAt: Date.now(), values });
+  benchCache.set(key, { fetchedAt: Date.now(), values });
   return values;
 }
 
@@ -29,34 +65,88 @@ function pctChange(values: number[]): number | null {
   return (end / start - 1) * 100;
 }
 
-// In-memory performance history (resets on deploy). Keyed per user.
-const performanceHistory: Map<
-  string,
-  Array<{
-    timestamp: string;
-    balance: number;
-    portfolioValue: number;
-    pnl: number;
-    pnlPercent: number;
-  }>
-> = new Map();
+function buildTicks(timestamps: number[], format: 'time' | 'date' | 'month'): string[] {
+  if (timestamps.length < 2) return [];
+  const N = 8;
+  const out: string[] = [];
+  for (let i = 0; i < N; i++) {
+    const idx = Math.round((i / (N - 1)) * (timestamps.length - 1));
+    const d = new Date(timestamps[idx] * 1000);
+    if (format === 'time') {
+      out.push(d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }));
+    } else if (format === 'date') {
+      out.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }));
+    } else {
+      out.push(d.toLocaleDateString('en-US', { month: 'short', timeZone: 'America/New_York' }));
+    }
+  }
+  return out;
+}
 
-export async function GET() {
+function buildEquitySeries(history: AlpacaPortfolioHistory, cfg: TfCfg) {
+  const ts: number[] = [];
+  const eq: number[] = [];
+  for (let i = 0; i < history.timestamp.length; i++) {
+    const v = history.equity[i];
+    if (typeof v === 'number' && Number.isFinite(v) && v > 0) {
+      ts.push(history.timestamp[i]);
+      eq.push(v);
+    }
+  }
+  if (cfg.sliceMode) {
+    const now = new Date();
+    const startSec = cfg.sliceMode === 'MTD'
+      ? Math.floor(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1) / 1000)
+      : Math.floor(Date.UTC(now.getUTCFullYear(), 0, 1) / 1000);
+    const startIdx = ts.findIndex((t) => t >= startSec);
+    if (startIdx > 0) {
+      ts.splice(0, startIdx);
+      eq.splice(0, startIdx);
+    }
+  }
+  if (cfg.sliceLast && eq.length > cfg.sliceLast) {
+    const drop = eq.length - cfg.sliceLast;
+    ts.splice(0, drop);
+    eq.splice(0, drop);
+  }
+  return { ts, eq };
+}
+
+export async function GET(req: NextRequest) {
   try {
     const userCreds = await getRequestCreds();
     if (!userCreds) {
       return NextResponse.json({ error: 'Not connected' }, { status: 401 });
     }
 
-    const creds = {
+    const url = new URL(req.url);
+    const tfParam = (url.searchParams.get('tf') || '24H').toUpperCase();
+    const tf: Tf = (Object.prototype.hasOwnProperty.call(TF_MAP, tfParam) ? tfParam : '24H') as Tf;
+    const cfg = TF_MAP[tf];
+
+    const creds: AlpacaCreds = {
       apiKey: userCreds.apiKey,
       apiSecret: userCreds.apiSecret,
       env: userCreds.environment,
     };
 
-    const [accountRes, positionsRes] = await Promise.all([
+    const isIntradayTf = cfg.period === '1D';
+    const useExtendedHours = ['1Min', '5Min', '15Min'].includes(cfg.timeframe);
+    const reuseHistoryForDayBar = isIntradayTf && cfg.timeframe === '5Min';
+    const reuseSpyChartForDayBar = isIntradayTf && cfg.benchTf === '5Min' && cfg.benchLimit >= 78;
+
+    const [accountRes, positionsRes, historyRes, dayHistoryFetched, spyChartValues, spyDayFetched, qqqValues] = await Promise.all([
       getAccount(creds),
       getPositions(creds),
+      getPortfolioHistory(creds, { period: cfg.period, timeframe: cfg.timeframe, extended_hours: useExtendedHours }),
+      reuseHistoryForDayBar
+        ? Promise.resolve<AlpacaResult<AlpacaPortfolioHistory> | null>(null)
+        : getPortfolioHistory(creds, { period: '1D', timeframe: '5Min', extended_hours: true }),
+      fetchBenchmark(creds, 'SPY', cfg.benchTf, cfg.benchLimit),
+      reuseSpyChartForDayBar
+        ? Promise.resolve<number[] | null>(null)
+        : fetchBenchmark(creds, 'SPY', '5Min', 80),
+      fetchBenchmark(creds, 'QQQ', '5Min', 80),
     ]);
 
     if (!accountRes.success) {
@@ -78,90 +168,95 @@ export async function GET() {
     }
 
     const initialValue = userCreds.startBalance || totalValue;
-    const pnl = totalValue - initialValue;
-    const pnlPercent = initialValue > 0 ? (pnl / initialValue) * 100 : 0;
 
-    const userKey = userCreds.accountId || 'default';
-    if (!performanceHistory.has(userKey)) performanceHistory.set(userKey, []);
-    const history = performanceHistory.get(userKey)!;
-
-    const now = new Date().toISOString();
-    history.push({ timestamp: now, balance: cashBalance, portfolioValue: totalValue, pnl, pnlPercent });
-    if (history.length > 1000) history.shift();
-
-    const chartData = history.map((h) => ({
-      time: new Date(h.timestamp).toLocaleTimeString('en-US', {
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-      }),
-      timestamp: h.timestamp,
-      value: Math.round(h.portfolioValue),
-      pnl: Math.round(h.pnl),
-      pnlPercent: Number(h.pnlPercent.toFixed(2)),
-    }));
-
-    const firstValue = history[0]?.portfolioValue || initialValue;
-    const sessionPnl = totalValue - firstValue;
-    const sessionPnlPercent = firstValue > 0 ? (sessionPnl / firstValue) * 100 : 0;
-
-    let peak = initialValue;
-    let maxDrawdown = 0;
-    for (const point of history) {
-      if (point.portfolioValue > peak) peak = point.portfolioValue;
-      const drawdown = peak > 0 ? ((peak - point.portfolioValue) / peak) * 100 : 0;
-      if (drawdown > maxDrawdown) maxDrawdown = drawdown;
+    // ── Windowed equity series ──────────────────────────────────────────
+    let ts: number[] = [];
+    let eq: number[] = [];
+    if (historyRes.success) {
+      ({ ts, eq } = buildEquitySeries(historyRes.data, cfg));
+    }
+    const nowSec = Math.floor(Date.now() / 1000);
+    if (eq.length === 0) {
+      ts = [nowSec];
+      eq = [totalValue];
+    } else if (Math.abs(eq[eq.length - 1] - totalValue) > 0.5) {
+      // Append a live tip — Alpaca's portfolio history lags the live equity by
+      // a tick, so the user's chart never reaches the headline number without it.
+      ts.push(nowSec);
+      eq.push(totalValue);
     }
 
-    // ── Benchmark fetch (SPY for chart overlay, QQQ for NASDAQ card) ──
-    // Both pulled in parallel; per-symbol 60-second cache.
-    const credsForBench = {
-      apiKey: userCreds.apiKey,
-      apiSecret: userCreds.apiSecret,
-      env: userCreds.environment,
-    };
-    const [benchValues, qqqValues] = await Promise.all([
-      fetchBenchmark(credsForBench, 'SPY'),
-      fetchBenchmark(credsForBench, 'QQQ'),
-    ]);
-    const benchPct = pctChange(benchValues);
-    const qqqPct = pctChange(qqqValues);
-    const vsBenchPct = benchPct === null ? null : sessionPnlPercent - benchPct;
+    const windowStart = eq[0];
+    const windowPnl = totalValue - windowStart;
+    const windowPnlPct = windowStart > 0 ? (windowPnl / windowStart) * 100 : 0;
+
+    let peak = eq[0];
+    let maxDrawdown = 0;
+    for (const v of eq) {
+      if (v > peak) peak = v;
+      const dd = peak > 0 ? ((peak - v) / peak) * 100 : 0;
+      if (dd > maxDrawdown) maxDrawdown = dd;
+    }
+
+    const inceptionPnl = totalValue - initialValue;
+    const inceptionPnlPct = initialValue > 0 ? (inceptionPnl / initialValue) * 100 : 0;
+
+    const chartData = eq.map((v, i) => ({ timestamp: ts[i], value: Math.round(v * 100) / 100 }));
+    const xTicks = buildTicks(ts, cfg.tickFormat);
+
+    // ── Benchmark overlay (matched to tf) ───────────────────────────────
+    const benchPctWindow = pctChange(spyChartValues);
+    const vsBenchPct = benchPctWindow === null ? null : windowPnlPct - benchPctWindow;
+
+    // ── BenchmarkBar (always intraday, regardless of tf) ────────────────
+    const dayHistoryRes = dayHistoryFetched ?? historyRes;
+    let apexDayPct: number | null = null;
+    if (dayHistoryRes?.success) {
+      const dayEq: number[] = [];
+      for (const v of dayHistoryRes.data.equity) {
+        if (typeof v === 'number' && Number.isFinite(v) && v > 0) dayEq.push(v);
+      }
+      apexDayPct = dayEq.length >= 2 ? (dayEq[dayEq.length - 1] / dayEq[0] - 1) * 100 : null;
+    }
+    const spyDayValues = spyDayFetched ?? spyChartValues;
+    const spyDayPct = pctChange(spyDayValues);
+    const qqqDayPct = pctChange(qqqValues);
 
     return NextResponse.json({
+      tf,
       current: {
         balance: cashBalance,
         positionsValue,
         totalValue,
-        pnl,
-        pnlPercent,
+        pnl: windowPnl,
+        pnlPercent: windowPnlPct,
         initialValue,
+        sinceInceptionPnl: inceptionPnl,
+        sinceInceptionPnlPct: inceptionPnlPct,
       },
       session: {
-        startValue: firstValue,
+        startValue: windowStart,
         currentValue: totalValue,
-        pnl: sessionPnl,
-        pnlPercent: sessionPnlPercent,
+        pnl: windowPnl,
+        pnlPercent: windowPnlPct,
         peak,
         maxDrawdown,
-        dataPoints: history.length,
+        dataPoints: eq.length,
       },
       chartData,
+      xTicks,
       benchmark: {
         symbol: 'SPY',
-        values: benchValues,
-        pct: benchPct,
+        values: spyChartValues,
+        pct: benchPctWindow,
         vsBenchPct,
       },
-      // Compact comparison for the BenchmarkBar at top of the dashboard.
-      // Apex pct is sessionPnlPercent (intraday return), matching the
-      // benchmark window so the comparison is apples-to-apples.
       benchmarkBar: {
-        apexPct: sessionPnlPercent,
-        spyPct: benchPct,
-        qqqPct: qqqPct,
+        apexPct: apexDayPct,
+        spyPct: spyDayPct,
+        qqqPct: qqqDayPct,
       },
-      timestamp: now,
+      timestamp: new Date().toISOString(),
       sync: {
         cash: cashBalance,
         equity: totalValue,
