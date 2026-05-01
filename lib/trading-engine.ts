@@ -146,6 +146,45 @@ function recordStoploss(clerkUserId: string, ticker: string): void {
 // momentum is high but a sector-wide shock is breaking.
 const SECTOR_VETO_BIAS = -0.4;
 
+// Intraday session high per ticker — used by POSITION_DIP to detect
+// "give-back from today's peak" on held names. Keyed per-ticker (not
+// per-user) since the high is a market-level fact, not user-specific.
+// Auto-resets when the ET trading date rolls over.
+const sessionHighByTicker: Map<string, { high: number; dateET: string }> = new Map();
+
+function todayET(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
+}
+
+function trackSessionHigh(ticker: string, price: number): number {
+  const today = todayET();
+  const existing = sessionHighByTicker.get(ticker);
+  if (!existing || existing.dateET !== today) {
+    sessionHighByTicker.set(ticker, { high: price, dateET: today });
+    return price;
+  }
+  if (price > existing.high) existing.high = price;
+  return existing.high;
+}
+
+// Per-(user, ticker) cooldown after POSITION_DIP fires. Prevents a single
+// sustained drawdown from triggering a ladder of buys all the way down —
+// 30 min lets the picture clear before the next add. Module-level Map so
+// warm lambdas reuse it; cold start = "we might add twice in close
+// succession on the first day after a deploy", which is acceptable.
+const positionDipCooldown: Map<string, number> = new Map();
+const POSITION_DIP_COOLDOWN_MS = 30 * 60 * 1000;
+
+function inPositionDipCooldown(clerkUserId: string, ticker: string): boolean {
+  const ts = positionDipCooldown.get(firstSeenKey(clerkUserId, ticker));
+  if (!ts) return false;
+  return Date.now() - ts < POSITION_DIP_COOLDOWN_MS;
+}
+
+function recordPositionDip(clerkUserId: string, ticker: string): void {
+  positionDipCooldown.set(firstSeenKey(clerkUserId, ticker), Date.now());
+}
+
 function hwmKey(clerkUserId: string, ticker: string): string {
   return `${clerkUserId}:${ticker.toUpperCase()}`;
 }
@@ -676,6 +715,7 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
     const price = priceByTicker.get(ticker);
     if (!price) continue;
     const m = analyzeMomentum(ticker, price);
+    const sessionHigh = trackSessionHigh(ticker, price);
 
     const pos = positionsByTicker.get(ticker.toUpperCase());
     const posValue = pos ? Math.abs(parseFloat(pos.market_value) || 0) : 0;
@@ -774,6 +814,46 @@ export async function runScanForUser(input: RunScanInput): Promise<ScanResult> {
           score: 15 * oversoldDepth * buyMul * eliteBonus * newsTickerMul,
           signalType: 'RSI_LOW',
         });
+      }
+    }
+
+    // POSITION_DIP — add to existing elite holdings on intraday weakness.
+    // Distinct from DIP (5-min noise on any universe ticker): fires only on
+    // currently held tickers in the elite slate, triggered by drop from
+    // today's session high. Allows trend=DOWN (the active dip is the
+    // entry) but stays gated on news/earnings/sector vetoes and a 30 min
+    // per-ticker cooldown so a sustained drawdown doesn't ladder buys all
+    // the way down. Sized at POSITION_DIP_SIZE_PCT × equity, capped by
+    // per-ticker headroom.
+    if (
+      pos &&
+      eliteSet.has(ticker) &&
+      parseFloat(pos.qty) >= 1 &&
+      sessionHigh > 0
+    ) {
+      const dropFromSessionHigh = (sessionHigh - price) / sessionHigh;
+      if (
+        dropFromSessionHigh >= SIGNAL.POSITION_DIP_THRESHOLD &&
+        dropFromSessionHigh <= SIGNAL.POSITION_DIP_MAX &&
+        !inPositionDipCooldown(clerkUserId, ticker)
+      ) {
+        const dipStrength = Math.min(3, dropFromSessionHigh / SIGNAL.POSITION_DIP_THRESHOLD);
+        const buyValue =
+          equity * SIGNAL.POSITION_DIP_SIZE_PCT * dipStrength *
+          buyMul * eliteBonus * convictionBoost *
+          sessionSizeFactor * newsBuyMul;
+        const headroom = tickerCapValue - posValue;
+        const cappedValue = Math.min(buyValue, headroom);
+        const amount = Math.floor(cappedValue / price);
+        if (amount >= 1) {
+          result.buyCandidates.push({
+            ticker, amount, price,
+            reason: `POSITION_DIP −${(dropFromSessionHigh * 100).toFixed(2)}% from $${sessionHigh.toFixed(2)} session high`,
+            score: 50 * dipStrength * eliteBonus * newsTickerMul,
+            signalType: 'POSITION_DIP',
+          });
+          recordPositionDip(clerkUserId, ticker);
+        }
       }
     }
   }

@@ -213,6 +213,20 @@ export const SIGNAL = {
   /** ATR computed over this many trading days. */
   ATR_PERIOD: 14,
 
+  // ── Position dip-add (intraday) ────────────────────────────────────
+  /** Min drop from today's session high to fire POSITION_DIP. Distinct
+   *  from DIP (5-min noise) — POSITION_DIP only fires on currently held
+   *  elite names that have given back ≥ 1.5 % from their intraday peak. */
+  POSITION_DIP_THRESHOLD: 0.015,
+  /** Cap on POSITION_DIP. Drops past 5 % usually signal real news, not
+   *  a noise pullback — let the existing rebalance pass (which only
+   *  fires below 85 % of target) and stop-loss handle those. */
+  POSITION_DIP_MAX: 0.05,
+  /** Base POSITION_DIP size as % of equity per fire, before multipliers.
+   *  Per-ticker cap headroom and a 30 min cooldown bound the total add
+   *  even during a sustained drawdown. */
+  POSITION_DIP_SIZE_PCT: 0.025,
+
   // ── Trailing stop / profit ratchet ─────────────────────────────────
   /** Profit % needed before any trailing stop activates. Below this we
    *  use the ATR / static stop only — small fluctuations shouldn't fire

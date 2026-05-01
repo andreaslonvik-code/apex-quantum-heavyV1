@@ -195,6 +195,21 @@ export default function DashboardPage() {
   const watchlistRows: WatchlistRow[] = useMemo(() => {
     const heldByTicker = new Map<string, AlpacaPositionPayload>();
     for (const p of positions) heldByTicker.set(p.ticker, p);
+
+    // Recent successful orders override the P&L heuristic — if the engine
+    // just BUY/SELL'd a ticker, that's the truthful signal to show. 15 min
+    // window matches the typical scan cadence + fill latency. ERR/PENDING
+    // don't count.
+    const RECENT_WINDOW_MS = 15 * 60 * 1000;
+    const cutoff = Date.now() - RECENT_WINDOW_MS;
+    const recentByTicker = new Map<string, 'BUY' | 'SELL'>();
+    for (const o of orders) {
+      if (o.status !== 'OK') continue;
+      const t = Date.parse(o.submittedAt);
+      if (!Number.isFinite(t) || t < cutoff) continue;
+      if (!recentByTicker.has(o.ticker)) recentByTicker.set(o.ticker, o.action);
+    }
+
     const universe = new Set<string>(BLUEPRINT_UNIVERSE.map((u) => u.ticker));
     const merged = [
       ...BLUEPRINT_UNIVERSE,
@@ -202,15 +217,37 @@ export default function DashboardPage() {
         .filter((p) => !universe.has(p.ticker))
         .map((p) => ({ ticker: p.ticker, name: p.symbol })),
     ];
+
+    // P&L thresholds match the engine's actual exit zones:
+    //   ≤ -1.8 % → approaching the -2 % static stop
+    //   ≥ +15 % → in the PROFIT_TAKE zone
+    // Anything in between is HOLD — the engine isn't going to act on it.
+    const SELL_LOSS_PCT = -1.8;
+    const SELL_PROFIT_PCT = 15;
+
     return merged.map(({ ticker, name }) => {
       const held = heldByTicker.get(ticker);
+      const recent = recentByTicker.get(ticker);
       if (held) {
-        const sig: Signal = held.pnl >= 0 ? 'HOLD' : 'SELL';
+        let sig: Signal;
+        if (recent) {
+          sig = recent;
+        } else if (held.pnlPercent <= SELL_LOSS_PCT || held.pnlPercent >= SELL_PROFIT_PCT) {
+          sig = 'SELL';
+        } else {
+          sig = 'HOLD';
+        }
         return { ticker, name, qty: held.antall, avg: held.avgPrice, mark: held.currentPrice, signal: sig };
+      }
+      if (recent === 'BUY') {
+        return { ticker, name, qty: 0, avg: 0, mark: 0, signal: 'BUY' as Signal };
+      }
+      if (recent === 'SELL') {
+        return { ticker, name, qty: 0, avg: 0, mark: 0, signal: 'SELL' as Signal };
       }
       return { ticker, name, qty: 0, avg: 0, mark: 0, signal: 'WATCH' as Signal };
     });
-  }, [positions]);
+  }, [positions, orders]);
 
   const equityPoints = useMemo(() => {
     if (!performance?.chartData?.length) return undefined;
