@@ -89,7 +89,7 @@ export function NewsFeed({ lang, feed }: Props) {
         <div>
           <div className="cap">{lang === 'no' ? 'NYHETER & X-SENTIMENT' : 'NEWS & X SENTIMENT'}</div>
           <div className="panel-sub">
-            {lang === 'no' ? 'Grok-4-Heavy skann hver time' : 'Grok-4-Heavy hourly scan'}
+            {lang === 'no' ? 'Grok-4-Heavy skann hvert minutt i sesjon' : 'Grok-4-Heavy minute scan in session'}
             {hasFeed && ` · ${formatScannedAt(feed!.scannedAt, lang)}`}
             {hasFeed && feed!.confidence > 0 && (
               ` · ${(feed!.confidence * 100).toFixed(0)}% ${lang === 'no' ? 'konfidens' : 'confidence'}`
