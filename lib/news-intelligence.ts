@@ -245,7 +245,11 @@ export async function persistNewsIntel(
 // Read path — used by trading engine + dashboard feed
 // ─────────────────────────────────────────────────────────────────────────────
 
-const CACHE_TTL_MS = 15 * 60 * 1000;
+// Read-cache TTL is shorter than the scan cadence so the trading engine
+// picks up fresh intel within ~1 cron tick of any new scan landing in
+// Supabase. Was 15 min back when we scanned every 30 min — at 1-min scan
+// cadence that's now too long and the engine would see stale intel.
+const CACHE_TTL_MS = 30 * 1000;
 const MAX_INTEL_AGE_MS = 4 * 60 * 60 * 1000;
 const MIN_CONFIDENCE = 0.4;
 

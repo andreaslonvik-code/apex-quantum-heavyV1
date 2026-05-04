@@ -1,20 +1,22 @@
 // Vercel Cron — Grok-4-Heavy news + sentiment scan with adaptive cadence.
 //
-// Cron fires every 30 min year-round (vercel.json schedule). The route
+// Cron fires every minute year-round (vercel.json schedule). The route
 // then decides whether to actually scan based on market session + last
 // scan time:
 //
-//   - Premarket / regular / afterhours (US equity sessions, ET):
-//     Scan if last scan >= 25 min ago. Effective cadence: every 30 min.
-//     Captures intra-session news flow that drives same-day price action.
+//   - Premarket / regular / afterhours (US equity sessions, ET, 04:00-20:00):
+//     Scan if last scan >= 50 s ago. Effective cadence: ~1 min.
+//     Catches Trump-tweet / OPEC / Hormuz flow within minutes instead of
+//     30+ min. Latency from event → engine reaction drops to ~1-3 min.
 //
 //   - Market closed (overnight / weekend):
-//     Scan if last scan >= 55 min ago. Effective cadence: hourly.
-//     Catches overnight catalysts (Asia open, geopolitical events,
-//     after-hours earnings) that move the next session's open.
+//     Scan if last scan >= 30 min ago. Effective cadence: every 30 min.
+//     Catches overnight catalysts without burning per-minute API budget
+//     while nothing trades.
 //
-// This shape gives ~40 calls/day instead of 288 if we naively ran every
-// 5 min — reasonable cost while still catching market-hours news flow.
+// Cost note: ~960 calls/weekday during sessions + ~50 closed-hour calls,
+// ~21k calls/month at this cadence. Use the closed-hour gate (30 min) to
+// avoid burning budget when the engine isn't trading.
 //
 // Auth: requires Authorization: Bearer ${CRON_SECRET}.
 import { NextResponse } from 'next/server';
@@ -26,8 +28,8 @@ import {
 import { createAdminClient } from '@/utils/supabase/admin';
 import { getMarketSession, isSessionTradable } from '@/lib/market-session';
 
-const SCAN_GAP_OPEN_MS = 25 * 60 * 1000;     // 25 min — re-scan after 25+ min during sessions
-const SCAN_GAP_CLOSED_MS = 55 * 60 * 1000;   // 55 min — re-scan after 55+ min when closed
+const SCAN_GAP_OPEN_MS = 50 * 1000;          // 50 s — re-scan ~every minute during sessions
+const SCAN_GAP_CLOSED_MS = 30 * 60 * 1000;   // 30 min — re-scan every 30 min when closed
 
 async function getLastScanAt(): Promise<Date | null> {
   try {
