@@ -76,11 +76,13 @@ export interface UserScanResult {
 const GROK_CADENCE_MS = 2 * 60 * 1000;
 const INDICATOR_BAR_COUNT = 60; // bars to fetch for indicator summary
 const MIN_NOTIONAL_USD = 1.0;
-// Alpaca paper rejects fractional/notional buys above ~$8–10 k with an
-// "insufficient buying power" error even when account cash is plenty.
-// Cap conservatively. With maxPositions=6 and a $50 k bucket, $7 k per pick
-// covers full deployment.
-const MAX_PER_ORDER_NOTIONAL = 7_000;
+// With PDT/DTBP entry-checks relaxed (pdt_check + dtbp_check = "exit"),
+// Alpaca accepts much larger fractional/notional orders. The chat-mirror
+// procedure wants 35–40 % of bucket on the #1 pick; on a $94 k account
+// that is ≈ $33 k, so the cap needs to clear that. $25 k stays under
+// observed Alpaca paper hard limits while letting the chat procedure
+// allocate weighted positions.
+const MAX_PER_ORDER_NOTIONAL = 25_000;
 
 function tradingSymbol(symbol: string): string {
   return symbol.replace('/', '');
@@ -327,17 +329,19 @@ function buildUserPrompt(args: {
   const minNotionalPerSlot = bucketCapital > 0 ? Math.floor((bucketCapital / targetSlots) * 0.95) : 0;
 
   return [
-    `# KRITISK MANDAT — LES FØRST`,
+    `# ALLOKER`,
     ``,
-    `DIN ENESTE OPPGAVE: Velg ${blueprint.params.maxPositions} tickere fra watchlisten å BUY.`,
-    `Engine kommer til å bestemme STØRRELSEN på hver BUY automatisk (bøtte-kapital / ${blueprint.params.maxPositions}).`,
-    `Du trenger IKKE oppgi notional_usd korrekt — engine ignorerer den verdien.`,
-    `Det viktigste er at du leverer NØYAKTIG ${blueprint.params.maxPositions} BUY-decisions hvis bøtta er tom,`,
-    `eller fyller opp til ${blueprint.params.maxPositions} totalt hvis det allerede er posisjoner.`,
+    `Kjør prosedyren fra system-prompten din for porteføljevalg.`,
+    `Du SKAL bruke Live Search aktivt for å hente:`,
+    `- Trump-poster på X / Truth Social (relevante for sektorer i watchlisten)`,
+    `- Oljepris og geopolitiske nyheter (Hormuz, OPEC, Midtøsten)`,
+    `- Top 13F-flytninger og earnings-sentiment for tickerne`,
+    `- Markedsregime-signaler (S&P, NASDAQ, VIX)`,
     ``,
-    `Bruk blueprint-strategiens regler for Å VELGE tickerne (regime, RSI, MA, geopolitikk, sentiment),`,
-    `men IKKE for å bestemme om du skal kjøpe i det hele tatt. Du SKAL alltid kjøpe ${blueprint.params.maxPositions} stk.`,
-    `Hvis ingen ticker oppfyller alle blueprint-kriterier perfekt, velg de SOM ER NÆRMEST.`,
+    `Returner ${blueprint.params.maxPositions} tickere maks (chat-prosedyrens HIGH-CONVICTION FILTER).`,
+    `Vekt allokeringen 35–40 % til #1, 25–30 % til #2, 15–20 % til #3 — engine sizer ordrene.`,
+    `Hvis bøtta er full og ny ticker har > 10 poeng høyere asymmetric score enn laveste hold,`,
+    `selg laveste og kjøp nye (REALLOKERING-regel).`,
     ``,
     `# Live trading-kontekst`,
     ``,
