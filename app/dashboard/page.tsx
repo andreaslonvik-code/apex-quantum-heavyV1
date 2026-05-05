@@ -140,6 +140,18 @@ export default function DashboardPage() {
     };
   }, [isConnected, refreshAll]);
 
+  // Kick the engine on connect so initial capital deployment happens at
+  // login instead of waiting up to 60 s for the next cron tick. The engine
+  // is idempotent — if positions or open orders already exist it no-ops.
+  useEffect(() => {
+    if (!isConnected) return;
+    fetch('/api/apex/blueprint-tick', { method: 'POST', credentials: 'include' })
+      .then(() => refreshAll())
+      .catch(() => {
+        /* soft-fail */
+      });
+  }, [isConnected, refreshAll]);
+
   // ── Derived values ───────────────────────────────────────────────────
   const startVal = performance?.current?.initialValue ?? accountInfo?.equity ?? 0;
   const currentVal = performance?.current?.totalValue ?? accountInfo?.equity ?? 0;

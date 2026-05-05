@@ -6,6 +6,7 @@ import {
   getCryptoBars,
   getLatestCryptoPrice,
   getLatestPrice,
+  getOrders,
   getPositions,
   getStockBars,
   placeOrder,
@@ -117,11 +118,76 @@ function decideEntryQty(
   return Math.floor(qty);
 }
 
+/**
+ * Initial deployment: blast `bucketCapital` across the top `maxPositions`
+ * watchlist tickers ranked by 20-bar momentum. Used when the user has no
+ * existing positions in this blueprint and no in-flight orders for it —
+ * typically right after sign-up / connect, or after a withdraw-all.
+ *
+ * Uses notional orders so we deploy exactly `bucketCapital / N` USD per
+ * pick regardless of price level. Notional orders require fractional
+ * shares (most major US stocks are fractionable on Alpaca).
+ */
+async function initialDeployBlueprint(
+  creds: AlpacaCreds,
+  blueprint: Blueprint,
+  bucketCapital: number,
+): Promise<TradeResult[]> {
+  const isCrypto = blueprint.id === 'crypto';
+  const slots = blueprint.params.maxPositions;
+  if (bucketCapital <= 0 || slots <= 0) return [];
+
+  const scored: Array<{ ticker: string; score: number; price: number }> = [];
+  for (const ticker of blueprint.watchlist) {
+    try {
+      const r = await fetchBars(creds, blueprint, ticker);
+      if (!r.success || r.data.length < 21) continue;
+      const closes = r.data.map((b) => b.c);
+      const last = closes[closes.length - 1];
+      const past = closes[closes.length - 21];
+      if (!last || !past) continue;
+      scored.push({ ticker, price: last, score: (last - past) / past });
+    } catch {
+      // skip
+    }
+  }
+  scored.sort((a, b) => b.score - a.score);
+  const picks = scored.slice(0, slots);
+  if (picks.length === 0) return [];
+
+  const perTicker = Math.floor((bucketCapital / picks.length) * 100) / 100;
+  if (perTicker < 1) return [];
+
+  const trades: TradeResult[] = [];
+  for (const pick of picks) {
+    const orderRes = await placeOrder(creds, {
+      symbol: tradingSymbol(pick.ticker),
+      notional: perTicker,
+      side: 'buy',
+      type: 'market',
+      time_in_force: isCrypto ? 'gtc' : 'day',
+      position_intent: 'buy_to_open',
+    });
+    trades.push({
+      blueprintId: blueprint.id,
+      ticker: pick.ticker,
+      action: 'BUY',
+      qty: 0,
+      price: pick.price,
+      status: orderRes.success ? 'OK' : 'ERR',
+      reason: 'INITIAL_DEPLOY',
+      error: orderRes.success ? undefined : orderRes.error,
+    });
+  }
+  return trades;
+}
+
 async function runBlueprint(
   creds: AlpacaCreds,
   blueprint: Blueprint,
   bucketCapital: number,
   allPositions: AlpacaPosition[],
+  openOrderSymbols: Set<string>,
   killSwitchOn: boolean,
 ): Promise<BlueprintRunResult> {
   const isCrypto = blueprint.id === 'crypto';
@@ -131,6 +197,15 @@ async function runBlueprint(
   for (const p of allPositions) {
     const norm = normalizePositionSymbol(p.symbol);
     if (watchlistSet.has(norm)) heldByTicker.set(norm, p);
+  }
+
+  // Tickers in this blueprint that have an open (unfilled) order. Skip both
+  // BUY and SELL signals on these to avoid stacking duplicate orders while
+  // the previous one is still live.
+  const inFlightTickers = new Set<string>();
+  for (const sym of openOrderSymbols) {
+    const norm = normalizePositionSymbol(sym);
+    if (watchlistSet.has(norm)) inFlightTickers.add(norm);
   }
 
   const result: BlueprintRunResult = {
@@ -145,8 +220,16 @@ async function runBlueprint(
 
   if (killSwitchOn || bucketCapital <= 0) return result;
 
+  // Initial deployment — fire on a fresh bucket (no positions, no in-flight).
+  if (heldByTicker.size === 0 && inFlightTickers.size === 0) {
+    const trades = await initialDeployBlueprint(creds, blueprint, bucketCapital);
+    result.trades.push(...trades);
+    return result;
+  }
+
   for (const ticker of blueprint.watchlist) {
     result.evaluated += 1;
+    if (inFlightTickers.has(ticker)) continue;
     try {
       const barsRes = await fetchBars(creds, blueprint, ticker);
       if (!barsRes.success || barsRes.data.length < blueprint.params.atrPeriod + 5) {
@@ -309,13 +392,25 @@ export async function runScanForUser(
   }
   const positions = positionsRes.data;
 
+  const ordersRes = await getOrders(creds, { status: 'open', limit: 200 });
+  const openOrderSymbols = new Set<string>(
+    ordersRes.success ? ordersRes.data.map((o) => o.symbol) : [],
+  );
+
   const allocation = await getUserAllocation(clerkUserId);
 
   for (const blueprint of BLUEPRINT_LIST) {
     const allocPct = allocation[blueprint.id] ?? 0;
     const bucketCapital = (equity * allocPct) / 100;
     const killSwitchOn = dailyPnlPct <= blueprint.params.dailyKillSwitchPct;
-    const result = await runBlueprint(creds, blueprint, bucketCapital, positions, killSwitchOn);
+    const result = await runBlueprint(
+      creds,
+      blueprint,
+      bucketCapital,
+      positions,
+      openOrderSymbols,
+      killSwitchOn,
+    );
     out.blueprints.push(result);
   }
 
