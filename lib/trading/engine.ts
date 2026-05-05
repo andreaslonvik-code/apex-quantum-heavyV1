@@ -419,16 +419,33 @@ interface ExecuteArgs {
   creds: AlpacaCreds;
   blueprint: Blueprint;
   bucketCapital: number;
+  /** Account-wide cap. perPickNotional × num_buys cannot exceed this. */
+  remainingBuyingPower: number;
   payload: GrokDecisionPayload;
   positionsByTicker: Map<string, AlpacaPosition>;
   inFlightTickers: Set<string>;
 }
 
-async function executeDecisions(args: ExecuteArgs): Promise<TradeResult[]> {
-  const { creds, blueprint, bucketCapital, payload, positionsByTicker, inFlightTickers } = args;
+interface ExecuteResult {
+  trades: TradeResult[];
+  /** Total successful BUY notional + SELL notional credit (negative). */
+  netDeployed: number;
+}
+
+async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
+  const {
+    creds,
+    blueprint,
+    bucketCapital,
+    remainingBuyingPower,
+    payload,
+    positionsByTicker,
+    inFlightTickers,
+  } = args;
   const isCrypto = blueprint.id === 'crypto';
   const watchlistSet = new Set<string>(blueprint.watchlist);
   const trades: TradeResult[] = [];
+  let netDeployed = 0;
   const maxNotionalPerTicker = bucketCapital * (blueprint.params.maxPctPerPosition / 100);
 
   // Two-phase execution: SELLs first to free buying power, then BUYs.
@@ -464,11 +481,17 @@ async function executeDecisions(args: ExecuteArgs): Promise<TradeResult[]> {
     keptPositionValue += parseFloat(pos.market_value) || 0;
   }
   const freeBucketCapital = Math.max(0, bucketCapital - keptPositionValue);
+
+  // Hard cap per-pick × N at the account-wide remaining buying power.
+  // Without this, even a correctly-sized bucket can exceed Alpaca's
+  // non-marginable buying power for fractional notional orders.
+  const safeRemainingBP = Math.max(0, remainingBuyingPower) * 0.95;
   let perPickNotional = 0;
   if (buyDecs.length > 0 && freeBucketCapital >= MIN_NOTIONAL_USD) {
     perPickNotional = Math.min(
       freeBucketCapital / buyDecs.length,
       maxNotionalPerTicker,
+      safeRemainingBP / buyDecs.length,
     );
   }
 
@@ -516,7 +539,7 @@ async function executeDecisions(args: ExecuteArgs): Promise<TradeResult[]> {
     for (const dec of buyDecs) {
       trades.push(skipTrade(blueprint.id, dec.ticker, 'BUY', 'no_free_capital'));
     }
-    return trades;
+    return { trades, netDeployed };
   }
   for (const dec of buyDecs) {
     const ticker = dec.ticker;
@@ -543,9 +566,10 @@ async function executeDecisions(args: ExecuteArgs): Promise<TradeResult[]> {
       reason: dec.reason || 'GROK_BUY',
       error: r.success ? undefined : r.error,
     });
+    if (r.success) netDeployed += notional;
   }
 
-  return trades;
+  return { trades, netDeployed };
 }
 
 function skipTrade(
@@ -638,6 +662,10 @@ async function runBlueprint(args: {
   bucketCapital: number;
   totalEquity: number;
   buyingPower: number;
+  /** Account-wide buying power remaining for this scan, ticking down as
+   *  earlier blueprints in the loop deploy capital. Used as a ceiling so
+   *  later blueprints can't request more than Alpaca will actually fund. */
+  remainingBuyingPower: number;
   allocationPct: number;
   allocationFull: { stocks: number; crypto: number; commodities: number };
   allPositions: AlpacaPosition[];
@@ -646,7 +674,7 @@ async function runBlueprint(args: {
   account: AccountSnapshot;
   recentOrders: OrderSummary[];
   marketClock: MarketClockSummary | null;
-}): Promise<BlueprintRunResult> {
+}): Promise<BlueprintRunResult & { deployedNotional: number }> {
   const {
     creds,
     clerkUserId,
@@ -654,6 +682,7 @@ async function runBlueprint(args: {
     bucketCapital,
     totalEquity,
     buyingPower,
+    remainingBuyingPower,
     allocationPct,
     allocationFull,
     allPositions,
@@ -686,7 +715,7 @@ async function runBlueprint(args: {
     reason: killSwitchOn ? 'daily_kill_switch' : undefined,
   };
 
-  if (killSwitchOn) return result;
+  if (killSwitchOn) return { ...result, deployedNotional: 0 };
 
   // If user has zero allocation to this bucket but positions still exist
   // (e.g. they reallocated 100 % to stocks after holding commodities),
@@ -716,7 +745,7 @@ async function runBlueprint(args: {
       });
     }
     result.reason = 'bucket_deallocated';
-    return result;
+    return { ...result, deployedNotional: 0 };
   }
 
   // 1. Mechanical safety always runs first.
@@ -742,7 +771,7 @@ async function runBlueprint(args: {
 
   if (!shouldCallGrok) {
     result.thesis = last?.thesis ?? undefined;
-    return result;
+    return { ...result, deployedNotional: 0 };
   }
 
   // 3. Build context + call Grok.
@@ -758,7 +787,7 @@ async function runBlueprint(args: {
       errorMessage: 'no_candidate_data',
     });
     result.reason = 'no_candidate_data';
-    return result;
+    return { ...result, deployedNotional: 0 };
   }
 
   const userPrompt = buildUserPrompt({
@@ -794,23 +823,24 @@ async function runBlueprint(args: {
       errorMessage: grokRes.error,
     });
     result.reason = `grok_error: ${grokRes.error}`;
-    return result;
+    return { ...result, deployedNotional: 0 };
   }
 
   const payload = grokRes.payload;
   result.thesis = payload.thesis;
 
   // 4. Execute Grok's decisions.
-  const tradeResults = await executeDecisions({
+  const exec = await executeDecisions({
     creds,
     blueprint,
     bucketCapital,
+    remainingBuyingPower,
     payload,
     positionsByTicker,
     inFlightTickers,
   });
-  result.trades.push(...tradeResults);
-  result.positionsHeld = positionsByTicker.size + tradeResults.filter(
+  result.trades.push(...exec.trades);
+  result.positionsHeld = positionsByTicker.size + exec.trades.filter(
     (t) => t.action === 'BUY' && t.status === 'OK',
   ).length;
 
@@ -823,7 +853,7 @@ async function runBlueprint(args: {
     rawResponse: grokRes.raw ?? null,
   });
 
-  return result;
+  return { ...result, deployedNotional: exec.netDeployed };
 }
 
 export async function runScanForUser(
@@ -877,6 +907,14 @@ export async function runScanForUser(
 
   const allocation = await getUserAllocation(clerkUserId);
 
+  // Account-wide cap on new BUY notional this scan. Notional/fractional
+  // orders on Alpaca draw from non-marginable buying power (≈ cash), not
+  // margin × 2. Use cash so each blueprint's deployment stays within the
+  // pool Alpaca will actually fund. 95 % leaves a small slack so rounding
+  // doesn't push the last order over the edge.
+  const cash = parseFloat(acctRes.data.cash) || 0;
+  let remainingBuyingPower = cash;
+
   for (const blueprint of BLUEPRINT_LIST) {
     const allocPct = allocation[blueprint.id] ?? 0;
     const bucketCapital = (equity * allocPct) / 100;
@@ -888,6 +926,7 @@ export async function runScanForUser(
       bucketCapital,
       totalEquity: equity,
       buyingPower,
+      remainingBuyingPower,
       allocationPct: allocPct,
       allocationFull: allocation,
       allPositions: positions,
@@ -897,6 +936,7 @@ export async function runScanForUser(
       recentOrders,
       marketClock,
     });
+    remainingBuyingPower = Math.max(0, remainingBuyingPower - result.deployedNotional);
     out.blueprints.push(result);
   }
 
