@@ -5,6 +5,7 @@ import {
   type AlpacaCreds,
   type AlpacaOrder,
   type AlpacaPosition,
+  cancelAllOrders,
   getAccount,
   getClock,
   getCryptoBars,
@@ -75,10 +76,11 @@ export interface UserScanResult {
 const GROK_CADENCE_MS = 2 * 60 * 1000;
 const INDICATOR_BAR_COUNT = 60; // bars to fetch for indicator summary
 const MIN_NOTIONAL_USD = 1.0;
-// Alpaca paper has an empirical per-order cap on fractional/notional buys
-// around $10–15 k. Going above the cap returns "insufficient buying power"
-// even when total account cash is plenty. Stay safely under it.
-const MAX_PER_ORDER_NOTIONAL = 9_500;
+// Alpaca paper rejects fractional/notional buys above ~$8–10 k with an
+// "insufficient buying power" error even when account cash is plenty.
+// Cap conservatively. With maxPositions=6 and a $50 k bucket, $7 k per pick
+// covers full deployment.
+const MAX_PER_ORDER_NOTIONAL = 7_000;
 
 function tradingSymbol(symbol: string): string {
   return symbol.replace('/', '');
@@ -882,6 +884,13 @@ export async function runScanForUser(
     buyingPower: 0,
     blueprints: [],
   };
+
+  // Cancel any pending orders from previous scans. Pending notional BUYs
+  // lock buying_power even before they fill; on Alpaca paper this snowballs
+  // across ticks and produces "insufficient buying power" rejections on
+  // perfectly-sized new orders. Fresh state every scan eliminates that.
+  await cancelAllOrders(creds);
+  await new Promise((resolve) => setTimeout(resolve, 1500));
 
   const acctRes = await getAccount(creds);
   if (!acctRes.success) {
