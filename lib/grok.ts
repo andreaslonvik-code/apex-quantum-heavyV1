@@ -101,9 +101,14 @@ async function callOnce(
   let rawText = '';
   try {
     // Reasoning models on xAI (grok-4) do not accept `temperature` — drop it.
-    // Live Search lets Grok pull X posts, news, and web data per call —
-    // matches the experience of the Grok web/app chat. Without it the API
-    // is "blind" to anything outside the prompt we hand it.
+    //
+    // Built-in Agent Tools (xAI's replacement for the deprecated
+    // search_parameters API). Server-side execution: Grok runs each tool
+    // internally and returns the final, post-search answer in one response.
+    // No multi-turn loop required from us.
+    //   - web_search: pulls live web pages
+    //   - x_search:   pulls live X (Twitter) posts
+    //   - code_interpreter: runs arbitrary Python for math/parsing
     res = await fetch(GROK_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -118,15 +123,11 @@ async function callOnce(
           { role: 'user', content: req.userPrompt },
         ],
         response_format: { type: 'json_object' },
-        search_parameters: {
-          mode: 'auto',
-          sources: [
-            { type: 'web' },
-            { type: 'x' },
-            { type: 'news' },
-          ],
-          return_citations: true,
-        },
+        tools: [
+          { type: 'web_search' },
+          { type: 'x_search' },
+          { type: 'code_interpreter' },
+        ],
       }),
     });
   } catch (e) {
