@@ -470,6 +470,51 @@ function barsWindowMs(
   }
 }
 
+// ============ CRYPTO MARKET DATA ============
+const ALPACA_CRYPTO_DATA_BASE = 'https://data.alpaca.markets/v1beta3/crypto/us';
+
+/** Latest crypto trade price for a single pair (e.g. "BTC/USD"). */
+export async function getLatestCryptoPrice(
+  creds: AlpacaCreds,
+  symbol: string,
+): Promise<AlpacaResult<number>> {
+  const qs = new URLSearchParams({ symbols: symbol });
+  const url = `${ALPACA_CRYPTO_DATA_BASE}/latest/trades?${qs}`;
+  const r = await alpacaFetch<{ trades?: Record<string, { p?: number }> }>(url, creds);
+  if (!r.success) return r as AlpacaResult<number>;
+  const p = r.data.trades?.[symbol]?.p ?? 0;
+  if (!p) return { success: false, error: 'No crypto trade price', errorCode: 'NO_PRICE', status: r.status };
+  return { success: true, status: r.status, data: p };
+}
+
+/**
+ * Crypto bars for a single pair. Symbol uses the data API form ("BTC/USD").
+ * Crypto trades 24/7 so no SIP-delay buffer is needed.
+ */
+export async function getCryptoBars(
+  creds: AlpacaCreds,
+  symbol: string,
+  opts: {
+    timeframe: '1Min' | '5Min' | '15Min' | '1Hour' | '1Day';
+    limit?: number;
+  } = { timeframe: '1Hour', limit: 250 },
+): Promise<AlpacaResult<AlpacaBar[]>> {
+  const limit = opts.limit ?? 250;
+  const end = new Date();
+  const start = new Date(end.getTime() - barsWindowMs(opts.timeframe, limit));
+  const qs = new URLSearchParams();
+  qs.set('symbols', symbol);
+  qs.set('timeframe', opts.timeframe);
+  qs.set('limit', String(limit));
+  qs.set('start', start.toISOString());
+  qs.set('end', end.toISOString());
+  const url = `${ALPACA_CRYPTO_DATA_BASE}/bars?${qs}`;
+  const r = await alpacaFetch<{ bars?: Record<string, AlpacaBar[]> }>(url, creds);
+  if (!r.success) return r as AlpacaResult<AlpacaBar[]>;
+  const bars = r.data.bars?.[symbol] ?? [];
+  return { success: true, status: r.status, data: bars };
+}
+
 // ============ PORTFOLIO HISTORY ============
 export interface AlpacaPortfolioHistory {
   timestamp: number[];        // unix seconds

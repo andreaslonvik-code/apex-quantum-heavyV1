@@ -17,6 +17,7 @@ import { Watchlist, type WatchlistRow, type Signal } from './components/watchlis
 import { RecentOrders, type RecentOrder } from './components/recent-orders';
 import { BenchmarkBar, type BenchmarkBarPayload } from './components/benchmark-bar';
 import { WithdrawModal, type WithdrawStatus } from './components/withdraw-modal';
+import { AllocationCard } from './components/allocation-card';
 import type { Lang } from './components/i18n';
 
 interface AccountInfo {
@@ -376,6 +377,7 @@ export default function DashboardPage() {
             largestTicker={largest?.ticker ?? null}
             largestPct={largest?.pct ?? 0}
           />
+          <AllocationCard lang={lang} />
           {failedOrder && (
             <FailedOrderAlert
               lang={lang}

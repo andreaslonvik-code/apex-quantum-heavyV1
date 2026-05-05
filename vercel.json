@@ -1,5 +1,17 @@
 {
+  "crons": [
+    {
+      "path": "/api/cron/tick",
+      "schedule": "* * * * *"
+    }
+  ],
   "functions": {
+    "app/api/cron/tick/route.ts": {
+      "maxDuration": 60
+    },
+    "app/api/apex/blueprint-tick/route.ts": {
+      "maxDuration": 60
+    },
     "app/api/inngest/route.ts": {
       "maxDuration": 60
     }
