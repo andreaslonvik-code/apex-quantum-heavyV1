@@ -13,8 +13,9 @@ const GROK_ENDPOINT = 'https://api.x.ai/v1/chat/completions';
 // to `grok-4`.
 const DEFAULT_MODEL =
   process.env.XAI_MODEL ?? process.env.GROK_MODEL ?? 'grok-4';
-// 3 min — Grok-4-Heavy and complex prompts can take 60–120s.
-const REQUEST_TIMEOUT_MS = 180_000;
+// 5 min — matches Vercel function maxDuration. Grok-4 reasoning can take
+// 2–4 min on large prompts (e.g. stocks watchlist with 46 tickers).
+const REQUEST_TIMEOUT_MS = 290_000;
 
 export type GrokAction = 'BUY' | 'SELL' | 'HOLD';
 

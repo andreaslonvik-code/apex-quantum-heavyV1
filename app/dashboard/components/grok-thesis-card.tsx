@@ -105,13 +105,49 @@ export function GrokThesisCard({ lang }: Props) {
       const data = await r.json().catch(() => ({}));
       if (!r.ok) {
         toast.error(`${t.runFail}: ${data?.error ?? r.status}`);
-      } else {
-        const errors: string[] = [];
-        for (const bp of data.blueprints ?? []) {
-          if (bp.reason && bp.reason.startsWith('grok_error')) errors.push(`${bp.blueprintId}: ${bp.reason}`);
+        await load();
+        return;
+      }
+
+      let totalOk = 0;
+      let totalErr = 0;
+      const grokErrors: string[] = [];
+      const tradeErrors: string[] = [];
+      for (const bp of (data.blueprints ?? []) as Array<{
+        blueprintId: string;
+        reason?: string;
+        trades?: Array<{ ticker: string; action: string; status: string; error?: string }>;
+      }>) {
+        if (bp.reason && bp.reason.startsWith('grok_error')) {
+          grokErrors.push(`${bp.blueprintId}: ${bp.reason.slice(0, 100)}`);
         }
-        if (errors.length) toast.error(`${t.runFail} — ${errors.join(' | ')}`);
-        else toast.success(t.runOk);
+        for (const tr of bp.trades ?? []) {
+          if (tr.status === 'OK') totalOk += 1;
+          else if (tr.status === 'ERR') {
+            totalErr += 1;
+            if (tradeErrors.length < 3) {
+              tradeErrors.push(
+                `${bp.blueprintId}/${tr.ticker} ${tr.action}: ${tr.error ?? 'rejected'}`,
+              );
+            }
+          }
+        }
+      }
+
+      if (grokErrors.length) {
+        toast.error(`Grok-feil: ${grokErrors.join(' · ')}`, { duration: 10_000 });
+      }
+      if (totalErr > 0) {
+        toast.error(
+          `${totalOk} ordre OK, ${totalErr} avvist av Alpaca. Først: ${tradeErrors.join(' | ')}`,
+          { duration: 12_000 },
+        );
+      }
+      if (totalOk > 0 && totalErr === 0 && grokErrors.length === 0) {
+        toast.success(`${t.runOk} — ${totalOk} ordre plassert`);
+      }
+      if (totalOk === 0 && totalErr === 0 && grokErrors.length === 0) {
+        toast.info('Grok kjørte men ingen ordre ble lagt inn (HOLD-only eller cadence-throttled)', { duration: 8_000 });
       }
       await load();
     } catch (e) {
