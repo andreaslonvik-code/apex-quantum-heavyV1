@@ -4,6 +4,7 @@ import { decide } from '@/lib/grok';
 import { getLatestDecisionsForUser } from '@/lib/grok-decisions';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 /**
  * Quick diagnostic for the Grok integration. Reports:
@@ -19,7 +20,8 @@ export async function GET() {
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
   const apiKeyPresent = Boolean(process.env.XAI_API_KEY);
-  const model = process.env.XAI_MODEL ?? 'grok-4-heavy';
+  const model =
+    process.env.XAI_MODEL ?? process.env.GROK_MODEL ?? 'grok-4';
 
   // Probe Grok with a minimal prompt to surface API/model errors.
   const probeStart = Date.now();

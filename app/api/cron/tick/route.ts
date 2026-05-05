@@ -3,7 +3,7 @@ import { getAllConnectedUsers } from '@/lib/user-alpaca';
 import { runScanForUser } from '@/lib/trading/engine';
 
 export const dynamic = 'force-dynamic';
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 /**
  * Vercel cron entrypoint. Runs every minute, fanning out a scan-and-trade

@@ -8,10 +8,13 @@
 
 const GROK_ENDPOINT = 'https://api.x.ai/v1/chat/completions';
 // xAI's API exposes `grok-4` (alias to grok-4-0709). The "Heavy" variant is
-// gated behind SuperGrok and not always callable via standard API. Default to
-// `grok-4`; set XAI_MODEL=grok-4-heavy in env if your account supports it.
-const DEFAULT_MODEL = process.env.XAI_MODEL ?? 'grok-4';
-const REQUEST_TIMEOUT_MS = 60_000;
+// gated behind SuperGrok and not always callable via standard API.
+// Read XAI_MODEL first, fall back to GROK_MODEL (legacy name), then default
+// to `grok-4`.
+const DEFAULT_MODEL =
+  process.env.XAI_MODEL ?? process.env.GROK_MODEL ?? 'grok-4';
+// 3 min — Grok-4-Heavy and complex prompts can take 60–120s.
+const REQUEST_TIMEOUT_MS = 180_000;
 
 export type GrokAction = 'BUY' | 'SELL' | 'HOLD';
 

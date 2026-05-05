@@ -3,6 +3,7 @@ import { getRequestCreds } from '@/lib/get-request-creds';
 import { runScanForUser } from '@/lib/trading/engine';
 
 export const dynamic = 'force-dynamic';
+export const maxDuration = 300;
 
 /** Manual trigger for the user's own tick. Used from the dashboard for testing. */
 export async function POST() {
