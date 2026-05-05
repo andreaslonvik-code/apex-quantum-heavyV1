@@ -247,6 +247,55 @@ export default function DashboardPage() {
     };
   }, [positions, orders]);
 
+  /**
+   * Unified "Mine posisjoner" — every held position across all three
+   * buckets, sorted by market value descending. Drives the top-of-page
+   * holdings panel so the user sees current exposure in one glance.
+   */
+  const myHoldingsRows: WatchlistRow[] = useMemo(() => {
+    // Build ticker → human-readable name lookup across all blueprints.
+    const tickerToName = new Map<string, string>();
+    for (const bpId of ['stocks', 'crypto', 'commodities'] as const) {
+      const bp = BLUEPRINTS[bpId];
+      for (const ticker of bp.watchlist) {
+        tickerToName.set(ticker, bp.tickerNames?.[ticker] ?? ticker);
+      }
+    }
+
+    const SELL_LOSS_PCT = -1.8;
+    const SELL_PROFIT_PCT = 15;
+
+    const rows: Array<WatchlistRow & { _mv: number }> = [];
+    for (const p of positions) {
+      if (!Number.isFinite(p.antall) || p.antall <= 0) continue;
+      // Normalize crypto: "BTCUSD" → "BTC/USD" so name lookup matches blueprint.
+      let displayTicker = p.ticker;
+      if (
+        !displayTicker.includes('/') &&
+        /^[A-Z]+USD$/.test(displayTicker) &&
+        displayTicker.length >= 6
+      ) {
+        displayTicker = `${displayTicker.slice(0, -3)}/USD`;
+      }
+      const name = tickerToName.get(displayTicker) ?? p.symbol;
+      let sig: Signal;
+      if (p.pnlPercent <= SELL_LOSS_PCT || p.pnlPercent >= SELL_PROFIT_PCT) sig = 'SELL';
+      else sig = 'HOLD';
+
+      rows.push({
+        ticker: displayTicker,
+        name,
+        qty: p.antall,
+        avg: p.avgPrice,
+        mark: p.currentPrice,
+        signal: sig,
+        _mv: p.marketValue,
+      });
+    }
+    rows.sort((a, b) => b._mv - a._mv);
+    return rows.map(({ _mv: _mv, ...row }) => row);
+  }, [positions]);
+
   const equityPoints = useMemo(() => {
     if (!performance?.chartData?.length) return undefined;
     return performance.chartData.map((d) => d.value);
@@ -398,6 +447,21 @@ export default function DashboardPage() {
             sim={mode === 'sim'}
             thinData
           />
+
+          {/* Unified holdings panel — every active position across all
+              buckets, sorted by market value. */}
+          {myHoldingsRows.length > 0 && (
+            <Watchlist
+              lang={lang}
+              rows={myHoldingsRows}
+              title={lang === 'no' ? 'Mine posisjoner' : 'My positions'}
+              subtitle={
+                lang === 'no'
+                  ? `${myHoldingsRows.length} aktive posisjoner på tvers av aksjer, krypto og råvarer`
+                  : `${myHoldingsRows.length} active positions across stocks, crypto, and commodities`
+              }
+            />
+          )}
 
           {/* Per-blueprint watchlists — each market gets its own panel. */}
           {(['stocks', 'crypto', 'commodities'] as const).map((bp) => (
