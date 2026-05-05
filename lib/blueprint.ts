@@ -177,13 +177,16 @@ export const RISK = {
   /** Parallelism for /quotes calls — Alpaca paper rate ≈ 200/min. */
   PRICE_FETCH_CONCURRENCY: 12,
   /** Each rebalance trade closes this fraction of the gap to target.
-   *  At 0.4 we converge over ~3-4 ticks, giving us an averaged entry
-   *  price across a few minutes instead of paying whatever the spot
-   *  is on the first tick. Reduces single-tick adverse selection. */
-  REBALANCE_CONVERGENCE: 0.4,
+   *  At 0.80 we reach full deployment in 1-2 ticks instead of 6-8.
+   *  Tradeoff: more single-tick adverse selection on price spikes. The
+   *  remaining 20% smoothing across the next tick keeps us from paying
+   *  the absolute top on a green-bar minute. */
+  REBALANCE_CONVERGENCE: 0.80,
   /** Position is "underweight enough to top up" when current value falls
-   *  below target × this factor. */
-  REBALANCE_UNDERWEIGHT: 0.85,
+   *  below target × this factor. Tight band (0.95) → engine tops up on
+   *  small drift, prioritising staying near 100 % deployed over
+   *  minimising spread bleed. */
+  REBALANCE_UNDERWEIGHT: 0.95,
   /** Position is "overweight enough to trim" when current value exceeds
    *  target × this factor. */
   REBALANCE_OVERWEIGHT: 1.30,

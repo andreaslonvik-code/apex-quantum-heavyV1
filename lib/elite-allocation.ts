@@ -33,15 +33,18 @@ export const ELITE_TIER_WEIGHTS: readonly number[] = [
   0.02,  // 8th (lotto)
 ];
 
-/** Hold this much of equity in cash for slippage + intraday frictions. */
-export const CASH_BUFFER_PCT = 0.01;
+/** Hold this much of equity in cash for slippage + intraday frictions.
+ *  0.5 % is the minimum buffer that still covers normal spread bleed on
+ *  large-cap names. Targeting ~99.5 % deployed maximises capital working
+ *  toward the asymmetric-upside thesis. */
+export const CASH_BUFFER_PCT = 0.005;
 
-/** Hard floor — picks below this score get zero weight. 9.0 lets the
- *  lotto-tier (rank 6-8 catalyst plays at 9.0-9.4) through while still
- *  excluding mediocre fillers. computeTargetWeights falls back to top-N
- *  by score if the filter empties the slate, so we don't go to 100 %
- *  cash on a quiet day. */
-export const MIN_PICK_SCORE = 9.0;
+/** Hard floor — picks below this score get zero weight. 8.0 keeps the
+ *  slate full (5 picks) even on days where Grok scores conservatively,
+ *  prioritising deployment over picky filtering. The fallback at line ~76
+ *  guards us from deploying with nothing, but that fallback should rarely
+ *  fire with a score floor this permissive. */
+export const MIN_PICK_SCORE = 8.0;
 
 /** Per-ticker hard ceiling regardless of tier (sanity guardrail). Top
  *  tier is now 35 %; 40 % gives a small headroom for price appreciation
