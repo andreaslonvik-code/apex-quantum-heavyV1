@@ -1,8 +1,12 @@
 import {
+  type AlpacaAccount,
   type AlpacaBar,
+  type AlpacaClock,
   type AlpacaCreds,
+  type AlpacaOrder,
   type AlpacaPosition,
   getAccount,
+  getClock,
   getCryptoBars,
   getLatestCryptoPrice,
   getLatestPrice,
@@ -191,17 +195,91 @@ function summarizePositions(
   for (const p of positions) {
     const norm = normalizePositionSymbol(p.symbol);
     if (!watchlist.has(norm)) continue;
-    out.push({
-      ticker: norm,
-      qty: parseFloat(p.qty) || 0,
-      avg_entry: parseFloat(p.avg_entry_price) || 0,
-      current_price: parseFloat(p.current_price) || 0,
-      market_value: parseFloat(p.market_value) || 0,
-      unrealized_pnl: parseFloat(p.unrealized_pl) || 0,
-      unrealized_pnl_pct: round((parseFloat(p.unrealized_plpc) || 0) * 100, 2),
-    });
+    out.push(positionToSummary(p, norm));
   }
   return out;
+}
+
+function summarizeAllPositions(positions: AlpacaPosition[]): PositionSummary[] {
+  return positions.map((p) => positionToSummary(p, normalizePositionSymbol(p.symbol)));
+}
+
+function positionToSummary(p: AlpacaPosition, ticker: string): PositionSummary {
+  return {
+    ticker,
+    qty: parseFloat(p.qty) || 0,
+    avg_entry: parseFloat(p.avg_entry_price) || 0,
+    current_price: parseFloat(p.current_price) || 0,
+    market_value: parseFloat(p.market_value) || 0,
+    unrealized_pnl: parseFloat(p.unrealized_pl) || 0,
+    unrealized_pnl_pct: round((parseFloat(p.unrealized_plpc) || 0) * 100, 2),
+  };
+}
+
+function accountToSnapshot(acct: AlpacaAccount, env: 'paper' | 'live'): AccountSnapshot {
+  return {
+    environment: env,
+    status: acct.status,
+    currency: acct.currency,
+    cash: parseFloat(acct.cash) || 0,
+    equity: parseFloat(acct.equity) || 0,
+    buying_power: parseFloat(acct.buying_power) || 0,
+    portfolio_value: parseFloat(acct.portfolio_value) || 0,
+    pattern_day_trader: !!acct.pattern_day_trader,
+    trading_blocked: !!acct.trading_blocked,
+    account_blocked: !!acct.account_blocked,
+  };
+}
+
+function clockToSummary(c: AlpacaClock): MarketClockSummary {
+  return {
+    is_open: !!c.is_open,
+    next_open: c.next_open,
+    next_close: c.next_close,
+  };
+}
+
+function ordersToSummary(orders: AlpacaOrder[]): OrderSummary[] {
+  return orders.slice(0, 20).map((o) => ({
+    ticker: o.symbol,
+    side: o.side,
+    qty: parseFloat(o.qty) || 0,
+    notional: 0,
+    status: o.status,
+    filled_avg_price: parseFloat(o.filled_avg_price ?? '0') || 0,
+    submitted_at: o.submitted_at,
+    filled_at: o.filled_at ?? null,
+  }));
+}
+
+interface AccountSnapshot {
+  environment: 'paper' | 'live';
+  status: string;
+  currency: string;
+  cash: number;
+  equity: number;
+  buying_power: number;
+  portfolio_value: number;
+  pattern_day_trader: boolean;
+  trading_blocked: boolean;
+  account_blocked: boolean;
+}
+
+interface OrderSummary {
+  ticker: string;
+  side: string;
+  qty: number;
+  notional: number;
+  status: string;
+  filled_avg_price: number;
+  submitted_at: string;
+  filled_at: string | null;
+}
+
+interface MarketClockSummary {
+  is_open: boolean;
+  next_open: string;
+  next_close: string;
 }
 
 function buildUserPrompt(args: {
@@ -213,6 +291,11 @@ function buildUserPrompt(args: {
   candidates: IndicatorSnapshot[];
   inFlightTickers: string[];
   allocationPct: number;
+  account: AccountSnapshot;
+  allPositions: PositionSummary[];
+  recentOrders: OrderSummary[];
+  marketClock: MarketClockSummary | null;
+  allocationFull: { stocks: number; crypto: number; commodities: number };
 }): string {
   const {
     blueprint,
@@ -223,6 +306,11 @@ function buildUserPrompt(args: {
     candidates,
     inFlightTickers,
     allocationPct,
+    account,
+    allPositions,
+    recentOrders,
+    marketClock,
+    allocationFull,
   } = args;
 
   const isBucketEmpty = positions.length === 0 && inFlightTickers.length === 0;
@@ -254,11 +342,29 @@ function buildUserPrompt(args: {
     `Maks samtidige posisjoner i denne bøtta: ${blueprint.params.maxPositions}`,
     `Status: ${isBucketEmpty ? 'BØTTA ER TOM — MÅ DEPLOYE FULL KAPITAL NÅ' : `${positions.length} posisjon(er) holdes`}`,
     ``,
-    `## Eksisterende posisjoner i bøtta`,
+    `## Brukerens Alpaca-konto`,
+    JSON.stringify(account, null, 2),
+    ``,
+    `## Markedstid`,
+    marketClock
+      ? JSON.stringify(marketClock, null, 2)
+      : '(ukjent)',
+    `Merk: aksjer og ETFs (incl. BNO/GOLD) handles kun når market er åpent. Krypto handler 24/7.`,
+    ``,
+    `## Allokering på tvers av alle bøtter (% av total equity)`,
+    JSON.stringify(allocationFull, null, 2),
+    ``,
+    `## Alle posisjoner (på tvers av bøtter)`,
+    allPositions.length === 0 ? '(ingen)' : JSON.stringify(allPositions, null, 2),
+    ``,
+    `## Eksisterende posisjoner i denne bøtta`,
     positions.length === 0 ? '(ingen)' : JSON.stringify(positions, null, 2),
     ``,
     `## Tickere med åpne (uutløste) ordre — IKKE legg inn nye ordre på disse`,
     inFlightTickers.length === 0 ? '(ingen)' : inFlightTickers.join(', '),
+    ``,
+    `## Siste 20 ordre (status, fills, outcomes — for kontekst)`,
+    recentOrders.length === 0 ? '(ingen)' : JSON.stringify(recentOrders, null, 2),
     ``,
     `## Watchlist-kandidater med live indikatorer`,
     JSON.stringify(candidates, null, 2),
@@ -496,9 +602,13 @@ async function runBlueprint(args: {
   totalEquity: number;
   buyingPower: number;
   allocationPct: number;
+  allocationFull: { stocks: number; crypto: number; commodities: number };
   allPositions: AlpacaPosition[];
   openOrderSymbols: Set<string>;
   killSwitchOn: boolean;
+  account: AccountSnapshot;
+  recentOrders: OrderSummary[];
+  marketClock: MarketClockSummary | null;
 }): Promise<BlueprintRunResult> {
   const {
     creds,
@@ -508,9 +618,13 @@ async function runBlueprint(args: {
     totalEquity,
     buyingPower,
     allocationPct,
+    allocationFull,
     allPositions,
     openOrderSymbols,
     killSwitchOn,
+    account,
+    recentOrders,
+    marketClock,
   } = args;
 
   const watchlistSet = new Set<string>(blueprint.watchlist);
@@ -590,6 +704,11 @@ async function runBlueprint(args: {
     candidates,
     inFlightTickers: [...inFlightTickers],
     allocationPct,
+    account,
+    allPositions: summarizeAllPositions(allPositions),
+    recentOrders,
+    marketClock,
+    allocationFull,
   });
 
   const grokRes = await decide({
@@ -677,10 +796,18 @@ export async function runScanForUser(
   }
   const positions = positionsRes.data;
 
-  const ordersRes = await getOrders(creds, { status: 'open', limit: 200 });
+  const openOrdersRes = await getOrders(creds, { status: 'open', limit: 200 });
   const openOrderSymbols = new Set<string>(
-    ordersRes.success ? ordersRes.data.map((o) => o.symbol) : [],
+    openOrdersRes.success ? openOrdersRes.data.map((o) => o.symbol) : [],
   );
+
+  const recentOrdersRes = await getOrders(creds, { status: 'all', limit: 20 });
+  const recentOrders = recentOrdersRes.success ? ordersToSummary(recentOrdersRes.data) : [];
+
+  const clockRes = await getClock(creds);
+  const marketClock = clockRes.success ? clockToSummary(clockRes.data) : null;
+
+  const account = accountToSnapshot(acctRes.data, creds.env);
 
   const allocation = await getUserAllocation(clerkUserId);
 
@@ -696,9 +823,13 @@ export async function runScanForUser(
       totalEquity: equity,
       buyingPower,
       allocationPct: allocPct,
+      allocationFull: allocation,
       allPositions: positions,
       openOrderSymbols,
       killSwitchOn,
+      account,
+      recentOrders,
+      marketClock,
     });
     out.blueprints.push(result);
   }

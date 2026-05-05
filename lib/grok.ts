@@ -7,7 +7,10 @@
  */
 
 const GROK_ENDPOINT = 'https://api.x.ai/v1/chat/completions';
-const DEFAULT_MODEL = process.env.XAI_MODEL ?? 'grok-4-heavy';
+// xAI's API exposes `grok-4` (alias to grok-4-0709). The "Heavy" variant is
+// gated behind SuperGrok and not always callable via standard API. Default to
+// `grok-4`; set XAI_MODEL=grok-4-heavy in env if your account supports it.
+const DEFAULT_MODEL = process.env.XAI_MODEL ?? 'grok-4';
 const REQUEST_TIMEOUT_MS = 60_000;
 
 export type GrokAction = 'BUY' | 'SELL' | 'HOLD';

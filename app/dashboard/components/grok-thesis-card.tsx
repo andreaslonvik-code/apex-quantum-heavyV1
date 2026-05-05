@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { toast } from 'sonner';
 import type { Lang } from './i18n';
 
 type AssetClass = 'stocks' | 'crypto' | 'commodities';
@@ -25,25 +26,33 @@ interface GrokRow {
 const COPY = {
   no: {
     title: 'Grok-thesis',
-    sub: 'Siste beslutning per blueprint (Grok-4-Heavy, 15 min cadence)',
-    none: 'Ingen Grok-beslutninger ennå — venter på første kjøring.',
+    sub: 'Siste beslutning per blueprint (2 min cadence)',
+    none: 'Ingen Grok-beslutninger ennå — trykk "Kjør nå" eller vent på neste cron-tick.',
     failed: 'Grok-feil',
     blueprints: { stocks: 'Aksjer', crypto: 'Krypto', commodities: 'Råvarer' },
     actions: { BUY: 'KJØP', SELL: 'SELG', HOLD: 'HOLD' },
     decided: 'Besluttet',
     minAgo: 'min siden',
     hAgo: 't siden',
+    runNow: 'Kjør nå',
+    running: 'Kjører …',
+    runOk: 'Grok-tick utført',
+    runFail: 'Grok-tick feilet',
   },
   en: {
     title: 'Grok thesis',
-    sub: 'Latest decision per blueprint (Grok-4-Heavy, 15 min cadence)',
-    none: 'No Grok decisions yet — waiting for first scan.',
+    sub: 'Latest decision per blueprint (2 min cadence)',
+    none: 'No Grok decisions yet — click "Run now" or wait for the next cron tick.',
     failed: 'Grok error',
     blueprints: { stocks: 'Stocks', crypto: 'Crypto', commodities: 'Commodities' },
     actions: { BUY: 'BUY', SELL: 'SELL', HOLD: 'HOLD' },
     decided: 'Decided',
     minAgo: 'min ago',
     hAgo: 'h ago',
+    runNow: 'Run now',
+    running: 'Running …',
+    runOk: 'Grok tick executed',
+    runFail: 'Grok tick failed',
   },
 } as const;
 
@@ -65,29 +74,52 @@ export function GrokThesisCard({ lang }: Props) {
   const t = COPY[lang];
   const [latest, setLatest] = useState<Partial<Record<AssetClass, GrokRow>>>({});
   const [loaded, setLoaded] = useState(false);
+  const [running, setRunning] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch('/api/apex/grok-status', { credentials: 'include' });
+      if (!r.ok) return;
+      const data = await r.json();
+      setLatest((data?.latest as Partial<Record<AssetClass, GrokRow>>) ?? {});
+    } catch {
+      /* soft-fail */
+    } finally {
+      setLoaded(true);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    const load = async () => {
-      try {
-        const r = await fetch('/api/apex/grok-status', { credentials: 'include' });
-        if (!r.ok) return;
-        const data = await r.json();
-        if (cancelled) return;
-        setLatest((data?.latest as Partial<Record<AssetClass, GrokRow>>) ?? {});
-      } catch {
-        /* soft-fail */
-      } finally {
-        if (!cancelled) setLoaded(true);
-      }
-    };
     load();
     const id = setInterval(load, 30_000);
-    return () => {
-      cancelled = true;
-      clearInterval(id);
-    };
-  }, []);
+    return () => clearInterval(id);
+  }, [load]);
+
+  const onRunNow = useCallback(async () => {
+    setRunning(true);
+    try {
+      const r = await fetch('/api/apex/blueprint-tick', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        toast.error(`${t.runFail}: ${data?.error ?? r.status}`);
+      } else {
+        const errors: string[] = [];
+        for (const bp of data.blueprints ?? []) {
+          if (bp.reason && bp.reason.startsWith('grok_error')) errors.push(`${bp.blueprintId}: ${bp.reason}`);
+        }
+        if (errors.length) toast.error(`${t.runFail} — ${errors.join(' | ')}`);
+        else toast.success(t.runOk);
+      }
+      await load();
+    } catch (e) {
+      toast.error(`${t.runFail}: ${e instanceof Error ? e.message : 'unknown'}`);
+    } finally {
+      setRunning(false);
+    }
+  }, [load, t.runFail, t.runOk]);
 
   const order: AssetClass[] = ['stocks', 'crypto', 'commodities'];
   const hasAny = Object.values(latest).some(Boolean);
@@ -99,6 +131,15 @@ export function GrokThesisCard({ lang }: Props) {
           <div className="cap">{t.title}</div>
           <div className="panel-sub">{t.sub}</div>
         </div>
+        <button
+          type="button"
+          onClick={onRunNow}
+          disabled={running}
+          className="btn-primary-v8"
+          style={{ opacity: running ? 0.5 : 1, fontSize: 12, padding: '6px 12px' }}
+        >
+          {running ? t.running : t.runNow}
+        </button>
       </div>
 
       {!loaded ? null : !hasAny ? (
