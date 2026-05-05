@@ -1,20 +1,20 @@
 /**
- * xAI Grok client. Used by the trading engine to translate blueprint
- * strategy text + live market context into BUY/SELL/HOLD decisions.
+ * xAI Grok client — uses the Responses API (`/v1/responses`) so we can
+ * enable built-in Agent Tools (web_search, x_search) for live data parity
+ * with the user's Grok chat experience.
  *
  * Auth: bearer XAI_API_KEY (env var, server-only).
- * Endpoint: https://api.x.ai/v1/chat/completions (OpenAI-compatible).
  */
 
-const GROK_ENDPOINT = 'https://api.x.ai/v1/chat/completions';
-// xAI's API exposes `grok-4` (alias to grok-4-0709). The "Heavy" variant is
-// gated behind SuperGrok and not always callable via standard API.
+const GROK_ENDPOINT = 'https://api.x.ai/v1/responses';
+const FALLBACK_MODEL = 'grok-4';
 // Read XAI_MODEL first, fall back to GROK_MODEL (legacy name), then default
-// to `grok-4`.
-const DEFAULT_MODEL =
-  process.env.XAI_MODEL ?? process.env.GROK_MODEL ?? 'grok-4';
-// 5 min — matches Vercel function maxDuration. Grok-4 reasoning can take
-// 2–4 min on large prompts (e.g. stocks watchlist with 46 tickers).
+// to `grok-4`. If the configured model returns "Model not found" we fall
+// back to `grok-4` automatically.
+const PRIMARY_MODEL =
+  process.env.XAI_MODEL ?? process.env.GROK_MODEL ?? FALLBACK_MODEL;
+// 5 min — matches Vercel function maxDuration. Grok-4-Heavy reasoning + tool
+// loops can take 2–4 min on large prompts.
 const REQUEST_TIMEOUT_MS = 290_000;
 
 export type GrokAction = 'BUY' | 'SELL' | 'HOLD';
@@ -54,14 +54,41 @@ interface ChatRequest {
  * Call Grok with a system + user prompt and parse the JSON response into a
  * decision payload. Returns a discriminated-union result — never throws.
  *
- * Retries on transient xAI overload responses (HTTP 429 / 503) with
- * exponential backoff up to 3 attempts. Other errors fail fast.
+ * - Retries on transient xAI overload (HTTP 429 / 503) with exponential backoff.
+ * - Falls back from the configured model to `grok-4` if the primary model is
+ *   "Model not found" (Heavy variant flakiness on the API tier).
  */
 export async function decide(req: ChatRequest): Promise<GrokResult> {
   const apiKey = process.env.XAI_API_KEY;
   if (!apiKey) return { success: false, error: 'XAI_API_KEY not set' };
 
-  const model = req.model ?? DEFAULT_MODEL;
+  const primaryModel = req.model ?? PRIMARY_MODEL;
+  const modelsToTry =
+    primaryModel === FALLBACK_MODEL ? [primaryModel] : [primaryModel, FALLBACK_MODEL];
+
+  let lastError: GrokResult | null = null;
+
+  for (const model of modelsToTry) {
+    const result = await tryWithRetries(apiKey, model, req);
+    if (result.success) return result;
+    lastError = result;
+    // Only fall back to the next model on "model not found" / "invalid model"
+    const e = typeof result.error === 'string' ? result.error.toLowerCase() : '';
+    const modelMissing =
+      e.includes('model not found') ||
+      e.includes('invalid model') ||
+      e.includes('unknown model');
+    if (!modelMissing) break; // any other error: stop here
+  }
+
+  return lastError ?? { success: false, error: 'unknown' };
+}
+
+async function tryWithRetries(
+  apiKey: string,
+  model: string,
+  req: ChatRequest,
+): Promise<GrokResult> {
   const maxAttempts = 3;
   let lastError: GrokResult | null = null;
 
@@ -70,7 +97,6 @@ export async function decide(req: ChatRequest): Promise<GrokResult> {
     if (r.success) return r;
 
     lastError = r;
-    // Only retry on transient overload signatures.
     const transient =
       typeof r.error === 'string' &&
       (r.error.includes('HTTP 503') ||
@@ -79,7 +105,6 @@ export async function decide(req: ChatRequest): Promise<GrokResult> {
         r.error.includes('temporarily unavailable'));
     if (!transient || attempt === maxAttempts) break;
 
-    // Exponential backoff: 5s, 12s, 25s (with small jitter).
     const baseMs = [5_000, 12_000, 25_000][attempt - 1] ?? 30_000;
     const jitter = Math.floor(Math.random() * 2_000);
     await new Promise((resolve) => setTimeout(resolve, baseMs + jitter));
@@ -100,15 +125,12 @@ async function callOnce(
   let raw: unknown;
   let rawText = '';
   try {
-    // Reasoning models on xAI (grok-4) do not accept `temperature` — drop it.
-    //
-    // Live data is currently OFF. xAI deprecated `search_parameters` and
-    // `live_search` tool variants on the chat completions endpoint, and
-    // their new Agent Tools API (web_search/x_search/code_interpreter)
-    // appears to be exposed only through the Responses API
-    // (https://docs.x.ai/docs/guides/tools/overview), which uses a
-    // different endpoint + schema. Migration is a separate task. For now
-    // Grok answers from training data only.
+    // Responses API (`/v1/responses`):
+    //   - `input` instead of `messages`
+    //   - `tools: [{type: "web_search"}, {type: "x_search"}]` for built-in
+    //     server-side live search (Grok runs them, returns final answer)
+    //   - `text.format` for JSON output (alternative to chat completions'
+    //     response_format)
     res = await fetch(GROK_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -118,11 +140,15 @@ async function callOnce(
       signal: ctrl.signal,
       body: JSON.stringify({
         model,
-        messages: [
+        input: [
           { role: 'system', content: req.systemPrompt },
           { role: 'user', content: req.userPrompt },
         ],
-        response_format: { type: 'json_object' },
+        tools: [
+          { type: 'web_search' },
+          { type: 'x_search' },
+        ],
+        text: { format: { type: 'json_object' } },
       }),
     });
   } catch (e) {
@@ -152,30 +178,94 @@ async function callOnce(
     return { success: false, error: `HTTP ${res.status}: ${detail}`, raw };
   }
 
-  const json = raw as {
-    choices?: Array<{ message?: { content?: string } }>;
-    usage?: GrokUsage;
-  };
-  const content = json.choices?.[0]?.message?.content;
-  if (typeof content !== 'string') {
-    return { success: false, error: 'No string content in Grok response', raw };
+  const text = extractResponsesText(raw);
+  if (!text) {
+    return { success: false, error: 'No text content in Responses API output', raw };
   }
 
   let parsed: unknown;
   try {
-    parsed = JSON.parse(content);
+    parsed = JSON.parse(text);
   } catch (e) {
     return {
       success: false,
       error: `Grok returned non-JSON content: ${e instanceof Error ? e.message : String(e)}`,
-      raw: { ...json, content_preview: content.slice(0, 500) },
+      raw: { ...(raw as object), content_preview: text.slice(0, 500) },
     };
   }
 
   const validated = validatePayload(parsed);
   if (!validated.ok) return { success: false, error: validated.error, raw };
 
-  return { success: true, payload: validated.payload, raw, usage: json.usage };
+  const usage = extractUsage(raw);
+  return { success: true, payload: validated.payload, raw, usage };
+}
+
+/**
+ * Pull the final-answer text out of a Responses API response. The API
+ * returns an `output` array; the model's text lives in a "message" item
+ * with `content[].text` (server-executed tool calls show up as separate
+ * items but we don't need to do anything with those — they're already
+ * folded into the final message).
+ */
+function extractResponsesText(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const r = raw as {
+    output_text?: string;
+    output?: Array<{
+      type?: string;
+      content?: Array<{ type?: string; text?: string }>;
+      text?: string;
+    }>;
+  };
+  // Some SDK versions expose `output_text` as a convenience top-level field.
+  if (typeof r.output_text === 'string' && r.output_text.length > 0) {
+    return r.output_text;
+  }
+  if (!Array.isArray(r.output)) return null;
+  for (const item of r.output) {
+    if (item.type === 'message' && Array.isArray(item.content)) {
+      for (const c of item.content) {
+        if (
+          (c.type === 'output_text' || c.type === 'text') &&
+          typeof c.text === 'string' &&
+          c.text.length > 0
+        ) {
+          return c.text;
+        }
+      }
+    }
+    // Fallback: some shapes put text directly on the item.
+    if (typeof item.text === 'string' && item.text.length > 0) {
+      return item.text;
+    }
+  }
+  return null;
+}
+
+function extractUsage(raw: unknown): GrokUsage | undefined {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const r = raw as { usage?: Record<string, unknown> };
+  if (!r.usage) return undefined;
+  const u = r.usage;
+  return {
+    prompt_tokens:
+      typeof u.input_tokens === 'number'
+        ? u.input_tokens
+        : typeof u.prompt_tokens === 'number'
+          ? u.prompt_tokens
+          : undefined,
+    completion_tokens:
+      typeof u.output_tokens === 'number'
+        ? u.output_tokens
+        : typeof u.completion_tokens === 'number'
+          ? u.completion_tokens
+          : undefined,
+    total_tokens:
+      typeof u.total_tokens === 'number' ? u.total_tokens : undefined,
+    num_sources_used:
+      typeof u.num_sources_used === 'number' ? u.num_sources_used : undefined,
+  };
 }
 
 function validatePayload(
