@@ -323,13 +323,15 @@ function buildUserPrompt(args: {
   return [
     `# KRITISK MANDAT — LES FØRST`,
     ``,
-    `Brukeren krever at HELE bøtte-kapitalen er deployert til enhver tid.`,
-    `Det betyr at du ALDRI skal returnere bare HOLD-decisions når bøtta har ledige slots og ledig kapital.`,
-    `Hvis blueprint-strategien sier "vent på RSI<30 + MA200-support", må du fortsatt`,
-    `velge de BESTE tilgjengelige kandidatene fra watchlisten og deploye kapital nå.`,
-    `Du står fritt til å rangere etter momentum, regime, sentiment, eller blueprint-vekt — men`,
-    `du MÅ levere BUY-decisions som dekker hele ledig bøtte-kapital ved hver beslutning så lenge`,
-    `bøtta ikke er full og ikke ligger i kill-switch.`,
+    `DIN ENESTE OPPGAVE: Velg ${blueprint.params.maxPositions} tickere fra watchlisten å BUY.`,
+    `Engine kommer til å bestemme STØRRELSEN på hver BUY automatisk (bøtte-kapital / ${blueprint.params.maxPositions}).`,
+    `Du trenger IKKE oppgi notional_usd korrekt — engine ignorerer den verdien.`,
+    `Det viktigste er at du leverer NØYAKTIG ${blueprint.params.maxPositions} BUY-decisions hvis bøtta er tom,`,
+    `eller fyller opp til ${blueprint.params.maxPositions} totalt hvis det allerede er posisjoner.`,
+    ``,
+    `Bruk blueprint-strategiens regler for Å VELGE tickerne (regime, RSI, MA, geopolitikk, sentiment),`,
+    `men IKKE for å bestemme om du skal kjøpe i det hele tatt. Du SKAL alltid kjøpe ${blueprint.params.maxPositions} stk.`,
+    `Hvis ingen ticker oppfyller alle blueprint-kriterier perfekt, velg de SOM ER NÆRMEST.`,
     ``,
     `# Live trading-kontekst`,
     ``,
@@ -378,24 +380,21 @@ function buildUserPrompt(args: {
     ``,
     `Returner et JSON-objekt med formatet:`,
     `{`,
-    `  "thesis": "kort sammendrag av regime, geopolitikk og strategi for denne bøtta (maks 400 tegn)",`,
+    `  "thesis": "kort sammendrag av valgene dine og hvorfor (maks 400 tegn)",`,
     `  "decisions": [`,
-    `    { "ticker": "<symbol fra watchlisten>", "action": "BUY"|"SELL"|"HOLD", "notional_usd": <USD-beløp ved BUY>, "reason": "kort begrunnelse (maks 200 tegn)" }`,
+    `    { "ticker": "<symbol fra watchlisten>", "action": "BUY"|"SELL"|"HOLD", "notional_usd": 0, "reason": "kort begrunnelse (maks 200 tegn)" }`,
     `  ]`,
     `}`,
     ``,
     `Regler for output (HARDE KRAV):`,
     `- Kun watchlist-tickere er tillatt.`,
-    `- **Sum av notional_usd på BUY-decisions MÅ være mellom ${round(bucketCapital * 0.95, 2)} og ${round(bucketCapital, 2)} USD** (95–100 % av bøtte-kapital). Lavere enn dette er regelbrudd.`,
-    `- Default-størrelse per pick = bøtte-kapital / antall valgte tickere. Eksempel: ${blueprint.params.maxPositions} picks → hver = $${round(bucketCapital / blueprint.params.maxPositions, 2)}.`,
-    `- Du kan vekte litt opp/ned mellom picks (±20 %) basert på conviction, men sum skal fortsatt være ≥ ${round(bucketCapital * 0.95, 2)} USD.`,
-    `- Sum skal ALDRI overstige bøtte-kapital ($${round(bucketCapital, 2)}) eller buying power.`,
-    `- Hold deg innenfor max ${blueprint.params.maxPositions} samtidige posisjoner (eksisterende + nye BUYs).`,
-    `- Maks ${blueprint.params.maxPctPerPosition} % av bøtta i én ticker (= maks $${round(bucketCapital * (blueprint.params.maxPctPerPosition / 100), 2)} per ticker).`,
-    `- IGNORER blueprint-tekstens "1.5 % risk per trade"-regler. De gjelder ikke her — fullkapital-mandatet overstyrer.`,
-    `- HOLD = ingen ordre, posisjon beholdes.`,
+    `- Hvis bøtta er tom (ingen posisjoner): returner NØYAKTIG ${blueprint.params.maxPositions} BUY-decisions.`,
+    `- Hvis bøtta har N posisjoner og N < ${blueprint.params.maxPositions}: returner ${blueprint.params.maxPositions} − N nye BUYs OG vurder om hver eksisterende posisjon bør HOLD eller SELL.`,
+    `- Hvis bøtta er full (${blueprint.params.maxPositions} posisjoner): returner kun HOLD/SELL-decisions for eksisterende posisjoner.`,
+    `- notional_usd: sett bare en placeholder (f.eks. 0 eller bucket_capital/maxPositions). Engine overstyrer den uansett.`,
+    `- IGNORER blueprint-tekstens "1.5 % risk per trade"-regler — engine sizer ordrene.`,
+    `- HOLD = posisjonen beholdes.`,
     `- SELL = lukk hele posisjonen.`,
-    `- BUY på en ticker som allerede holdes = øk posisjonen med notional_usd (DCA).`,
     `- Ikke putt SELL på tickere som ikke er i posisjons-listen.`,
     `- Ikke putt BUY på tickere som er i in-flight-listen.`,
     `- Returner KUN gyldig JSON, ingen ekstra tekst.`,
@@ -432,6 +431,11 @@ async function executeDecisions(args: ExecuteArgs): Promise<TradeResult[]> {
   const trades: TradeResult[] = [];
   const maxNotionalPerTicker = bucketCapital * (blueprint.params.maxPctPerPosition / 100);
 
+  // Two-phase execution: SELLs first to free buying power, then BUYs.
+  // Without this, a BUY queued right after a SELL hits Alpaca before the
+  // freed cash is released → "insufficient buying power" rejection.
+  const sellDecs: typeof payload.decisions = [];
+  const buyDecs: typeof payload.decisions = [];
   for (const dec of payload.decisions) {
     const ticker = dec.ticker;
     if (!watchlistSet.has(ticker)) {
@@ -442,22 +446,40 @@ async function executeDecisions(args: ExecuteArgs): Promise<TradeResult[]> {
       trades.push(skipTrade(blueprint.id, ticker, dec.action, 'in_flight'));
       continue;
     }
+    if (dec.action === 'HOLD') continue;
+    if (dec.action === 'SELL') sellDecs.push(dec);
+    else if (dec.action === 'BUY') buyDecs.push(dec);
+  }
 
-    if (dec.action === 'HOLD') {
-      continue;
-    }
+  // ── FULL-DEPLOYMENT OVERRIDE ─────────────────────────────────────────
+  // Ignore the per-pick notional Grok suggested. Engine sizes every BUY
+  // so that the bucket reaches 100 % deployment after this scan.
+  //
+  // free_capital = bucket_capital − value of positions we're keeping
+  // per_pick_target = free_capital / num_buys, capped at max-per-position
+  const sellTickerSet = new Set(sellDecs.map((d) => d.ticker));
+  let keptPositionValue = 0;
+  for (const [ticker, pos] of positionsByTicker) {
+    if (sellTickerSet.has(ticker)) continue; // closing this — capital frees up
+    keptPositionValue += parseFloat(pos.market_value) || 0;
+  }
+  const freeBucketCapital = Math.max(0, bucketCapital - keptPositionValue);
+  let perPickNotional = 0;
+  if (buyDecs.length > 0 && freeBucketCapital >= MIN_NOTIONAL_USD) {
+    perPickNotional = Math.min(
+      freeBucketCapital / buyDecs.length,
+      maxNotionalPerTicker,
+    );
+  }
 
-    if (dec.action === 'SELL') {
+  // ── Phase 1: SELLs (parallel) ────────────────────────────────────────
+  const sellResults = await Promise.all(
+    sellDecs.map(async (dec) => {
+      const ticker = dec.ticker;
       const held = positionsByTicker.get(ticker);
-      if (!held) {
-        trades.push(skipTrade(blueprint.id, ticker, 'SELL', 'no_position'));
-        continue;
-      }
+      if (!held) return skipTrade(blueprint.id, ticker, 'SELL', 'no_position');
       const qty = parseFloat(held.qty) || 0;
-      if (qty <= 0) {
-        trades.push(skipTrade(blueprint.id, ticker, 'SELL', 'zero_qty'));
-        continue;
-      }
+      if (qty <= 0) return skipTrade(blueprint.id, ticker, 'SELL', 'zero_qty');
       const r = await placeOrder(creds, {
         symbol: tradingSymbol(ticker),
         qty,
@@ -466,27 +488,39 @@ async function executeDecisions(args: ExecuteArgs): Promise<TradeResult[]> {
         time_in_force: isCrypto ? 'gtc' : 'day',
         position_intent: 'sell_to_close',
       });
-      trades.push({
+      return {
         blueprintId: blueprint.id,
         ticker,
-        action: 'SELL',
+        action: 'SELL' as const,
         qty,
         notional: 0,
-        status: r.success ? 'OK' : 'ERR',
+        status: r.success ? ('OK' as TradeStatus) : ('ERR' as TradeStatus),
         reason: dec.reason || 'GROK_SELL',
         error: r.success ? undefined : r.error,
-      });
-      continue;
-    }
+      };
+    }),
+  );
+  trades.push(...sellResults);
 
-    // BUY
-    const requested = dec.notional_usd ?? 0;
-    if (!Number.isFinite(requested) || requested < MIN_NOTIONAL_USD) {
-      trades.push(skipTrade(blueprint.id, ticker, 'BUY', 'invalid_notional'));
-      continue;
+  // Wait for SELLs to settle and free buying power. 2.5s is empirical —
+  // Alpaca paper releases cash from market sells within ~1s but we add
+  // slack so the next BUY doesn't get a stale buying-power snapshot.
+  if (sellDecs.some((d) => d) && buyDecs.length > 0) {
+    await new Promise((resolve) => setTimeout(resolve, 2500));
+  }
+
+  // ── Phase 2: BUYs (sequential, all at engine-forced size) ────────────
+  // Engine ignores Grok's notional. Each BUY uses perPickNotional so the
+  // bucket reaches full deployment.
+  if (buyDecs.length > 0 && perPickNotional < MIN_NOTIONAL_USD) {
+    for (const dec of buyDecs) {
+      trades.push(skipTrade(blueprint.id, dec.ticker, 'BUY', 'no_free_capital'));
     }
-    const capped = Math.min(requested, maxNotionalPerTicker);
-    const notional = round(capped, 2);
+    return trades;
+  }
+  for (const dec of buyDecs) {
+    const ticker = dec.ticker;
+    const notional = round(perPickNotional, 2);
     if (notional < MIN_NOTIONAL_USD) {
       trades.push(skipTrade(blueprint.id, ticker, 'BUY', 'below_min_notional'));
       continue;
@@ -654,6 +688,37 @@ async function runBlueprint(args: {
 
   if (killSwitchOn) return result;
 
+  // If user has zero allocation to this bucket but positions still exist
+  // (e.g. they reallocated 100 % to stocks after holding commodities),
+  // liquidate all in-bucket holdings so capital flows to other buckets.
+  if (bucketCapital <= 0) {
+    for (const [ticker, held] of positionsByTicker) {
+      if (inFlightTickers.has(ticker)) continue;
+      const qty = parseFloat(held.qty) || 0;
+      if (qty <= 0) continue;
+      const r = await placeOrder(creds, {
+        symbol: tradingSymbol(ticker),
+        qty,
+        side: 'sell',
+        type: 'market',
+        time_in_force: blueprint.id === 'crypto' ? 'gtc' : 'day',
+        position_intent: 'sell_to_close',
+      });
+      result.trades.push({
+        blueprintId: blueprint.id,
+        ticker,
+        action: 'SELL',
+        qty,
+        notional: 0,
+        status: r.success ? 'OK' : 'ERR',
+        reason: 'BUCKET_DEALLOCATED',
+        error: r.success ? undefined : r.error,
+      });
+    }
+    result.reason = 'bucket_deallocated';
+    return result;
+  }
+
   // 1. Mechanical safety always runs first.
   const safetyTrades = await mechanicalSafetyPass({
     creds,
@@ -668,8 +733,6 @@ async function runBlueprint(args: {
       positionsByTicker.delete(t.ticker);
     }
   }
-
-  if (bucketCapital <= 0) return result;
 
   // 2. Decide whether to call Grok this tick.
   const last = await getLatestDecision(clerkUserId, blueprint.id);
