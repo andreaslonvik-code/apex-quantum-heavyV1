@@ -15,13 +15,13 @@ export const dynamic = 'force-dynamic';
  * notional buys to be rejected with "insufficient buying power" once the
  * account has accumulated day trades intraday — even when cash is plenty.
  *
- * Setting both checks to "exit" (or "both") moves the gate to fill time so
- * the engine can submit fresh orders after a kill-switch SELL on the same
- * day. PDT flag itself stays — that auto-clears after 5 trade-free days.
+ * Setting both checks to "exit" moves the gate to fill time so the engine
+ * can submit fresh orders after a kill-switch SELL on the same day. PDT
+ * flag itself stays — that auto-clears after 5 trade-free days.
  *
- * POST to apply.
+ * Accepts both GET and POST so you can hit it from the URL bar in a browser.
  */
-export async function POST() {
+async function applyRelax() {
   const c = await getRequestCreds();
   if (!c) {
     return NextResponse.json({ error: 'Not connected to Alpaca' }, { status: 401 });
@@ -44,4 +44,12 @@ export async function POST() {
     after: r.success ? r.data : null,
     error: r.success ? null : r.error,
   });
+}
+
+export async function GET() {
+  return applyRelax();
+}
+
+export async function POST() {
+  return applyRelax();
 }
