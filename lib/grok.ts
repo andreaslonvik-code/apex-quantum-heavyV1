@@ -61,7 +61,9 @@ export async function decide(req: ChatRequest): Promise<GrokResult> {
 
   let res: Response;
   let raw: unknown;
+  let rawText = '';
   try {
+    // Reasoning models on xAI (grok-4) do not accept `temperature` — drop it.
     res = await fetch(GROK_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -76,7 +78,6 @@ export async function decide(req: ChatRequest): Promise<GrokResult> {
           { role: 'user', content: req.userPrompt },
         ],
         response_format: { type: 'json_object' },
-        temperature: 0.4,
       }),
     });
   } catch (e) {
@@ -85,17 +86,26 @@ export async function decide(req: ChatRequest): Promise<GrokResult> {
   }
   clearTimeout(timer);
 
-  let text = '';
   try {
-    text = await res.text();
-    raw = text ? JSON.parse(text) : null;
+    rawText = await res.text();
+    raw = rawText ? JSON.parse(rawText) : null;
   } catch (e) {
-    return { success: false, error: `JSON parse: ${e instanceof Error ? e.message : String(e)}`, raw: text };
+    // If body isn't JSON, surface the raw text so we can see exactly what xAI said.
+    return {
+      success: false,
+      error: `non-JSON body (${res.status}): ${rawText.slice(0, 500)} — parse: ${e instanceof Error ? e.message : String(e)}`,
+      raw: rawText,
+    };
   }
 
   if (!res.ok) {
-    const msg = (raw as { error?: { message?: string } })?.error?.message ?? `HTTP ${res.status}`;
-    return { success: false, error: msg, raw };
+    const errObj = (raw as { error?: { message?: string; code?: string; type?: string } })?.error;
+    const detail =
+      errObj?.message ??
+      (typeof raw === 'object' && raw
+        ? JSON.stringify(raw).slice(0, 500)
+        : rawText.slice(0, 500));
+    return { success: false, error: `HTTP ${res.status}: ${detail}`, raw };
   }
 
   const json = raw as {
