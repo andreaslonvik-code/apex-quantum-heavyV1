@@ -11,31 +11,51 @@ import {
   getStockBars,
   placeOrder,
 } from '@/lib/alpaca';
-import { BLUEPRINT_LIST, type Blueprint } from '@/lib/blueprints';
+import { BLUEPRINT_LIST, type AssetClass, type Blueprint } from '@/lib/blueprints';
+import { decide, type GrokDecision, type GrokDecisionPayload } from '@/lib/grok';
+import { getLatestDecision, saveDecision } from '@/lib/grok-decisions';
 import { getUserAllocation } from '@/lib/user-allocation';
 import { atr, macd, rsi, sma } from './indicators';
+
+/**
+ * Apex Quantum trading engine — Grok-driven.
+ *
+ * Cadence:
+ *   - Cron tick fires every minute.
+ *   - Grok is called at most once every GROK_CADENCE_MS (default 15 min) per
+ *     user per blueprint. Between calls only mechanical safety runs.
+ *   - Mechanical safety = ATR-stop + profit-take checks on held positions.
+ *     These are bounded protection in case price moves between Grok calls.
+ *
+ * Decision execution:
+ *   - Grok returns `{ thesis, decisions: [{ ticker, action, notional_usd, reason }] }`.
+ *   - BUY → notional market order on Alpaca, position_intent: buy_to_open.
+ *   - SELL → close full Alpaca position for that ticker.
+ *   - HOLD → no order.
+ */
 
 export type TradeAction = 'BUY' | 'SELL';
 export type TradeStatus = 'OK' | 'ERR' | 'SKIP';
 
 export interface TradeResult {
-  blueprintId: string;
+  blueprintId: AssetClass;
   ticker: string;
   action: TradeAction;
   qty: number;
-  price: number;
+  notional: number;
   status: TradeStatus;
   reason: string;
   error?: string;
 }
 
 export interface BlueprintRunResult {
-  blueprintId: string;
+  blueprintId: AssetClass;
   bucketCapital: number;
   positionsHeld: number;
-  evaluated: number;
   trades: TradeResult[];
   killSwitchTriggered: boolean;
+  grokCalled: boolean;
+  thesis?: string;
   reason?: string;
 }
 
@@ -48,15 +68,15 @@ export interface UserScanResult {
   error?: string;
 }
 
-/** Convert Alpaca crypto-data symbol ("BTC/USD") → trading symbol ("BTCUSD"). */
+const GROK_CADENCE_MS = 15 * 60 * 1000;
+const INDICATOR_BAR_COUNT = 60; // bars to fetch for indicator summary
+const MIN_NOTIONAL_USD = 1.0;
+
 function tradingSymbol(symbol: string): string {
   return symbol.replace('/', '');
 }
 
-/** Convert Alpaca position symbol ("BTCUSD") to a blueprint-watchlist match. */
 function normalizePositionSymbol(symbol: string): string {
-  // Alpaca returns crypto positions without slash. Try inserting a slash before
-  // a 3-letter quote currency so it lines up with the blueprint watchlist.
   if (symbol.includes('/')) return symbol;
   if (/^[A-Z]+USD$/.test(symbol) && symbol.length >= 6) {
     return `${symbol.slice(0, -3)}/USD`;
@@ -69,24 +89,23 @@ async function fetchBars(
   blueprint: Blueprint,
   ticker: string,
 ) {
-  const isCrypto = blueprint.id === 'crypto';
-  if (isCrypto) {
+  if (blueprint.id === 'crypto') {
     return getCryptoBars(creds, ticker, {
       timeframe: blueprint.params.timeframe,
-      limit: blueprint.params.barLimit,
+      limit: INDICATOR_BAR_COUNT,
     });
   }
   return getStockBars(creds, ticker, {
     timeframe: blueprint.params.timeframe,
-    limit: blueprint.params.barLimit,
+    limit: INDICATOR_BAR_COUNT,
   });
 }
 
-async function fetchSpot(
+async function fetchLatest(
   creds: AlpacaCreds,
   blueprint: Blueprint,
   ticker: string,
-  bars: AlpacaBar[],
+  fallback: number,
 ): Promise<number> {
   if (blueprint.id === 'crypto') {
     const r = await getLatestCryptoPrice(creds, ticker);
@@ -95,74 +114,255 @@ async function fetchSpot(
     const r = await getLatestPrice(creds, ticker);
     if (r.success) return r.data;
   }
-  return bars[bars.length - 1]?.c ?? 0;
+  return fallback;
 }
 
-function decideEntryQty(
-  bucketCapital: number,
-  spotPrice: number,
-  atrValue: number,
-  params: Blueprint['params'],
-  isCrypto: boolean,
-): number {
-  if (spotPrice <= 0 || atrValue <= 0) return 0;
-  const dollarRisk = bucketCapital * params.riskPctPerTrade;
-  const stopDistance = params.atrStopMult * atrValue;
-  let qty = stopDistance > 0 ? dollarRisk / stopDistance : 0;
-  const maxDollar = bucketCapital * (params.maxPctPerPosition / 100);
-  qty = Math.min(qty, maxDollar / spotPrice);
-  if (qty <= 0) return 0;
-  if (isCrypto) {
-    return Math.floor(qty * 1_000_000) / 1_000_000;
-  }
-  return Math.floor(qty);
+interface IndicatorSnapshot {
+  ticker: string;
+  price: number;
+  change_24h_pct: number | null;
+  change_5d_pct: number | null;
+  rsi_14: number | null;
+  sma_50: number | null;
+  sma_200: number | null;
+  macd_hist: number | null;
+  atr_14: number | null;
 }
 
-/**
- * Initial deployment: blast `bucketCapital` across the top `maxPositions`
- * watchlist tickers ranked by 20-bar momentum. Used when the user has no
- * existing positions in this blueprint and no in-flight orders for it —
- * typically right after sign-up / connect, or after a withdraw-all.
- *
- * Uses notional orders so we deploy exactly `bucketCapital / N` USD per
- * pick regardless of price level. Notional orders require fractional
- * shares (most major US stocks are fractionable on Alpaca).
- */
-async function initialDeployBlueprint(
+async function buildIndicatorSnapshots(
   creds: AlpacaCreds,
   blueprint: Blueprint,
-  bucketCapital: number,
-): Promise<TradeResult[]> {
-  const isCrypto = blueprint.id === 'crypto';
-  const slots = blueprint.params.maxPositions;
-  if (bucketCapital <= 0 || slots <= 0) return [];
-
-  const scored: Array<{ ticker: string; score: number; price: number }> = [];
+): Promise<IndicatorSnapshot[]> {
+  const snaps: IndicatorSnapshot[] = [];
   for (const ticker of blueprint.watchlist) {
     try {
       const r = await fetchBars(creds, blueprint, ticker);
-      if (!r.success || r.data.length < 21) continue;
-      const closes = r.data.map((b) => b.c);
+      if (!r.success || r.data.length < 5) continue;
+      const bars: AlpacaBar[] = r.data;
+      const closes = bars.map((b) => b.c);
       const last = closes[closes.length - 1];
-      const past = closes[closes.length - 21];
-      if (!last || !past) continue;
-      scored.push({ ticker, price: last, score: (last - past) / past });
+      const live = await fetchLatest(creds, blueprint, ticker, last);
+      const p = live || last;
+      const ago1 = closes[closes.length - 2] ?? p;
+      const ago5 = closes[Math.max(0, closes.length - 6)] ?? p;
+      snaps.push({
+        ticker,
+        price: round(p, 6),
+        change_24h_pct: ago1 ? round(((p - ago1) / ago1) * 100, 2) : null,
+        change_5d_pct: ago5 ? round(((p - ago5) / ago5) * 100, 2) : null,
+        rsi_14: nullableRound(rsi(closes, 14), 1),
+        sma_50: nullableRound(sma(closes, 50), 4),
+        sma_200: nullableRound(sma(closes, 200), 4),
+        macd_hist: nullableRound(macd(closes)?.hist ?? null, 4),
+        atr_14: nullableRound(atr(bars, blueprint.params.atrPeriod), 4),
+      });
     } catch {
-      // skip
+      // skip ticker on fetch error
     }
   }
-  scored.sort((a, b) => b.score - a.score);
-  const picks = scored.slice(0, slots);
-  if (picks.length === 0) return [];
+  return snaps;
+}
 
-  const perTicker = Math.floor((bucketCapital / picks.length) * 100) / 100;
-  if (perTicker < 1) return [];
+function round(n: number, decimals: number): number {
+  const f = 10 ** decimals;
+  return Math.round(n * f) / f;
+}
 
+function nullableRound(n: number | null, decimals: number): number | null {
+  if (n == null || !Number.isFinite(n)) return null;
+  return round(n, decimals);
+}
+
+interface PositionSummary {
+  ticker: string;
+  qty: number;
+  avg_entry: number;
+  current_price: number;
+  market_value: number;
+  unrealized_pnl: number;
+  unrealized_pnl_pct: number;
+}
+
+function summarizePositions(
+  positions: AlpacaPosition[],
+  watchlist: ReadonlySet<string>,
+): PositionSummary[] {
+  const out: PositionSummary[] = [];
+  for (const p of positions) {
+    const norm = normalizePositionSymbol(p.symbol);
+    if (!watchlist.has(norm)) continue;
+    out.push({
+      ticker: norm,
+      qty: parseFloat(p.qty) || 0,
+      avg_entry: parseFloat(p.avg_entry_price) || 0,
+      current_price: parseFloat(p.current_price) || 0,
+      market_value: parseFloat(p.market_value) || 0,
+      unrealized_pnl: parseFloat(p.unrealized_pl) || 0,
+      unrealized_pnl_pct: round((parseFloat(p.unrealized_plpc) || 0) * 100, 2),
+    });
+  }
+  return out;
+}
+
+function buildUserPrompt(args: {
+  blueprint: Blueprint;
+  bucketCapital: number;
+  totalEquity: number;
+  buyingPower: number;
+  positions: PositionSummary[];
+  candidates: IndicatorSnapshot[];
+  inFlightTickers: string[];
+  allocationPct: number;
+}): string {
+  const {
+    blueprint,
+    bucketCapital,
+    totalEquity,
+    buyingPower,
+    positions,
+    candidates,
+    inFlightTickers,
+    allocationPct,
+  } = args;
+
+  return [
+    `# Live trading-kontekst`,
+    ``,
+    `Asset class: ${blueprint.id}`,
+    `Tidsstempel: ${new Date().toISOString()}`,
+    `Bruker-allokering: ${allocationPct} % av total equity til denne bøtta`,
+    `Total equity (USD): ${round(totalEquity, 2)}`,
+    `Bøtte-kapital (USD): ${round(bucketCapital, 2)}`,
+    `Buying power (USD): ${round(buyingPower, 2)}`,
+    `Maks samtidige posisjoner i denne bøtta: ${blueprint.params.maxPositions}`,
+    ``,
+    `## Eksisterende posisjoner i bøtta`,
+    positions.length === 0 ? '(ingen)' : JSON.stringify(positions, null, 2),
+    ``,
+    `## Tickere med åpne (uutløste) ordre — IKKE legg inn nye ordre på disse`,
+    inFlightTickers.length === 0 ? '(ingen)' : inFlightTickers.join(', '),
+    ``,
+    `## Watchlist-kandidater med live indikatorer`,
+    JSON.stringify(candidates, null, 2),
+    ``,
+    `# Oppgave`,
+    ``,
+    `Følg blueprint-strategien fra system-prompten SLAVISK. Returner et JSON-objekt med formatet:`,
+    `{`,
+    `  "thesis": "kort sammendrag av regime, geopolitikk og strategi for denne bøtta (maks 400 tegn)",`,
+    `  "decisions": [`,
+    `    { "ticker": "<symbol fra watchlisten>", "action": "BUY"|"SELL"|"HOLD", "notional_usd": <USD-beløp ved BUY>, "reason": "kort begrunnelse (maks 200 tegn) basert på blueprint-reglene" }`,
+    `  ]`,
+    `}`,
+    ``,
+    `Regler for output:`,
+    `- Kun watchlist-tickere er tillatt.`,
+    `- Sum av notional_usd på BUY-decisions må ikke overstige bøtte-kapital eller buying power.`,
+    `- Hold deg innenfor max ${blueprint.params.maxPositions} samtidige posisjoner (eksisterende + nye BUYs).`,
+    `- Maks ${blueprint.params.maxPctPerPosition} % av bøtta i én ticker.`,
+    `- Risiko per trade ${(blueprint.params.riskPctPerTrade * 100).toFixed(1)} % via ATR-skalert sizing der relevant.`,
+    `- Grunngivelse for hver decision skal referere til konkrete blueprint-regler (RSI, MA, regime, geopolitikk, profit-take, ATR-stop, etc.).`,
+    `- HOLD = ingen ordre, posisjon beholdes.`,
+    `- SELL = lukk hele posisjonen.`,
+    `- BUY på en ticker som allerede holdes = øk posisjonen med notional_usd (DCA).`,
+    `- Ikke putt SELL på tickere som ikke er i posisjons-listen.`,
+    `- Ikke putt BUY på tickere som er i in-flight-listen.`,
+    `- Returner KUN gyldig JSON, ingen ekstra tekst.`,
+  ].join('\n');
+}
+
+async function callGrokForBlueprint(
+  blueprint: Blueprint,
+  userPrompt: string,
+): Promise<GrokDecisionPayload | null> {
+  const r = await decide({
+    systemPrompt: blueprint.strategy,
+    userPrompt,
+  });
+  if (!r.success) {
+    return null;
+  }
+  return r.payload;
+}
+
+interface ExecuteArgs {
+  creds: AlpacaCreds;
+  blueprint: Blueprint;
+  bucketCapital: number;
+  payload: GrokDecisionPayload;
+  positionsByTicker: Map<string, AlpacaPosition>;
+  inFlightTickers: Set<string>;
+}
+
+async function executeDecisions(args: ExecuteArgs): Promise<TradeResult[]> {
+  const { creds, blueprint, bucketCapital, payload, positionsByTicker, inFlightTickers } = args;
+  const isCrypto = blueprint.id === 'crypto';
+  const watchlistSet = new Set<string>(blueprint.watchlist);
   const trades: TradeResult[] = [];
-  for (const pick of picks) {
-    const orderRes = await placeOrder(creds, {
-      symbol: tradingSymbol(pick.ticker),
-      notional: perTicker,
+  const maxNotionalPerTicker = bucketCapital * (blueprint.params.maxPctPerPosition / 100);
+
+  for (const dec of payload.decisions) {
+    const ticker = dec.ticker;
+    if (!watchlistSet.has(ticker)) {
+      trades.push(skipTrade(blueprint.id, ticker, dec.action, 'not_in_watchlist'));
+      continue;
+    }
+    if (inFlightTickers.has(ticker)) {
+      trades.push(skipTrade(blueprint.id, ticker, dec.action, 'in_flight'));
+      continue;
+    }
+
+    if (dec.action === 'HOLD') {
+      continue;
+    }
+
+    if (dec.action === 'SELL') {
+      const held = positionsByTicker.get(ticker);
+      if (!held) {
+        trades.push(skipTrade(blueprint.id, ticker, 'SELL', 'no_position'));
+        continue;
+      }
+      const qty = parseFloat(held.qty) || 0;
+      if (qty <= 0) {
+        trades.push(skipTrade(blueprint.id, ticker, 'SELL', 'zero_qty'));
+        continue;
+      }
+      const r = await placeOrder(creds, {
+        symbol: tradingSymbol(ticker),
+        qty,
+        side: 'sell',
+        type: 'market',
+        time_in_force: isCrypto ? 'gtc' : 'day',
+        position_intent: 'sell_to_close',
+      });
+      trades.push({
+        blueprintId: blueprint.id,
+        ticker,
+        action: 'SELL',
+        qty,
+        notional: 0,
+        status: r.success ? 'OK' : 'ERR',
+        reason: dec.reason || 'GROK_SELL',
+        error: r.success ? undefined : r.error,
+      });
+      continue;
+    }
+
+    // BUY
+    const requested = dec.notional_usd ?? 0;
+    if (!Number.isFinite(requested) || requested < MIN_NOTIONAL_USD) {
+      trades.push(skipTrade(blueprint.id, ticker, 'BUY', 'invalid_notional'));
+      continue;
+    }
+    const capped = Math.min(requested, maxNotionalPerTicker);
+    const notional = round(capped, 2);
+    if (notional < MIN_NOTIONAL_USD) {
+      trades.push(skipTrade(blueprint.id, ticker, 'BUY', 'below_min_notional'));
+      continue;
+    }
+    const r = await placeOrder(creds, {
+      symbol: tradingSymbol(ticker),
+      notional,
       side: 'buy',
       type: 'market',
       time_in_force: isCrypto ? 'gtc' : 'day',
@@ -170,38 +370,133 @@ async function initialDeployBlueprint(
     });
     trades.push({
       blueprintId: blueprint.id,
-      ticker: pick.ticker,
+      ticker,
       action: 'BUY',
       qty: 0,
-      price: pick.price,
-      status: orderRes.success ? 'OK' : 'ERR',
-      reason: 'INITIAL_DEPLOY',
-      error: orderRes.success ? undefined : orderRes.error,
+      notional,
+      status: r.success ? 'OK' : 'ERR',
+      reason: dec.reason || 'GROK_BUY',
+      error: r.success ? undefined : r.error,
     });
   }
+
   return trades;
 }
 
-async function runBlueprint(
-  creds: AlpacaCreds,
-  blueprint: Blueprint,
-  bucketCapital: number,
-  allPositions: AlpacaPosition[],
-  openOrderSymbols: Set<string>,
-  killSwitchOn: boolean,
-): Promise<BlueprintRunResult> {
-  const isCrypto = blueprint.id === 'crypto';
+function skipTrade(
+  blueprintId: AssetClass,
+  ticker: string,
+  action: TradeAction | 'HOLD',
+  reason: string,
+): TradeResult {
+  return {
+    blueprintId,
+    ticker,
+    action: action === 'HOLD' ? 'BUY' : action,
+    qty: 0,
+    notional: 0,
+    status: 'SKIP',
+    reason,
+  };
+}
 
-  const watchlistSet = new Set<string>(blueprint.watchlist);
-  const heldByTicker = new Map<string, AlpacaPosition>();
-  for (const p of allPositions) {
-    const norm = normalizePositionSymbol(p.symbol);
-    if (watchlistSet.has(norm)) heldByTicker.set(norm, p);
+/**
+ * Mechanical safety pass — runs every cron tick regardless of Grok cadence.
+ * Triggers SELL when a held position hits its ATR-stop or profit-take
+ * threshold, so a flash move between Grok calls doesn't blow through the
+ * blueprint's risk floor.
+ */
+async function mechanicalSafetyPass(args: {
+  creds: AlpacaCreds;
+  blueprint: Blueprint;
+  positionsByTicker: Map<string, AlpacaPosition>;
+  inFlightTickers: Set<string>;
+}): Promise<TradeResult[]> {
+  const { creds, blueprint, positionsByTicker, inFlightTickers } = args;
+  const isCrypto = blueprint.id === 'crypto';
+  const trades: TradeResult[] = [];
+
+  for (const [ticker, held] of positionsByTicker) {
+    if (inFlightTickers.has(ticker)) continue;
+    const qty = parseFloat(held.qty) || 0;
+    const entry = parseFloat(held.avg_entry_price) || 0;
+    if (qty <= 0 || entry <= 0) continue;
+
+    try {
+      const barsRes = await fetchBars(creds, blueprint, ticker);
+      if (!barsRes.success || barsRes.data.length < blueprint.params.atrPeriod + 5) continue;
+      const bars = barsRes.data;
+      const lastClose = bars[bars.length - 1]?.c ?? entry;
+      const price = await fetchLatest(creds, blueprint, ticker, lastClose);
+      const atrVal = atr(bars, blueprint.params.atrPeriod);
+      if (atrVal == null) continue;
+
+      const stopPrice = entry - blueprint.params.atrStopMult * atrVal;
+      const pnlPct = (price - entry) / entry;
+
+      let reason: string | null = null;
+      if (price <= stopPrice) reason = 'MECHANICAL_ATR_STOP';
+      else if (pnlPct >= blueprint.params.profitTakeThreshold) reason = 'MECHANICAL_PROFIT_TAKE';
+
+      if (!reason) continue;
+
+      const r = await placeOrder(creds, {
+        symbol: tradingSymbol(ticker),
+        qty,
+        side: 'sell',
+        type: 'market',
+        time_in_force: isCrypto ? 'gtc' : 'day',
+        position_intent: 'sell_to_close',
+      });
+      trades.push({
+        blueprintId: blueprint.id,
+        ticker,
+        action: 'SELL',
+        qty,
+        notional: 0,
+        status: r.success ? 'OK' : 'ERR',
+        reason,
+        error: r.success ? undefined : r.error,
+      });
+    } catch {
+      // skip on transient error
+    }
   }
 
-  // Tickers in this blueprint that have an open (unfilled) order. Skip both
-  // BUY and SELL signals on these to avoid stacking duplicate orders while
-  // the previous one is still live.
+  return trades;
+}
+
+async function runBlueprint(args: {
+  creds: AlpacaCreds;
+  clerkUserId: string;
+  blueprint: Blueprint;
+  bucketCapital: number;
+  totalEquity: number;
+  buyingPower: number;
+  allocationPct: number;
+  allPositions: AlpacaPosition[];
+  openOrderSymbols: Set<string>;
+  killSwitchOn: boolean;
+}): Promise<BlueprintRunResult> {
+  const {
+    creds,
+    clerkUserId,
+    blueprint,
+    bucketCapital,
+    totalEquity,
+    buyingPower,
+    allocationPct,
+    allPositions,
+    openOrderSymbols,
+    killSwitchOn,
+  } = args;
+
+  const watchlistSet = new Set<string>(blueprint.watchlist);
+  const positionsByTicker = new Map<string, AlpacaPosition>();
+  for (const p of allPositions) {
+    const norm = normalizePositionSymbol(p.symbol);
+    if (watchlistSet.has(norm)) positionsByTicker.set(norm, p);
+  }
   const inFlightTickers = new Set<string>();
   for (const sym of openOrderSymbols) {
     const norm = normalizePositionSymbol(sym);
@@ -211,152 +506,119 @@ async function runBlueprint(
   const result: BlueprintRunResult = {
     blueprintId: blueprint.id,
     bucketCapital,
-    positionsHeld: heldByTicker.size,
-    evaluated: 0,
+    positionsHeld: positionsByTicker.size,
     trades: [],
     killSwitchTriggered: killSwitchOn,
+    grokCalled: false,
     reason: killSwitchOn ? 'daily_kill_switch' : undefined,
   };
 
-  if (killSwitchOn || bucketCapital <= 0) return result;
+  if (killSwitchOn) return result;
 
-  // Initial deployment — fire on a fresh bucket (no positions, no in-flight).
-  if (heldByTicker.size === 0 && inFlightTickers.size === 0) {
-    const trades = await initialDeployBlueprint(creds, blueprint, bucketCapital);
-    result.trades.push(...trades);
-    return result;
-  }
-
-  for (const ticker of blueprint.watchlist) {
-    result.evaluated += 1;
-    if (inFlightTickers.has(ticker)) continue;
-    try {
-      const barsRes = await fetchBars(creds, blueprint, ticker);
-      if (!barsRes.success || barsRes.data.length < blueprint.params.atrPeriod + 5) {
-        continue;
-      }
-      const bars = barsRes.data;
-      const closes = bars.map((b) => b.c);
-      const lastBarClose = closes[closes.length - 1];
-      const spot = await fetchSpot(creds, blueprint, ticker, bars);
-      const price = spot || lastBarClose;
-      if (price <= 0) continue;
-
-      const rsiVal = rsi(closes, 14);
-      const atrVal = atr(bars, blueprint.params.atrPeriod);
-      if (rsiVal == null || atrVal == null) continue;
-
-      const held = heldByTicker.get(ticker);
-
-      if (held) {
-        const qty = parseFloat(held.qty);
-        const entry = parseFloat(held.avg_entry_price);
-        if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(entry) || entry <= 0) continue;
-        const pnlPct = (price - entry) / entry;
-        const stopPrice = entry - blueprint.params.atrStopMult * atrVal;
-
-        let reason: string | null = null;
-        if (rsiVal >= blueprint.params.rsiOverbought) reason = 'RSI_OVERBOUGHT';
-        else if (pnlPct >= blueprint.params.profitTakeThreshold) reason = 'PROFIT_TAKE';
-        else if (price <= stopPrice) reason = 'ATR_STOP';
-
-        if (reason) {
-          const orderRes = await placeOrder(creds, {
-            symbol: tradingSymbol(ticker),
-            qty,
-            side: 'sell',
-            type: 'market',
-            time_in_force: isCrypto ? 'gtc' : 'day',
-            position_intent: 'sell_to_close',
-          });
-          result.trades.push({
-            blueprintId: blueprint.id,
-            ticker,
-            action: 'SELL',
-            qty,
-            price,
-            status: orderRes.success ? 'OK' : 'ERR',
-            reason,
-            error: orderRes.success ? undefined : orderRes.error,
-          });
-          if (orderRes.success) heldByTicker.delete(ticker);
-        }
-        continue;
-      }
-
-      // ---------- Entry path ----------
-      if (heldByTicker.size >= blueprint.params.maxPositions) continue;
-      if (rsiVal >= blueprint.params.rsiOversold) continue;
-
-      const sma200 = sma(closes, 200);
-      const sma50 = sma(closes, 50);
-      const macdRes = macd(closes);
-      if (sma50 == null || sma200 == null || macdRes == null) continue;
-      // Uptrend confirmation: price above the slower MA.
-      if (price < sma200) continue;
-      // Momentum confirmation: MACD histogram positive.
-      if (macdRes.hist <= 0) continue;
-
-      const qty = decideEntryQty(bucketCapital, price, atrVal, blueprint.params, isCrypto);
-      if (qty <= 0) continue;
-
-      const orderRes = await placeOrder(creds, {
-        symbol: tradingSymbol(ticker),
-        qty,
-        side: 'buy',
-        type: 'market',
-        time_in_force: isCrypto ? 'gtc' : 'day',
-        position_intent: 'buy_to_open',
-      });
-      result.trades.push({
-        blueprintId: blueprint.id,
-        ticker,
-        action: 'BUY',
-        qty,
-        price,
-        status: orderRes.success ? 'OK' : 'ERR',
-        reason: 'RSI_OVERSOLD_UPTREND',
-        error: orderRes.success ? undefined : orderRes.error,
-      });
-      if (orderRes.success) {
-        heldByTicker.set(ticker, {
-          asset_id: '',
-          symbol: ticker,
-          exchange: '',
-          asset_class: isCrypto ? 'crypto' : 'us_equity',
-          qty: String(qty),
-          avg_entry_price: String(price),
-          side: 'long',
-          market_value: String(qty * price),
-          cost_basis: String(qty * price),
-          unrealized_pl: '0',
-          unrealized_plpc: '0',
-          current_price: String(price),
-        });
-      }
-    } catch (e) {
-      result.trades.push({
-        blueprintId: blueprint.id,
-        ticker,
-        action: 'BUY',
-        qty: 0,
-        price: 0,
-        status: 'ERR',
-        reason: 'EXCEPTION',
-        error: e instanceof Error ? e.message : String(e),
-      });
+  // 1. Mechanical safety always runs first.
+  const safetyTrades = await mechanicalSafetyPass({
+    creds,
+    blueprint,
+    positionsByTicker,
+    inFlightTickers,
+  });
+  result.trades.push(...safetyTrades);
+  // Drop closed positions from local cache so subsequent Grok decisions see fresh state.
+  for (const t of safetyTrades) {
+    if (t.action === 'SELL' && t.status === 'OK') {
+      positionsByTicker.delete(t.ticker);
     }
   }
 
-  result.positionsHeld = heldByTicker.size;
+  if (bucketCapital <= 0) return result;
+
+  // 2. Decide whether to call Grok this tick.
+  const last = await getLatestDecision(clerkUserId, blueprint.id);
+  const lastMs = last && !last.failed ? new Date(last.decidedAt).getTime() : 0;
+  const ageMs = Date.now() - lastMs;
+  const shouldCallGrok = !last || last.failed || ageMs >= GROK_CADENCE_MS;
+
+  if (!shouldCallGrok) {
+    result.thesis = last?.thesis ?? undefined;
+    return result;
+  }
+
+  // 3. Build context + call Grok.
+  const candidates = await buildIndicatorSnapshots(creds, blueprint);
+  if (candidates.length === 0) {
+    await saveDecision({
+      clerkUserId,
+      blueprintId: blueprint.id,
+      thesis: '',
+      decisions: [],
+      rawResponse: null,
+      failed: true,
+      errorMessage: 'no_candidate_data',
+    });
+    result.reason = 'no_candidate_data';
+    return result;
+  }
+
+  const userPrompt = buildUserPrompt({
+    blueprint,
+    bucketCapital,
+    totalEquity,
+    buyingPower,
+    positions: summarizePositions(allPositions, watchlistSet),
+    candidates,
+    inFlightTickers: [...inFlightTickers],
+    allocationPct,
+  });
+
+  const grokRes = await decide({
+    systemPrompt: blueprint.strategy,
+    userPrompt,
+  });
+  result.grokCalled = true;
+
+  if (!grokRes.success) {
+    await saveDecision({
+      clerkUserId,
+      blueprintId: blueprint.id,
+      thesis: '',
+      decisions: [],
+      rawResponse: grokRes.raw ?? null,
+      failed: true,
+      errorMessage: grokRes.error,
+    });
+    result.reason = `grok_error: ${grokRes.error}`;
+    return result;
+  }
+
+  const payload = grokRes.payload;
+  result.thesis = payload.thesis;
+
+  // 4. Execute Grok's decisions.
+  const tradeResults = await executeDecisions({
+    creds,
+    blueprint,
+    bucketCapital,
+    payload,
+    positionsByTicker,
+    inFlightTickers,
+  });
+  result.trades.push(...tradeResults);
+  result.positionsHeld = positionsByTicker.size + tradeResults.filter(
+    (t) => t.action === 'BUY' && t.status === 'OK',
+  ).length;
+
+  await saveDecision({
+    clerkUserId,
+    blueprintId: blueprint.id,
+    thesis: payload.thesis,
+    decisions: payload.decisions,
+    usage: grokRes.usage,
+    rawResponse: grokRes.raw ?? null,
+  });
+
   return result;
 }
 
-/**
- * Scan + trade for one user across all three blueprints. Each blueprint runs
- * with its own bucket capital (equity × allocation %). Returns a structured
- * result for logging / dashboard display.
- */
 export async function runScanForUser(
   creds: AlpacaCreds,
   clerkUserId: string,
@@ -376,9 +638,10 @@ export async function runScanForUser(
     return out;
   }
   const equity = parseFloat(acctRes.data.equity) || 0;
-  const lastEquity = parseFloat(
-    (acctRes.data as unknown as { last_equity?: string }).last_equity ?? acctRes.data.equity,
-  ) || equity;
+  const lastEquity =
+    parseFloat(
+      (acctRes.data as unknown as { last_equity?: string }).last_equity ?? acctRes.data.equity,
+    ) || equity;
   const buyingPower = parseFloat(acctRes.data.buying_power) || 0;
   out.equity = equity;
   out.buyingPower = buyingPower;
@@ -403,16 +666,22 @@ export async function runScanForUser(
     const allocPct = allocation[blueprint.id] ?? 0;
     const bucketCapital = (equity * allocPct) / 100;
     const killSwitchOn = dailyPnlPct <= blueprint.params.dailyKillSwitchPct;
-    const result = await runBlueprint(
+    const result = await runBlueprint({
       creds,
+      clerkUserId,
       blueprint,
       bucketCapital,
-      positions,
+      totalEquity: equity,
+      buyingPower,
+      allocationPct: allocPct,
+      allPositions: positions,
       openOrderSymbols,
       killSwitchOn,
-    );
+    });
     out.blueprints.push(result);
   }
 
   return out;
 }
+
+export type { GrokDecision } from '@/lib/grok';

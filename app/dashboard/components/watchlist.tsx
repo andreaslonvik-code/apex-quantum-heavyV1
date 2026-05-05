@@ -16,9 +16,13 @@ export interface WatchlistRow {
 interface Props {
   lang: Lang;
   rows: WatchlistRow[];
+  /** Optional override of the panel title (default = i18n watchlistTitle). */
+  title?: string;
+  /** Optional override of the panel subtitle. */
+  subtitle?: string;
 }
 
-export function Watchlist({ lang, rows }: Props) {
+export function Watchlist({ lang, rows, title, subtitle }: Props) {
   const t = I18N[lang];
   const sigLabel: Record<Signal, string> = {
     BUY: t.sigBuy,
@@ -39,8 +43,8 @@ export function Watchlist({ lang, rows }: Props) {
     <div className="panel">
       <div className="panel-head">
         <div>
-          <div className="cap">{t.watchlistTitle}</div>
-          <div className="panel-sub">{t.watchlistSub}</div>
+          <div className="cap">{title ?? t.watchlistTitle}</div>
+          <div className="panel-sub">{subtitle ?? t.watchlistSub}</div>
         </div>
         <div className="panel-head-r">
           <span className="tag">
@@ -85,7 +89,9 @@ export function Watchlist({ lang, rows }: Props) {
                 </td>
                 <td className="r aq-mono">{held ? p.qty : <span className="mute">—</span>}</td>
                 <td className="r aq-mono">{held ? `$${fmtUSD(p.avg)}` : <span className="mute">—</span>}</td>
-                <td className="r aq-mono">${fmtUSD(p.mark)}</td>
+                <td className={`r aq-mono ${held ? '' : 'mute'}`}>
+                  {p.mark > 0 ? `$${fmtUSD(p.mark)}` : <span className="mute">—</span>}
+                </td>
                 <td className={`r aq-mono ${held ? (up ? 'up' : 'dn') : 'mute'}`}>
                   {held ? `${up ? '+' : ''}$${fmtUSD(pnl)}` : '—'}
                 </td>

@@ -18,7 +18,15 @@ import { RecentOrders, type RecentOrder } from './components/recent-orders';
 import { BenchmarkBar, type BenchmarkBarPayload } from './components/benchmark-bar';
 import { WithdrawModal, type WithdrawStatus } from './components/withdraw-modal';
 import { AllocationCard } from './components/allocation-card';
+import { GrokThesisCard } from './components/grok-thesis-card';
 import type { Lang } from './components/i18n';
+import { BLUEPRINTS, type AssetClass } from '@/lib/blueprints';
+
+const BLUEPRINT_TITLES: Record<AssetClass, { no: string; en: string }> = {
+  stocks: { no: 'Aksjer', en: 'Stocks' },
+  crypto: { no: 'Krypto', en: 'Crypto' },
+  commodities: { no: 'Råvarer', en: 'Commodities' },
+};
 
 interface AccountInfo {
   accountId: string;
@@ -177,14 +185,20 @@ export default function DashboardPage() {
     return { ticker: top.ticker, pct };
   }, [positions, totalForExposure]);
 
-  const watchlistRows: WatchlistRow[] = useMemo(() => {
+  const watchlistRowsByBlueprint = useMemo(() => {
+    // Alpaca crypto positions come back without slash ("BTCUSD"); blueprints
+    // store the data-API form ("BTC/USD"). Index held positions by both forms
+    // so the watchlist matches regardless of which side hands us the ticker.
     const heldByTicker = new Map<string, AlpacaPositionPayload>();
-    for (const p of positions) heldByTicker.set(p.ticker, p);
+    for (const p of positions) {
+      heldByTicker.set(p.ticker, p);
+      if (!p.ticker.includes('/') && /^[A-Z]+USD$/.test(p.ticker) && p.ticker.length >= 6) {
+        heldByTicker.set(`${p.ticker.slice(0, -3)}/USD`, p);
+      }
+    }
 
-    // Recent successful orders override the P&L heuristic — if the engine
-    // just BUY/SELL'd a ticker, that's the truthful signal to show. 15 min
-    // window matches the typical scan cadence + fill latency. ERR/PENDING
-    // don't count.
+    // Recent successful orders override the P&L heuristic — 15 min window
+    // matches the typical scan cadence + fill latency. ERR/PENDING don't count.
     const RECENT_WINDOW_MS = 15 * 60 * 1000;
     const cutoff = Date.now() - RECENT_WINDOW_MS;
     const recentByTicker = new Map<string, 'BUY' | 'SELL'>();
@@ -192,36 +206,45 @@ export default function DashboardPage() {
       if (o.status !== 'OK') continue;
       const t = Date.parse(o.submittedAt);
       if (!Number.isFinite(t) || t < cutoff) continue;
-      if (!recentByTicker.has(o.ticker)) recentByTicker.set(o.ticker, o.action);
+      const norm = o.ticker;
+      if (!recentByTicker.has(norm)) recentByTicker.set(norm, o.action);
+      if (!norm.includes('/') && /^[A-Z]+USD$/.test(norm) && norm.length >= 6) {
+        const slashed = `${norm.slice(0, -3)}/USD`;
+        if (!recentByTicker.has(slashed)) recentByTicker.set(slashed, o.action);
+      }
     }
-
-    const merged = positions.map((p) => ({ ticker: p.ticker, name: p.symbol }));
 
     const SELL_LOSS_PCT = -1.8;
     const SELL_PROFIT_PCT = 15;
 
-    return merged.map(({ ticker, name }) => {
-      const held = heldByTicker.get(ticker);
-      const recent = recentByTicker.get(ticker);
-      if (held) {
-        let sig: Signal;
-        if (recent) {
-          sig = recent;
-        } else if (held.pnlPercent <= SELL_LOSS_PCT || held.pnlPercent >= SELL_PROFIT_PCT) {
-          sig = 'SELL';
-        } else {
-          sig = 'HOLD';
+    const buildRows = (blueprintId: AssetClass): WatchlistRow[] => {
+      const bp = BLUEPRINTS[blueprintId];
+      return bp.watchlist.map((ticker) => {
+        const name = bp.tickerNames?.[ticker] ?? ticker;
+        const held = heldByTicker.get(ticker);
+        const recent = recentByTicker.get(ticker);
+        if (held) {
+          let sig: Signal;
+          if (recent) sig = recent;
+          else if (held.pnlPercent <= SELL_LOSS_PCT || held.pnlPercent >= SELL_PROFIT_PCT) sig = 'SELL';
+          else sig = 'HOLD';
+          return { ticker, name, qty: held.antall, avg: held.avgPrice, mark: held.currentPrice, signal: sig };
         }
-        return { ticker, name, qty: held.antall, avg: held.avgPrice, mark: held.currentPrice, signal: sig };
-      }
-      if (recent === 'BUY') {
-        return { ticker, name, qty: 0, avg: 0, mark: 0, signal: 'BUY' as Signal };
-      }
-      if (recent === 'SELL') {
-        return { ticker, name, qty: 0, avg: 0, mark: 0, signal: 'SELL' as Signal };
-      }
-      return { ticker, name, qty: 0, avg: 0, mark: 0, signal: 'WATCH' as Signal };
-    });
+        if (recent === 'BUY') {
+          return { ticker, name, qty: 0, avg: 0, mark: 0, signal: 'BUY' as Signal };
+        }
+        if (recent === 'SELL') {
+          return { ticker, name, qty: 0, avg: 0, mark: 0, signal: 'SELL' as Signal };
+        }
+        return { ticker, name, qty: 0, avg: 0, mark: 0, signal: 'WATCH' as Signal };
+      });
+    };
+
+    return {
+      stocks: buildRows('stocks'),
+      crypto: buildRows('crypto'),
+      commodities: buildRows('commodities'),
+    };
   }, [positions, orders]);
 
   const equityPoints = useMemo(() => {
@@ -376,8 +399,16 @@ export default function DashboardPage() {
             thinData
           />
 
-          {/* Watchlist (102 tickers, holdings sorted to the top) */}
-          <Watchlist lang={lang} rows={watchlistRows} />
+          {/* Per-blueprint watchlists — each market gets its own panel. */}
+          {(['stocks', 'crypto', 'commodities'] as const).map((bp) => (
+            <Watchlist
+              key={bp}
+              lang={lang}
+              rows={watchlistRowsByBlueprint[bp]}
+              title={BLUEPRINT_TITLES[bp][lang]}
+              subtitle={BLUEPRINTS[bp].name}
+            />
+          ))}
         </div>
 
         <div className="col-r">
@@ -390,6 +421,7 @@ export default function DashboardPage() {
             largestPct={largest?.pct ?? 0}
           />
           <AllocationCard lang={lang} />
+          <GrokThesisCard lang={lang} />
           {failedOrder && (
             <FailedOrderAlert
               lang={lang}

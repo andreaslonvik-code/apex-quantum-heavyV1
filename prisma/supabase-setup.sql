@@ -57,3 +57,32 @@ CREATE TRIGGER alpaca_accounts_updated_at
 
 -- Server-side access only. Cron uses SUPABASE_SERVICE_ROLE_KEY (bypasses RLS).
 ALTER TABLE alpaca_accounts DISABLE ROW LEVEL SECURITY;
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Grok decisions audit log
+--
+-- One row per Grok call. Stored so the engine can:
+--   1) Throttle Grok calls — only call when last decision is older than the
+--      configured cadence (default 15 min).
+--   2) Re-execute Grok's last decisions on between-call ticks if needed.
+--   3) Display thesis + per-ticker reasoning on the dashboard.
+--   4) Audit + post-mortem when a trade goes bad.
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS grok_decisions (
+  id              BIGSERIAL PRIMARY KEY,
+  clerk_user_id   TEXT NOT NULL,
+  blueprint_id    TEXT NOT NULL CHECK (blueprint_id IN ('stocks','crypto','commodities')),
+  decided_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  thesis          TEXT,
+  decisions       JSONB NOT NULL DEFAULT '[]'::jsonb,
+  prompt_tokens   INTEGER,
+  output_tokens   INTEGER,
+  raw_response    JSONB,
+  failed          BOOLEAN NOT NULL DEFAULT false,
+  error_message   TEXT
+);
+
+CREATE INDEX IF NOT EXISTS grok_decisions_user_blueprint_idx
+  ON grok_decisions (clerk_user_id, blueprint_id, decided_at DESC);
+
+ALTER TABLE grok_decisions DISABLE ROW LEVEL SECURITY;

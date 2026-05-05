@@ -32,4 +32,9 @@ export interface Blueprint {
   /** Optional human-readable name override per ticker (used by UI). */
   tickerNames?: Readonly<Record<string, string>>;
   params: BlueprintParams;
+  /**
+   * Verbatim trading-logic text fed to Grok as system prompt. Grok must
+   * follow these rules strictly when emitting BUY / SELL / HOLD decisions.
+   */
+  strategy: string;
 }
