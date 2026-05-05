@@ -298,6 +298,22 @@ export function getAccountConfigurations(
   );
 }
 
+/**
+ * PATCH account configuration. Used to relax PDT/DTBP entry checks so
+ * Alpaca stops returning "insufficient buying power" on legit notional
+ * orders just because too many day-trades happened intraday.
+ */
+export function updateAccountConfigurations(
+  creds: AlpacaCreds,
+  patch: Partial<AlpacaAccountConfig>,
+): Promise<AlpacaResult<AlpacaAccountConfig>> {
+  return alpacaFetch<AlpacaAccountConfig>(
+    `${getTradingBase(creds.env)}/account/configurations`,
+    creds,
+    { method: 'PATCH', body: JSON.stringify(patch) },
+  );
+}
+
 /** Validate API credentials by hitting /account. Returns the account if valid.
  *  On 401, probes the opposite environment so we can tell the user whether the
  *  keys belong to the *other* env (most common) vs are simply invalid. */
