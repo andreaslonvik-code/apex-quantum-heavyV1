@@ -194,154 +194,6 @@ async function probeInngest(): Promise<Probe> {
   };
 }
 
-interface CronProbe extends Probe {
-  scheduledEvery: string;
-}
-
-async function probeCronNewsScan(): Promise<CronProbe> {
-  // News-scan cron fires every minute and writes to news_intelligence on
-  // every successful scan during market sessions, every ~30 min when
-  // closed. Latest scanned_at = the most reliable "Vercel cron is alive"
-  // signal in the entire system.
-  try {
-    const sb = createAdminClient();
-    const { data, error } = await withTimeout(
-      sb
-        .from('news_intelligence')
-        .select('scanned_at')
-        .order('scanned_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    );
-    if (error) {
-      return {
-        name: 'Vercel Cron · news-scan',
-        status: 'down',
-        detail: error.message,
-        scheduledEvery: '1 min (gated 30 min when market closed)',
-        dashboardUrl: 'https://vercel.com/dashboard',
-      };
-    }
-    const last = data?.scanned_at ? new Date(String(data.scanned_at)) : null;
-    const ageMs = last ? Date.now() - last.getTime() : Infinity;
-    // 35 min covers worst-case closed-hour gap (30 min) + a buffer.
-    const status: Status = ageMs < 35 * 60_000 ? 'ok' : ageMs < 2 * 60 * 60_000 ? 'warn' : 'down';
-    return {
-      name: 'Vercel Cron · news-scan',
-      status,
-      detail: `last scan: ${fmtAge(last)}`,
-      hint:
-        status !== 'ok'
-          ? 'Sjekk Vercel Cron-loggen for /api/cron/news-scan og at CRON_SECRET stemmer'
-          : undefined,
-      scheduledEvery: '1 min (gated 30 min when closed)',
-      dashboardUrl: 'https://vercel.com/dashboard',
-    };
-  } catch (e) {
-    return {
-      name: 'Vercel Cron · news-scan',
-      status: 'down',
-      detail: String(e),
-      scheduledEvery: '1 min',
-      dashboardUrl: 'https://vercel.com/dashboard',
-    };
-  }
-}
-
-async function probeCronAutonomous(): Promise<CronProbe> {
-  // Autonomous cron does not write a heartbeat — it only writes to
-  // position_lots when a trade fires. Outside RTH (and on slow days)
-  // that's expected to be stale, so "stale" alone isn't a failure.
-  // We surface the latest lot timestamp as a signal of last executed
-  // trade, and link to Vercel for actual cron-run history.
-  try {
-    const sb = createAdminClient();
-    const { data, error } = await withTimeout(
-      sb
-        .from('position_lots')
-        .select('entry_at')
-        .order('entry_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    );
-    if (error) {
-      return {
-        name: 'Vercel Cron · autonomous',
-        status: 'warn',
-        detail: `position_lots query failed: ${error.message}`,
-        scheduledEvery: '1 min',
-        dashboardUrl: 'https://vercel.com/dashboard',
-      };
-    }
-    const last = data?.entry_at ? new Date(String(data.entry_at)) : null;
-    return {
-      name: 'Vercel Cron · autonomous',
-      status: 'unknown',
-      detail: `last executed trade: ${fmtAge(last)} (no heartbeat — stale ok outside RTH)`,
-      hint: 'Run-historikk: Vercel → Project → Cron Jobs → /api/cron/autonomous',
-      scheduledEvery: '1 min',
-      dashboardUrl: 'https://vercel.com/dashboard',
-    };
-  } catch (e) {
-    return {
-      name: 'Vercel Cron · autonomous',
-      status: 'down',
-      detail: String(e),
-      scheduledEvery: '1 min',
-      dashboardUrl: 'https://vercel.com/dashboard',
-    };
-  }
-}
-
-async function probeCronLearn(): Promise<CronProbe> {
-  // Learn cron runs daily at 02:00 UTC. signal_multipliers.updated_at on
-  // the most-recently-touched row is the heartbeat.
-  try {
-    const sb = createAdminClient();
-    const { data, error } = await withTimeout(
-      sb
-        .from('signal_multipliers')
-        .select('updated_at')
-        .order('updated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle(),
-    );
-    if (error) {
-      return {
-        name: 'Vercel Cron · learn',
-        status: 'down',
-        detail: error.message,
-        scheduledEvery: 'daily 02:00 UTC',
-        dashboardUrl: 'https://vercel.com/dashboard',
-      };
-    }
-    const last = data?.updated_at ? new Date(String(data.updated_at)) : null;
-    const ageMs = last ? Date.now() - last.getTime() : Infinity;
-    // Healthy if updated within 30h (gives slack for daily schedule + Vercel jitter).
-    const status: Status =
-      ageMs < 30 * 60 * 60_000 ? 'ok' : ageMs < 72 * 60 * 60_000 ? 'warn' : 'down';
-    return {
-      name: 'Vercel Cron · learn',
-      status,
-      detail: `last update: ${fmtAge(last)}`,
-      hint:
-        status !== 'ok'
-          ? 'Kan også bety for få closed lots — sjekk /api/cron/learn-loggen'
-          : undefined,
-      scheduledEvery: 'daily 02:00 UTC',
-      dashboardUrl: 'https://vercel.com/dashboard',
-    };
-  } catch (e) {
-    return {
-      name: 'Vercel Cron · learn',
-      status: 'down',
-      detail: String(e),
-      scheduledEvery: 'daily 02:00 UTC',
-      dashboardUrl: 'https://vercel.com/dashboard',
-    };
-  }
-}
-
 interface DbActivity {
   table: string;
   rows: number | null;
@@ -354,11 +206,6 @@ async function probeDbActivity(): Promise<DbActivity[]> {
   const sb = createAdminClient();
   const tables: Array<{ name: string; tsCol?: string }> = [
     { name: 'alpaca_accounts', tsCol: 'updated_at' },
-    { name: 'news_intelligence', tsCol: 'scanned_at' },
-    { name: 'ai_portfolio_selections', tsCol: 'selected_at' },
-    { name: 'signal_multipliers', tsCol: 'updated_at' },
-    { name: 'position_lots', tsCol: 'entry_at' },
-    { name: 'earnings_calendar', tsCol: 'fetched_at' },
   ];
   return Promise.all(
     tables.map(async ({ name, tsCol }): Promise<DbActivity> => {
@@ -401,7 +248,7 @@ const ENV_KEYS: Array<{ key: string; group: string; required: boolean }> = [
   { key: 'GROK_MODEL', group: 'xAI', required: false },
   { key: 'GROK_MODEL_NEWS', group: 'xAI', required: false },
   { key: 'GROK_MODEL_PORTFOLIO', group: 'xAI', required: false },
-  { key: 'CRON_SECRET', group: 'Vercel Cron', required: true },
+  { key: 'CRON_SECRET', group: 'Vercel Cron', required: false },
   { key: 'INNGEST_EVENT_KEY', group: 'Inngest', required: false },
   { key: 'INNGEST_SIGNING_KEY', group: 'Inngest', required: false },
   { key: 'ALPACA_DATA_URL', group: 'Alpaca', required: false },
@@ -507,27 +354,23 @@ export default async function OpsPage() {
     notFound();
   }
 
-  const [supabase, xai, clerk, inngest, cronNews, cronAuto, cronLearn, dbActivity] = await Promise.all([
+  const [supabase, xai, clerk, inngest, dbActivity] = await Promise.all([
     probeSupabase(),
     probeXai(),
     probeClerk(),
     probeInngest(),
-    probeCronNewsScan(),
-    probeCronAutonomous(),
-    probeCronLearn(),
     probeDbActivity(),
   ]);
 
   const services: Probe[] = [supabase, xai, clerk, inngest];
-  const crons: CronProbe[] = [cronNews, cronAuto, cronLearn];
   const env = checkEnv();
   const envByGroup = env.reduce<Record<string, typeof env>>((acc, e) => {
     (acc[e.group] ||= []).push(e);
     return acc;
   }, {});
   const missingRequired = env.filter((e) => e.required && !e.present);
-  const overallDown = [...services, ...crons].some((p) => p.status === 'down') || missingRequired.length > 0;
-  const overallWarn = [...services, ...crons].some((p) => p.status === 'warn');
+  const overallDown = services.some((p) => p.status === 'down') || missingRequired.length > 0;
+  const overallWarn = services.some((p) => p.status === 'warn');
   const overall: Status = overallDown ? 'down' : overallWarn ? 'warn' : 'ok';
 
   return (
@@ -583,19 +426,6 @@ export default async function OpsPage() {
         <Grid>
           {services.map((p) => (
             <ProbeCard key={p.name} p={p} />
-          ))}
-        </Grid>
-      </Section>
-
-      <Section title="Vercel Cron-jobber">
-        <Grid>
-          {crons.map((p) => (
-            <div key={p.name} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-              <ProbeCard p={p} />
-              <div style={{ fontSize: 11, color: 'var(--aq-muted)', paddingLeft: 4, fontFamily: 'var(--font-jetbrains)' }}>
-                schedule: {p.scheduledEvery}
-              </div>
-            </div>
           ))}
         </Grid>
       </Section>

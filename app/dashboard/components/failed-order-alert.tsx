@@ -7,7 +7,7 @@ interface Props {
   ticker: string;
   side: 'BUY' | 'SELL';
   message: string;
-  onRetry: () => void;
+  onRetry?: () => void;
   onDismiss: () => void;
 }
 
@@ -23,9 +23,11 @@ export function FailedOrderAlert({ lang, ticker, side, message, onRetry, onDismi
         </div>
         <div className="fail-desc">{message}</div>
         <div className="fail-actions">
-          <button type="button" className="fail-btn-primary" onClick={onRetry}>
-            {t.failRetry}
-          </button>
+          {onRetry && (
+            <button type="button" className="fail-btn-primary" onClick={onRetry}>
+              {t.failRetry}
+            </button>
+          )}
           <button type="button" className="fail-btn-ghost" onClick={onDismiss}>
             {t.failDismiss}
           </button>

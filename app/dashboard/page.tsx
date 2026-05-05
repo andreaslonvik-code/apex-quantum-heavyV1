@@ -15,16 +15,9 @@ import { WithdrawCard } from './components/withdraw-card';
 import { BottomStats } from './components/bottom-stats';
 import { Watchlist, type WatchlistRow, type Signal } from './components/watchlist';
 import { RecentOrders, type RecentOrder } from './components/recent-orders';
-import { NewsFeed, type NewsFeedPayload } from './components/news-feed';
 import { BenchmarkBar, type BenchmarkBarPayload } from './components/benchmark-bar';
 import { WithdrawModal, type WithdrawStatus } from './components/withdraw-modal';
 import type { Lang } from './components/i18n';
-import { WATCHLIST, TICKER_NAME } from '@/lib/blueprint';
-
-// Apex v8 universe joined with live Alpaca positions in the watchlist render.
-const BLUEPRINT_UNIVERSE: Array<{ ticker: string; name: string }> = WATCHLIST.map(
-  (ticker) => ({ ticker, name: TICKER_NAME[ticker] || ticker })
-);
 
 interface AccountInfo {
   accountId: string;
@@ -78,7 +71,6 @@ export default function DashboardPage() {
   const [performance, setPerformance] = useState<PerformancePayload | null>(null);
   const [positions, setPositions] = useState<AlpacaPositionPayload[]>([]);
   const [orders, setOrders] = useState<RecentOrder[]>([]);
-  const [newsFeed, setNewsFeed] = useState<NewsFeedPayload | null>(null);
   const [dismissedOrders, setDismissedOrders] = useState<Set<string>>(new Set());
   const [botRunning, setBotRunning] = useState(true);
   const [wdOpen, setWdOpen] = useState(false);
@@ -100,19 +92,6 @@ export default function DashboardPage() {
       /* soft-fail; next tick will retry */
     }
   }, [tf]);
-
-  // News intel only updates hourly — poll on a slower cadence than the
-  // 3 s trading-state poll so we don't hammer Alpaca / Supabase for free.
-  const refreshNews = useCallback(async () => {
-    try {
-      const r = await fetch('/api/apex/news-feed', { credentials: 'include' });
-      if (!r.ok) return;
-      const data = await r.json();
-      if (data?.feed !== undefined) setNewsFeed(data.feed as NewsFeedPayload | null);
-    } catch {
-      /* soft-fail */
-    }
-  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -160,13 +139,6 @@ export default function DashboardPage() {
     };
   }, [isConnected, refreshAll]);
 
-  useEffect(() => {
-    if (!isConnected) return;
-    refreshNews();
-    const newsTimer = setInterval(refreshNews, 60_000);
-    return () => clearInterval(newsTimer);
-  }, [isConnected, refreshNews]);
-
   // ── Derived values ───────────────────────────────────────────────────
   const startVal = performance?.current?.initialValue ?? accountInfo?.equity ?? 0;
   const currentVal = performance?.current?.totalValue ?? accountInfo?.equity ?? 0;
@@ -210,18 +182,8 @@ export default function DashboardPage() {
       if (!recentByTicker.has(o.ticker)) recentByTicker.set(o.ticker, o.action);
     }
 
-    const universe = new Set<string>(BLUEPRINT_UNIVERSE.map((u) => u.ticker));
-    const merged = [
-      ...BLUEPRINT_UNIVERSE,
-      ...positions
-        .filter((p) => !universe.has(p.ticker))
-        .map((p) => ({ ticker: p.ticker, name: p.symbol })),
-    ];
+    const merged = positions.map((p) => ({ ticker: p.ticker, name: p.symbol }));
 
-    // P&L thresholds match the engine's actual exit zones:
-    //   ≤ -1.8 % → approaching the -2 % static stop
-    //   ≥ +15 % → in the PROFIT_TAKE zone
-    // Anything in between is HOLD — the engine isn't going to act on it.
     const SELL_LOSS_PCT = -1.8;
     const SELL_PROFIT_PCT = 15;
 
@@ -299,16 +261,6 @@ export default function DashboardPage() {
   const handleStopAll = () => {
     setBotRunning(false);
     toast.error(lang === 'no' ? 'Stopp aktivert — ingen nye ordre' : 'Halt active — no new orders');
-  };
-
-  const handleRetryOrder = () => {
-    toast.info(
-      lang === 'no'
-        ? 'Trigger ny scan — agenten plasserer ordren igjen ved neste signal.'
-        : 'New scan triggered — the agent will retry on the next signal.'
-    );
-    fetch('/api/apex/autonomous', { method: 'POST', credentials: 'include' }).catch(() => {});
-    refreshAll();
   };
 
   const handleDismissOrder = (ticker: string, time: string) => {
@@ -434,11 +386,9 @@ export default function DashboardPage() {
                   ? `${failedOrder.reason || 'Ordre ble avvist'}. Kan skyldes at markedet var stengt eller utilstrekkelig kjøpekraft.`
                   : `${failedOrder.reason || 'Order rejected'}. Possibly the market was closed or buying power was insufficient.`
               }
-              onRetry={handleRetryOrder}
               onDismiss={() => handleDismissOrder(failedOrder.ticker, failedOrder.submittedAt)}
             />
           )}
-          <NewsFeed lang={lang} feed={newsFeed} />
           <WithdrawCard
             lang={lang}
             startVal={startVal}
