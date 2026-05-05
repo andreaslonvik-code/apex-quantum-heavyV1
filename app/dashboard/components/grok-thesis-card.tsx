@@ -125,7 +125,7 @@ export function GrokThesisCard({ lang }: Props) {
           if (tr.status === 'OK') totalOk += 1;
           else if (tr.status === 'ERR') {
             totalErr += 1;
-            if (tradeErrors.length < 3) {
+            if (tradeErrors.length < 10) {
               tradeErrors.push(
                 `${bp.blueprintId}/${tr.ticker} ${tr.action}: ${tr.error ?? 'rejected'}`,
               );
@@ -139,8 +139,8 @@ export function GrokThesisCard({ lang }: Props) {
       }
       if (totalErr > 0) {
         toast.error(
-          `${totalOk} ordre OK, ${totalErr} avvist av Alpaca. Først: ${tradeErrors.join(' | ')}`,
-          { duration: 12_000 },
+          `${totalOk} ordre OK, ${totalErr} avvist av Alpaca:\n${tradeErrors.join('\n')}`,
+          { duration: 30_000 },
         );
       }
       if (totalOk > 0 && totalErr === 0 && grokErrors.length === 0) {
