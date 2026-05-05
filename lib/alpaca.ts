@@ -47,12 +47,33 @@ export interface AlpacaAccount {
   currency: string;
   cash: string;
   equity: string;
+  last_equity?: string;
   buying_power: string;
+  /** ≈ cash. Used by Alpaca for fractional / notional orders. */
+  non_marginable_buying_power?: string;
+  regt_buying_power?: string;
+  daytrading_buying_power?: string;
+  effective_buying_power?: string;
+  initial_margin?: string;
+  maintenance_margin?: string;
   portfolio_value: string;
   pattern_day_trader: boolean;
   trading_blocked: boolean;
   account_blocked: boolean;
+  trade_suspended_by_user?: boolean;
+  shorting_enabled?: boolean;
+  multiplier?: string;
   created_at: string;
+}
+
+export interface AlpacaAccountConfig {
+  dtbp_check?: string;
+  trade_confirm_email?: string;
+  suspend_trade?: boolean;
+  no_shorting?: boolean;
+  fractional_trading?: boolean;
+  max_margin_multiplier?: string;
+  pdt_check?: string;
 }
 
 export interface AlpacaPosition {
@@ -109,6 +130,8 @@ export interface AlpacaOrder {
   client_order_id: string;
   symbol: string;
   qty: string;
+  /** Notional dollar amount when the order was placed via notional. */
+  notional?: string;
   side: string;
   status: string;
   type: string;
@@ -117,6 +140,14 @@ export interface AlpacaOrder {
   filled_qty?: string;
   submitted_at: string;
   filled_at?: string;
+  expired_at?: string;
+  canceled_at?: string;
+  failed_at?: string;
+  replaced_at?: string;
+  /** Reason returned when an order is rejected/cancelled by Alpaca. */
+  reject_reason?: string;
+  /** Free-form failure message Alpaca includes for some rejected orders. */
+  failure_reason?: string;
 }
 
 export interface AlpacaAsset {
@@ -255,6 +286,16 @@ async function alpacaFetch<T = unknown>(
 /** Fetch full Alpaca account snapshot. Used to validate creds on connect. */
 export function getAccount(creds: AlpacaCreds): Promise<AlpacaResult<AlpacaAccount>> {
   return alpacaFetch<AlpacaAccount>(`${getTradingBase(creds.env)}/account`, creds);
+}
+
+/** Fetch account configuration (fractional flag, day-trade rules, etc). */
+export function getAccountConfigurations(
+  creds: AlpacaCreds,
+): Promise<AlpacaResult<AlpacaAccountConfig>> {
+  return alpacaFetch<AlpacaAccountConfig>(
+    `${getTradingBase(creds.env)}/account/configurations`,
+    creds,
+  );
 }
 
 /** Validate API credentials by hitting /account. Returns the account if valid.
