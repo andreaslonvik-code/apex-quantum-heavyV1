@@ -8,11 +8,22 @@
 
 const GROK_ENDPOINT = 'https://api.x.ai/v1/responses';
 const FALLBACK_MODEL = 'grok-4';
-// Read XAI_MODEL first, fall back to GROK_MODEL (legacy name), then default
-// to `grok-4`. If the configured model returns "Model not found" we fall
-// back to `grok-4` automatically.
-const PRIMARY_MODEL =
-  process.env.XAI_MODEL ?? process.env.GROK_MODEL ?? FALLBACK_MODEL;
+// Resolve the API model name. Read XAI_MODEL or legacy GROK_MODEL env var,
+// but force-coerce any "heavy" variant down to `grok-4` because the Heavy
+// multi-agent variant is not callable on the public API tier (HTTP 400
+// "Model not found"). The Grok web/app chat uses Heavy via SuperGrok, but
+// API access requires a different tier.
+const PRIMARY_MODEL = ((): string => {
+  const fromEnv = process.env.XAI_MODEL ?? process.env.GROK_MODEL;
+  if (!fromEnv) return FALLBACK_MODEL;
+  if (fromEnv.toLowerCase().includes('heavy')) {
+    console.warn(
+      `[grok] env var requested "${fromEnv}" but that variant is not API-callable. Using ${FALLBACK_MODEL} instead.`,
+    );
+    return FALLBACK_MODEL;
+  }
+  return fromEnv;
+})();
 // 5 min — matches Vercel function maxDuration. Grok-4-Heavy reasoning + tool
 // loops can take 2–4 min on large prompts.
 const REQUEST_TIMEOUT_MS = 290_000;
