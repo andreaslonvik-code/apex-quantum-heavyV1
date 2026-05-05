@@ -74,8 +74,11 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     rsiOversold: 30,
     rsiOverbought: 70,
     riskPctPerTrade: 0.015,
-    maxPositions: 3,
-    maxPctPerPosition: 50,
+    // Bumped from 3 → 6. With Alpaca's ~$10 k per-order cap on fractional
+    // notional, a $47 k bucket needs ≥ 5 picks to fully deploy. 6 leaves
+    // headroom and improves diversification across the 137-ticker universe.
+    maxPositions: 6,
+    maxPctPerPosition: 25,
     dailyKillSwitchPct: -0.25,
     atrPeriod: 14,
     atrStopMult: 1.5,

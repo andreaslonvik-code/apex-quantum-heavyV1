@@ -6,17 +6,25 @@ import type { Blueprint } from './types';
 export const COMMODITIES_BLUEPRINT: Blueprint = {
   id: 'commodities',
   name: 'Apex Quantum v3.0 — Råvarer',
-  watchlist: ['BNO', 'GOLD'],
+  watchlist: ['BNO', 'GOLD', 'GLD', 'IAU', 'GDX', 'NEM', 'USO', 'XLE'],
   tickerNames: {
     BNO: 'United States Brent Oil Fund',
     GOLD: 'Barrick Gold',
+    GLD: 'SPDR Gold Shares',
+    IAU: 'iShares Gold Trust',
+    GDX: 'VanEck Gold Miners',
+    NEM: 'Newmont',
+    USO: 'United States Oil Fund',
+    XLE: 'Energy Select Sector',
   },
   params: {
     rsiOversold: 35,
     rsiOverbought: 70,
     riskPctPerTrade: 0.015,
-    maxPositions: 3,
-    maxPctPerPosition: 40,
+    // 5 picks among 8 commodities tickers lets full bucket deploy under
+    // Alpaca's per-order notional cap.
+    maxPositions: 5,
+    maxPctPerPosition: 25,
     dailyKillSwitchPct: -0.03,
     atrPeriod: 14,
     atrStopMult: 1.5,

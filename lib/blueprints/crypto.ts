@@ -34,8 +34,10 @@ export const CRYPTO_BLUEPRINT: Blueprint = {
     rsiOversold: 30,
     rsiOverbought: 70,
     riskPctPerTrade: 0.015,
-    maxPositions: 3,
-    maxPctPerPosition: 50,
+    // 5 picks across 10 crypto pairs allows full bucket deploy under
+    // Alpaca's per-order cap and keeps diversification.
+    maxPositions: 5,
+    maxPctPerPosition: 25,
     dailyKillSwitchPct: -0.03,
     atrPeriod: 14,
     atrStopMult: 1.5,

@@ -75,6 +75,10 @@ export interface UserScanResult {
 const GROK_CADENCE_MS = 2 * 60 * 1000;
 const INDICATOR_BAR_COUNT = 60; // bars to fetch for indicator summary
 const MIN_NOTIONAL_USD = 1.0;
+// Alpaca paper has an empirical per-order cap on fractional/notional buys
+// around $10–15 k. Going above the cap returns "insufficient buying power"
+// even when total account cash is plenty. Stay safely under it.
+const MAX_PER_ORDER_NOTIONAL = 9_500;
 
 function tradingSymbol(symbol: string): string {
   return symbol.replace('/', '');
@@ -492,6 +496,7 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
       freeBucketCapital / buyDecs.length,
       maxNotionalPerTicker,
       safeRemainingBP / buyDecs.length,
+      MAX_PER_ORDER_NOTIONAL, // Alpaca paper rejects fractional notional > ~$10–15 k.
     );
   }
 
