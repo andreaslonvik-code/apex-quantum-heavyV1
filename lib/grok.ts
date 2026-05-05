@@ -126,15 +126,13 @@ async function callOnce(
         tools: [
           {
             type: 'live_search',
-            live_search: {
-              mode: 'auto',
-              sources: [
-                { type: 'web' },
-                { type: 'x' },
-                { type: 'news' },
-              ],
-              return_citations: true,
-            },
+            mode: 'auto',
+            sources: [
+              { type: 'web' },
+              { type: 'x' },
+              { type: 'news' },
+            ],
+            return_citations: true,
           },
         ],
       }),
