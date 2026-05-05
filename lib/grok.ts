@@ -40,6 +40,8 @@ export interface GrokUsage {
   prompt_tokens?: number;
   completion_tokens?: number;
   total_tokens?: number;
+  /** Number of live-search sources Grok consumed for this call. */
+  num_sources_used?: number;
 }
 
 interface ChatRequest {
@@ -99,6 +101,9 @@ async function callOnce(
   let rawText = '';
   try {
     // Reasoning models on xAI (grok-4) do not accept `temperature` — drop it.
+    // Live Search lets Grok pull X posts, news, and web data per call —
+    // matches the experience of the Grok web/app chat. Without it the API
+    // is "blind" to anything outside the prompt we hand it.
     res = await fetch(GROK_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -113,6 +118,15 @@ async function callOnce(
           { role: 'user', content: req.userPrompt },
         ],
         response_format: { type: 'json_object' },
+        search_parameters: {
+          mode: 'auto',
+          sources: [
+            { type: 'web' },
+            { type: 'x' },
+            { type: 'news' },
+          ],
+          return_citations: true,
+        },
       }),
     });
   } catch (e) {
