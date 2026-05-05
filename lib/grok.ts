@@ -124,9 +124,18 @@ async function callOnce(
         ],
         response_format: { type: 'json_object' },
         tools: [
-          { type: 'web_search' },
-          { type: 'x_search' },
-          { type: 'code_interpreter' },
+          {
+            type: 'live_search',
+            live_search: {
+              mode: 'auto',
+              sources: [
+                { type: 'web' },
+                { type: 'x' },
+                { type: 'news' },
+              ],
+              return_citations: true,
+            },
+          },
         ],
       }),
     });
