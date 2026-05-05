@@ -14,11 +14,22 @@ interface GrokDecision {
   reason: string;
 }
 
+interface TradeOutcome {
+  ticker: string;
+  action: 'BUY' | 'SELL';
+  status: 'OK' | 'ERR' | 'SKIP';
+  notional: number;
+  qty: number;
+  reason: string;
+  error?: string;
+}
+
 interface GrokRow {
   blueprintId: AssetClass;
   decidedAt: string;
   thesis: string | null;
   decisions: GrokDecision[];
+  tradeOutcomes: TradeOutcome[];
   failed: boolean;
   errorMessage: string | null;
 }
@@ -233,40 +244,69 @@ export function GrokThesisCard({ lang }: Props) {
                     )}
                     {row.decisions.length > 0 && (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                        {row.decisions.map((d, i) => (
-                          <div
-                            key={`${d.ticker}-${i}`}
-                            style={{
-                              display: 'grid',
-                              gridTemplateColumns: '60px 56px 1fr',
-                              gap: 8,
-                              fontSize: 12,
-                              alignItems: 'baseline',
-                            }}
-                          >
-                            <span style={{ fontFamily: 'var(--font-jetbrains)', fontWeight: 600 }}>
-                              {d.ticker}
-                            </span>
-                            <span
+                        {row.decisions.map((d, i) => {
+                          const outcome = (row.tradeOutcomes ?? []).find(
+                            (o) => o.ticker === d.ticker && o.action === d.action,
+                          );
+                          const status = outcome?.status;
+                          const statusBadge =
+                            status === 'OK'
+                              ? { label: 'FYLT', color: 'var(--aq-green)' }
+                              : status === 'ERR'
+                                ? { label: 'AVVIST', color: 'var(--aq-red)' }
+                                : status === 'SKIP'
+                                  ? { label: 'HOPP', color: 'var(--aq-warn)' }
+                                  : d.action === 'HOLD'
+                                    ? null
+                                    : { label: '…', color: 'rgba(255,255,255,0.4)' };
+                          return (
+                            <div
+                              key={`${d.ticker}-${i}`}
                               style={{
-                                fontFamily: 'var(--font-jetbrains)',
-                                fontSize: 11,
-                                color:
-                                  d.action === 'BUY'
-                                    ? 'var(--aq-green)'
-                                    : d.action === 'SELL'
-                                      ? 'var(--aq-red)'
-                                      : 'rgba(255,255,255,0.5)',
+                                display: 'grid',
+                                gridTemplateColumns: '60px 56px 64px 1fr',
+                                gap: 8,
+                                fontSize: 12,
+                                alignItems: 'baseline',
                               }}
                             >
-                              {t.actions[d.action]}
-                              {d.action === 'BUY' && d.notional_usd
-                                ? ` $${Math.round(d.notional_usd).toLocaleString()}`
-                                : ''}
-                            </span>
-                            <span style={{ color: 'rgba(255,255,255,0.65)' }}>{d.reason}</span>
-                          </div>
-                        ))}
+                              <span style={{ fontFamily: 'var(--font-jetbrains)', fontWeight: 600 }}>
+                                {d.ticker}
+                              </span>
+                              <span
+                                style={{
+                                  fontFamily: 'var(--font-jetbrains)',
+                                  fontSize: 11,
+                                  color:
+                                    d.action === 'BUY'
+                                      ? 'var(--aq-green)'
+                                      : d.action === 'SELL'
+                                        ? 'var(--aq-red)'
+                                        : 'rgba(255,255,255,0.5)',
+                                }}
+                              >
+                                {t.actions[d.action]}
+                                {outcome && outcome.notional > 0
+                                  ? ` $${Math.round(outcome.notional).toLocaleString()}`
+                                  : ''}
+                              </span>
+                              <span
+                                style={{
+                                  fontFamily: 'var(--font-jetbrains)',
+                                  fontSize: 10,
+                                  color: statusBadge?.color ?? 'transparent',
+                                }}
+                              >
+                                {statusBadge?.label ?? ''}
+                              </span>
+                              <span style={{ color: 'rgba(255,255,255,0.65)' }}>
+                                {outcome?.error
+                                  ? `${d.reason} — ${outcome.error.slice(0, 80)}`
+                                  : d.reason}
+                              </span>
+                            </div>
+                          );
+                        })}
                       </div>
                     )}
                   </>

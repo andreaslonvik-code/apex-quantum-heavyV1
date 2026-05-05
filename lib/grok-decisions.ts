@@ -2,6 +2,16 @@ import { createAdminClient } from '@/utils/supabase/admin';
 import type { AssetClass } from './blueprints';
 import type { GrokDecision, GrokUsage } from './grok';
 
+export interface TradeOutcome {
+  ticker: string;
+  action: 'BUY' | 'SELL';
+  status: 'OK' | 'ERR' | 'SKIP';
+  notional: number;
+  qty: number;
+  reason: string;
+  error?: string;
+}
+
 export interface GrokDecisionRow {
   id: number;
   clerkUserId: string;
@@ -9,6 +19,7 @@ export interface GrokDecisionRow {
   decidedAt: string;
   thesis: string | null;
   decisions: GrokDecision[];
+  tradeOutcomes: TradeOutcome[];
   promptTokens: number | null;
   outputTokens: number | null;
   failed: boolean;
@@ -22,6 +33,7 @@ interface DbRow {
   decided_at: string;
   thesis: string | null;
   decisions: unknown;
+  trade_outcomes: unknown;
   prompt_tokens: number | null;
   output_tokens: number | null;
   failed: boolean;
@@ -36,6 +48,7 @@ function rowToDecision(row: DbRow): GrokDecisionRow {
     decidedAt: row.decided_at,
     thesis: row.thesis,
     decisions: Array.isArray(row.decisions) ? (row.decisions as GrokDecision[]) : [],
+    tradeOutcomes: Array.isArray(row.trade_outcomes) ? (row.trade_outcomes as TradeOutcome[]) : [],
     promptTokens: row.prompt_tokens,
     outputTokens: row.output_tokens,
     failed: row.failed,
@@ -81,6 +94,7 @@ interface SaveInput {
   blueprintId: AssetClass;
   thesis: string;
   decisions: GrokDecision[];
+  tradeOutcomes?: TradeOutcome[];
   usage?: GrokUsage;
   rawResponse: unknown;
   failed?: boolean;
@@ -95,6 +109,7 @@ export async function saveDecision(input: SaveInput): Promise<void> {
       blueprint_id: input.blueprintId,
       thesis: input.thesis || null,
       decisions: input.decisions,
+      trade_outcomes: input.tradeOutcomes ?? [],
       prompt_tokens: input.usage?.prompt_tokens ?? null,
       output_tokens: input.usage?.completion_tokens ?? null,
       raw_response: input.rawResponse ?? null,

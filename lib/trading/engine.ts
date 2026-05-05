@@ -854,6 +854,15 @@ async function runBlueprint(args: {
     blueprintId: blueprint.id,
     thesis: payload.thesis,
     decisions: payload.decisions,
+    tradeOutcomes: exec.trades.map((t) => ({
+      ticker: t.ticker,
+      action: t.action,
+      status: t.status,
+      notional: t.notional,
+      qty: t.qty,
+      reason: t.reason,
+      ...(t.error ? { error: t.error } : {}),
+    })),
     usage: grokRes.usage,
     rawResponse: grokRes.raw ?? null,
   });

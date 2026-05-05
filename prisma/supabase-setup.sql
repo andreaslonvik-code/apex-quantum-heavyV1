@@ -75,12 +75,18 @@ CREATE TABLE IF NOT EXISTS grok_decisions (
   decided_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   thesis          TEXT,
   decisions       JSONB NOT NULL DEFAULT '[]'::jsonb,
+  /** Per-decision execution outcome — { ticker, action, status, notional?, error? }. */
+  trade_outcomes  JSONB NOT NULL DEFAULT '[]'::jsonb,
   prompt_tokens   INTEGER,
   output_tokens   INTEGER,
   raw_response    JSONB,
   failed          BOOLEAN NOT NULL DEFAULT false,
   error_message   TEXT
 );
+
+-- Backfill on existing tables.
+ALTER TABLE grok_decisions
+  ADD COLUMN IF NOT EXISTS trade_outcomes JSONB NOT NULL DEFAULT '[]'::jsonb;
 
 CREATE INDEX IF NOT EXISTS grok_decisions_user_blueprint_idx
   ON grok_decisions (clerk_user_id, blueprint_id, decided_at DESC);
