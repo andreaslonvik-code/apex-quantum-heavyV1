@@ -6,25 +6,10 @@ import type { Blueprint } from './types';
 export const COMMODITIES_BLUEPRINT: Blueprint = {
   id: 'commodities',
   name: 'Apex Quantum v3.0 — Råvarer',
-  watchlist: [
-    // Gold
-    'GLD', 'IAU', 'GDX', 'NEM',
-    // Oil / energy
-    'USO', 'BNO', 'XLE', 'EQNR', 'XOM', 'CVX', 'OXY', 'SLB',
-  ],
+  watchlist: ['BNO', 'GOLD'],
   tickerNames: {
-    GLD: 'SPDR Gold Shares',
-    IAU: 'iShares Gold Trust',
-    GDX: 'VanEck Gold Miners',
-    NEM: 'Newmont',
-    USO: 'United States Oil Fund',
-    BNO: 'Brent Oil Fund',
-    XLE: 'Energy Select Sector',
-    EQNR: 'Equinor',
-    XOM: 'ExxonMobil',
-    CVX: 'Chevron',
-    OXY: 'Occidental',
-    SLB: 'Schlumberger',
+    BNO: 'United States Brent Oil Fund',
+    GOLD: 'Barrick Gold',
   },
   params: {
     rsiOversold: 35,

@@ -68,7 +68,7 @@ export interface UserScanResult {
   error?: string;
 }
 
-const GROK_CADENCE_MS = 15 * 60 * 1000;
+const GROK_CADENCE_MS = 2 * 60 * 1000;
 const INDICATOR_BAR_COUNT = 60; // bars to fetch for indicator summary
 const MIN_NOTIONAL_USD = 1.0;
 
@@ -225,7 +225,24 @@ function buildUserPrompt(args: {
     allocationPct,
   } = args;
 
+  const isBucketEmpty = positions.length === 0 && inFlightTickers.length === 0;
+  const targetSlots = Math.min(
+    blueprint.params.maxPositions,
+    Math.max(1, candidates.length),
+  );
+  const minNotionalPerSlot = bucketCapital > 0 ? Math.floor((bucketCapital / targetSlots) * 0.95) : 0;
+
   return [
+    `# KRITISK MANDAT — LES FØRST`,
+    ``,
+    `Brukeren krever at HELE bøtte-kapitalen er deployert til enhver tid.`,
+    `Det betyr at du ALDRI skal returnere bare HOLD-decisions når bøtta har ledige slots og ledig kapital.`,
+    `Hvis blueprint-strategien sier "vent på RSI<30 + MA200-support", må du fortsatt`,
+    `velge de BESTE tilgjengelige kandidatene fra watchlisten og deploye kapital nå.`,
+    `Du står fritt til å rangere etter momentum, regime, sentiment, eller blueprint-vekt — men`,
+    `du MÅ levere BUY-decisions som dekker hele ledig bøtte-kapital ved hver beslutning så lenge`,
+    `bøtta ikke er full og ikke ligger i kill-switch.`,
+    ``,
     `# Live trading-kontekst`,
     ``,
     `Asset class: ${blueprint.id}`,
@@ -235,6 +252,7 @@ function buildUserPrompt(args: {
     `Bøtte-kapital (USD): ${round(bucketCapital, 2)}`,
     `Buying power (USD): ${round(buyingPower, 2)}`,
     `Maks samtidige posisjoner i denne bøtta: ${blueprint.params.maxPositions}`,
+    `Status: ${isBucketEmpty ? 'BØTTA ER TOM — MÅ DEPLOYE FULL KAPITAL NÅ' : `${positions.length} posisjon(er) holdes`}`,
     ``,
     `## Eksisterende posisjoner i bøtta`,
     positions.length === 0 ? '(ingen)' : JSON.stringify(positions, null, 2),
@@ -247,21 +265,25 @@ function buildUserPrompt(args: {
     ``,
     `# Oppgave`,
     ``,
-    `Følg blueprint-strategien fra system-prompten SLAVISK. Returner et JSON-objekt med formatet:`,
+    `Følg blueprint-strategien fra system-prompten der den IKKE konflikter med kapital-deploy-mandatet.`,
+    `Hvis bøtta er tom: rangér watchlisten etter beste tilgjengelige kombinasjon av momentum, regime-fit,`,
+    `og blueprint-prioritering, og lever ${targetSlots} BUY-decisions som tilsammen bruker hele bøtte-kapitalen.`,
+    `Hvis bøtta er delvis full: fyll resterende slots OG vurder om eksisterende posisjoner bør holdes/selges.`,
+    ``,
+    `Returner et JSON-objekt med formatet:`,
     `{`,
     `  "thesis": "kort sammendrag av regime, geopolitikk og strategi for denne bøtta (maks 400 tegn)",`,
     `  "decisions": [`,
-    `    { "ticker": "<symbol fra watchlisten>", "action": "BUY"|"SELL"|"HOLD", "notional_usd": <USD-beløp ved BUY>, "reason": "kort begrunnelse (maks 200 tegn) basert på blueprint-reglene" }`,
+    `    { "ticker": "<symbol fra watchlisten>", "action": "BUY"|"SELL"|"HOLD", "notional_usd": <USD-beløp ved BUY>, "reason": "kort begrunnelse (maks 200 tegn)" }`,
     `  ]`,
     `}`,
     ``,
     `Regler for output:`,
     `- Kun watchlist-tickere er tillatt.`,
-    `- Sum av notional_usd på BUY-decisions må ikke overstige bøtte-kapital eller buying power.`,
+    `- Sum av notional_usd på BUY-decisions skal være så nær bøtte-kapital ($${round(bucketCapital, 2)}) som mulig — minimum ${minNotionalPerSlot > 0 ? `$${minNotionalPerSlot} per ny posisjon` : 'fyll bøtta så mye som mulig'}.`,
+    `- Sum av notional_usd skal ALDRI overstige bøtte-kapital eller buying power.`,
     `- Hold deg innenfor max ${blueprint.params.maxPositions} samtidige posisjoner (eksisterende + nye BUYs).`,
     `- Maks ${blueprint.params.maxPctPerPosition} % av bøtta i én ticker.`,
-    `- Risiko per trade ${(blueprint.params.riskPctPerTrade * 100).toFixed(1)} % via ATR-skalert sizing der relevant.`,
-    `- Grunngivelse for hver decision skal referere til konkrete blueprint-regler (RSI, MA, regime, geopolitikk, profit-take, ATR-stop, etc.).`,
     `- HOLD = ingen ordre, posisjon beholdes.`,
     `- SELL = lukk hele posisjonen.`,
     `- BUY på en ticker som allerede holdes = øk posisjonen med notional_usd (DCA).`,
