@@ -102,13 +102,13 @@ async function callOnce(
   try {
     // Reasoning models on xAI (grok-4) do not accept `temperature` — drop it.
     //
-    // Built-in Agent Tools (xAI's replacement for the deprecated
-    // search_parameters API). Server-side execution: Grok runs each tool
-    // internally and returns the final, post-search answer in one response.
-    // No multi-turn loop required from us.
-    //   - web_search: pulls live web pages
-    //   - x_search:   pulls live X (Twitter) posts
-    //   - code_interpreter: runs arbitrary Python for math/parsing
+    // Live data is currently OFF. xAI deprecated `search_parameters` and
+    // `live_search` tool variants on the chat completions endpoint, and
+    // their new Agent Tools API (web_search/x_search/code_interpreter)
+    // appears to be exposed only through the Responses API
+    // (https://docs.x.ai/docs/guides/tools/overview), which uses a
+    // different endpoint + schema. Migration is a separate task. For now
+    // Grok answers from training data only.
     res = await fetch(GROK_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -123,18 +123,6 @@ async function callOnce(
           { role: 'user', content: req.userPrompt },
         ],
         response_format: { type: 'json_object' },
-        tools: [
-          {
-            type: 'live_search',
-            mode: 'auto',
-            sources: [
-              { type: 'web' },
-              { type: 'x' },
-              { type: 'news' },
-            ],
-            return_citations: true,
-          },
-        ],
       }),
     });
   } catch (e) {
