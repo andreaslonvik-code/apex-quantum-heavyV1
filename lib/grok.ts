@@ -51,12 +51,46 @@ interface ChatRequest {
 /**
  * Call Grok with a system + user prompt and parse the JSON response into a
  * decision payload. Returns a discriminated-union result — never throws.
+ *
+ * Retries on transient xAI overload responses (HTTP 429 / 503) with
+ * exponential backoff up to 3 attempts. Other errors fail fast.
  */
 export async function decide(req: ChatRequest): Promise<GrokResult> {
   const apiKey = process.env.XAI_API_KEY;
   if (!apiKey) return { success: false, error: 'XAI_API_KEY not set' };
 
   const model = req.model ?? DEFAULT_MODEL;
+  const maxAttempts = 3;
+  let lastError: GrokResult | null = null;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const r = await callOnce(apiKey, model, req);
+    if (r.success) return r;
+
+    lastError = r;
+    // Only retry on transient overload signatures.
+    const transient =
+      typeof r.error === 'string' &&
+      (r.error.includes('HTTP 503') ||
+        r.error.includes('HTTP 429') ||
+        r.error.includes('at capacity') ||
+        r.error.includes('temporarily unavailable'));
+    if (!transient || attempt === maxAttempts) break;
+
+    // Exponential backoff: 5s, 12s, 25s (with small jitter).
+    const baseMs = [5_000, 12_000, 25_000][attempt - 1] ?? 30_000;
+    const jitter = Math.floor(Math.random() * 2_000);
+    await new Promise((resolve) => setTimeout(resolve, baseMs + jitter));
+  }
+
+  return lastError ?? { success: false, error: 'unknown' };
+}
+
+async function callOnce(
+  apiKey: string,
+  model: string,
+  req: ChatRequest,
+): Promise<GrokResult> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
 
@@ -91,7 +125,6 @@ export async function decide(req: ChatRequest): Promise<GrokResult> {
     rawText = await res.text();
     raw = rawText ? JSON.parse(rawText) : null;
   } catch (e) {
-    // If body isn't JSON, surface the raw text so we can see exactly what xAI said.
     return {
       success: false,
       error: `non-JSON body (${res.status}): ${rawText.slice(0, 500)} — parse: ${e instanceof Error ? e.message : String(e)}`,
