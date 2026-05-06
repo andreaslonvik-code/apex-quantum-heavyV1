@@ -88,6 +88,77 @@ function tradingSymbol(symbol: string): string {
   return symbol.replace('/', '');
 }
 
+/**
+ * Build a stock/ETF order that works in BOTH regular hours and pre-/after-
+ * market. Alpaca rules:
+ *   - Regular hours (09:30–16:00 ET): market orders + notional fractional ok.
+ *   - Extended hours (04:00–09:30 ET pre, 16:00–20:00 ET after): ONLY
+ *     limit + day + extended_hours: true + WHOLE shares. Market orders and
+ *     notional/fractional are rejected.
+ *
+ * `currentPrice` required so we can size whole-share qty + a tight limit
+ * price when we drop into extended-hours mode.
+ */
+function buildStockOrder(args: {
+  symbol: string;
+  side: 'buy' | 'sell';
+  qty?: number;
+  notional?: number;
+  currentPrice: number;
+  marketIsOpen: boolean;
+}): import('@/lib/alpaca').AlpacaOrderRequest | null {
+  const { symbol, side, qty, notional, currentPrice, marketIsOpen } = args;
+  const positionIntent = side === 'buy' ? 'buy_to_open' : 'sell_to_close';
+
+  if (marketIsOpen) {
+    if (notional !== undefined && notional > 0) {
+      return {
+        symbol,
+        notional,
+        side,
+        type: 'market',
+        time_in_force: 'day',
+        position_intent: positionIntent,
+      };
+    }
+    if (qty !== undefined && qty > 0) {
+      return {
+        symbol,
+        qty,
+        side,
+        type: 'market',
+        time_in_force: 'day',
+        position_intent: positionIntent,
+      };
+    }
+    return null;
+  }
+
+  // Extended hours: limit + whole shares + extended_hours flag.
+  if (currentPrice <= 0) return null;
+  const limitPrice =
+    side === 'buy'
+      ? Math.round(currentPrice * 1.005 * 100) / 100
+      : Math.round(currentPrice * 0.995 * 100) / 100;
+  let wholeQty = 0;
+  if (qty !== undefined && qty > 0) {
+    wholeQty = Math.floor(qty);
+  } else if (notional !== undefined && notional > 0) {
+    wholeQty = Math.floor(notional / currentPrice);
+  }
+  if (wholeQty <= 0) return null;
+  return {
+    symbol,
+    qty: wholeQty,
+    side,
+    type: 'limit',
+    limit_price: limitPrice,
+    time_in_force: 'day',
+    extended_hours: true,
+    position_intent: positionIntent,
+  };
+}
+
 function normalizePositionSymbol(symbol: string): string {
   if (symbol.includes('/')) return symbol;
   if (/^[A-Z]+USD$/.test(symbol) && symbol.length >= 6) {
@@ -444,6 +515,8 @@ interface ExecuteArgs {
   bucketCapital: number;
   /** Account-wide cap. perPickNotional × num_buys cannot exceed this. */
   remainingBuyingPower: number;
+  /** Whether NYSE regular hours are active. False during pre/after-market. */
+  marketIsOpen: boolean;
   payload: GrokDecisionPayload;
   positionsByTicker: Map<string, AlpacaPosition>;
   inFlightTickers: Set<string>;
@@ -461,6 +534,7 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     blueprint,
     bucketCapital,
     remainingBuyingPower,
+    marketIsOpen,
     payload,
     positionsByTicker,
     inFlightTickers,
@@ -527,14 +601,33 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
       if (!held) return skipTrade(blueprint.id, ticker, 'SELL', 'no_position');
       const qty = parseFloat(held.qty) || 0;
       if (qty <= 0) return skipTrade(blueprint.id, ticker, 'SELL', 'zero_qty');
-      const r = await placeOrder(creds, {
-        symbol: tradingSymbol(ticker),
-        qty,
-        side: 'sell',
-        type: 'market',
-        time_in_force: isCrypto ? 'gtc' : 'day',
-        position_intent: 'sell_to_close',
-      });
+      let orderReq: import('@/lib/alpaca').AlpacaOrderRequest | null;
+      if (isCrypto) {
+        orderReq = {
+          symbol: tradingSymbol(ticker),
+          qty,
+          side: 'sell',
+          type: 'market',
+          time_in_force: 'gtc',
+          position_intent: 'sell_to_close',
+        };
+      } else {
+        const priceRes = await getLatestPrice(creds, tradingSymbol(ticker));
+        const currentPrice = priceRes.success
+          ? priceRes.data
+          : parseFloat(held.current_price) || 0;
+        orderReq = buildStockOrder({
+          symbol: tradingSymbol(ticker),
+          side: 'sell',
+          qty,
+          currentPrice,
+          marketIsOpen,
+        });
+      }
+      if (!orderReq) {
+        return skipTrade(blueprint.id, ticker, 'SELL', 'no_price_for_extended_hours');
+      }
+      const r = await placeOrder(creds, orderReq);
       return {
         blueprintId: blueprint.id,
         ticker,
@@ -588,14 +681,34 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
       );
       continue;
     }
-    const r = await placeOrder(creds, {
-      symbol: tradingSymbol(ticker),
-      notional,
-      side: 'buy',
-      type: 'market',
-      time_in_force: isCrypto ? 'gtc' : 'day',
-      position_intent: 'buy_to_open',
-    });
+    let orderReq: import('@/lib/alpaca').AlpacaOrderRequest | null;
+    if (isCrypto) {
+      orderReq = {
+        symbol: tradingSymbol(ticker),
+        notional,
+        side: 'buy',
+        type: 'market',
+        time_in_force: 'gtc',
+        position_intent: 'buy_to_open',
+      };
+    } else {
+      // Stocks/commodities: fetch fresh price so extended-hours limit
+      // orders can size whole-share qty + a tight limit price.
+      const priceRes = await getLatestPrice(creds, tradingSymbol(ticker));
+      const currentPrice = priceRes.success ? priceRes.data : 0;
+      orderReq = buildStockOrder({
+        symbol: tradingSymbol(ticker),
+        side: 'buy',
+        notional,
+        currentPrice,
+        marketIsOpen,
+      });
+    }
+    if (!orderReq) {
+      trades.push(skipTrade(blueprint.id, ticker, 'BUY', 'no_price_for_extended_hours'));
+      continue;
+    }
+    const r = await placeOrder(creds, orderReq);
     trades.push({
       blueprintId: blueprint.id,
       ticker,
@@ -640,8 +753,9 @@ async function mechanicalSafetyPass(args: {
   blueprint: Blueprint;
   positionsByTicker: Map<string, AlpacaPosition>;
   inFlightTickers: Set<string>;
+  marketIsOpen: boolean;
 }): Promise<TradeResult[]> {
-  const { creds, blueprint, positionsByTicker, inFlightTickers } = args;
+  const { creds, blueprint, positionsByTicker, inFlightTickers, marketIsOpen } = args;
   const isCrypto = blueprint.id === 'crypto';
   const trades: TradeResult[] = [];
 
@@ -669,14 +783,24 @@ async function mechanicalSafetyPass(args: {
 
       if (!reason) continue;
 
-      const r = await placeOrder(creds, {
-        symbol: tradingSymbol(ticker),
-        qty,
-        side: 'sell',
-        type: 'market',
-        time_in_force: isCrypto ? 'gtc' : 'day',
-        position_intent: 'sell_to_close',
-      });
+      const orderReq = isCrypto
+        ? ({
+            symbol: tradingSymbol(ticker),
+            qty,
+            side: 'sell' as const,
+            type: 'market' as const,
+            time_in_force: 'gtc' as const,
+            position_intent: 'sell_to_close' as const,
+          })
+        : buildStockOrder({
+            symbol: tradingSymbol(ticker),
+            side: 'sell',
+            qty,
+            currentPrice: price,
+            marketIsOpen,
+          });
+      if (!orderReq) continue;
+      const r = await placeOrder(creds, orderReq);
       trades.push({
         blueprintId: blueprint.id,
         ticker,
@@ -765,14 +889,26 @@ async function runBlueprint(args: {
       if (inFlightTickers.has(ticker)) continue;
       const qty = parseFloat(held.qty) || 0;
       if (qty <= 0) continue;
-      const r = await placeOrder(creds, {
-        symbol: tradingSymbol(ticker),
-        qty,
-        side: 'sell',
-        type: 'market',
-        time_in_force: blueprint.id === 'crypto' ? 'gtc' : 'day',
-        position_intent: 'sell_to_close',
-      });
+      const isCrypto = blueprint.id === 'crypto';
+      const marketIsOpen = marketClock?.is_open ?? false;
+      const orderReq = isCrypto
+        ? ({
+            symbol: tradingSymbol(ticker),
+            qty,
+            side: 'sell' as const,
+            type: 'market' as const,
+            time_in_force: 'gtc' as const,
+            position_intent: 'sell_to_close' as const,
+          })
+        : buildStockOrder({
+            symbol: tradingSymbol(ticker),
+            side: 'sell',
+            qty,
+            currentPrice: parseFloat(held.current_price) || 0,
+            marketIsOpen,
+          });
+      if (!orderReq) continue;
+      const r = await placeOrder(creds, orderReq);
       result.trades.push({
         blueprintId: blueprint.id,
         ticker,
@@ -794,6 +930,7 @@ async function runBlueprint(args: {
     blueprint,
     positionsByTicker,
     inFlightTickers,
+    marketIsOpen: marketClock?.is_open ?? false,
   });
   result.trades.push(...safetyTrades);
   // Drop closed positions from local cache so subsequent Grok decisions see fresh state.
@@ -875,6 +1012,7 @@ async function runBlueprint(args: {
     blueprint,
     bucketCapital,
     remainingBuyingPower,
+    marketIsOpen: marketClock?.is_open ?? false,
     payload,
     positionsByTicker,
     inFlightTickers,

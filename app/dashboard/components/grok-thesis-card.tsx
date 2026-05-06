@@ -251,7 +251,11 @@ export function GrokThesisCard({ lang }: Props) {
                           const status = outcome?.status;
                           const statusBadge =
                             status === 'OK'
-                              ? { label: 'FYLT', color: 'var(--aq-green)' }
+                              ? // 'OK' from placeOrder means "Alpaca accepted
+                                // the order" — not necessarily filled. Crypto
+                                // fills instantly; stocks queue until market
+                                // open. The badge reflects this honestly.
+                                { label: 'INNSENDT', color: 'var(--aq-green)' }
                               : status === 'ERR'
                                 ? { label: 'AVVIST', color: 'var(--aq-red)' }
                                 : status === 'SKIP'
