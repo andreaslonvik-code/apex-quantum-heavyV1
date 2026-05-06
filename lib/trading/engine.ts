@@ -91,11 +91,12 @@ export interface UserScanResult {
   error?: string;
 }
 
-// 10 min cadence: enough for daily-bar strategy where indicators barely move
-// intraday. Mechanical safety (ATR-stop, profit-take) still runs every minute
-// independent of Grok, so risk management is unaffected. Going from 2 min to
-// 10 min reduces Grok API spend ~5× ($50/day → $10/day).
-const GROK_CADENCE_MS = 10 * 60 * 1000;
+// 20 min cadence: for a daily-bar strategy, indicators move negligibly within
+// 20 min, so doubling cadence costs almost nothing in signal quality but
+// halves Grok API spend. Mechanical safety (ATR-stop, profit-take, trailing
+// stop) still runs every minute independent of Grok, so risk management is
+// unaffected by the longer cadence.
+const GROK_CADENCE_MS = 20 * 60 * 1000;
 const INDICATOR_BAR_COUNT = 60; // bars to fetch for indicator summary
 const MIN_NOTIONAL_USD = 1.0;
 
@@ -148,6 +149,29 @@ async function detectBearRegime(creds: AlpacaCreds): Promise<{
   } catch {
     return null;
   }
+}
+
+/**
+ * Are we within the trading-relevant window? Returns true when ET wall-clock
+ * hour is in [04:00, 20:00) — that's pre-market open through after-hours
+ * close. Outside that window (20:00–04:00 ET, ~8 h overnight) Grok is not
+ * called, since no fills can happen and indicator drift is negligible.
+ *
+ * Mechanical safety (ATR-stop, trailing-stop) still runs every minute
+ * regardless — only the Grok decision call is gated. Crypto is unaffected
+ * (24/7 markets) but the crypto bucket is currently disabled.
+ */
+function isTradingHoursWindow(now = new Date()): boolean {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    hour: 'numeric',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(now);
+  const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
+  // Intl.DateTimeFormat may report midnight as "24"; normalize to 0.
+  const h = hour === 24 ? 0 : hour;
+  return h >= 4 && h < 20;
 }
 
 /**
@@ -1392,10 +1416,22 @@ async function runBlueprint(args: {
     lastMs = Number.isFinite(t) ? t : 0;
   }
   const ageMs = Date.now() - lastMs;
-  const shouldCallGrok = !last || last.failed || ageMs >= GROK_CADENCE_MS;
+
+  // Outside US extended-hours window (20:00–04:00 ET), no fills can happen
+  // and indicators drift negligibly. Skip Grok to save API spend; mechanical
+  // safety still ran above. Crypto bucket would override this if active
+  // (24/7 markets), but crypto is currently disabled — guard for the future.
+  const inTradingWindow = blueprint.id === 'crypto' || isTradingHoursWindow();
+  const shouldCallGrok =
+    inTradingWindow && (!last || last.failed || ageMs >= GROK_CADENCE_MS);
 
   if (!shouldCallGrok) {
     result.thesis = last?.thesis ?? undefined;
+    if (!inTradingWindow) {
+      result.reason = 'outside_trading_hours';
+    } else if (last && !last.failed && ageMs < GROK_CADENCE_MS) {
+      result.reason = 'within_cadence';
+    }
     return { ...result, deployedNotional: 0 };
   }
 
