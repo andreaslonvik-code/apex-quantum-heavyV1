@@ -73,7 +73,11 @@ export interface UserScanResult {
   error?: string;
 }
 
-const GROK_CADENCE_MS = 2 * 60 * 1000;
+// 10 min cadence: enough for daily-bar strategy where indicators barely move
+// intraday. Mechanical safety (ATR-stop, profit-take) still runs every minute
+// independent of Grok, so risk management is unaffected. Going from 2 min to
+// 10 min reduces Grok API spend ~5× ($50/day → $10/day).
+const GROK_CADENCE_MS = 10 * 60 * 1000;
 const INDICATOR_BAR_COUNT = 60; // bars to fetch for indicator summary
 const MIN_NOTIONAL_USD = 1.0;
 

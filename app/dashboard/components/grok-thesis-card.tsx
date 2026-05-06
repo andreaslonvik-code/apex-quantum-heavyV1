@@ -37,7 +37,7 @@ interface GrokRow {
 const COPY = {
   no: {
     title: 'Grok-thesis',
-    sub: 'Siste beslutning per blueprint (2 min cadence)',
+    sub: 'Siste beslutning per blueprint (10 min cadence)',
     none: 'Ingen Grok-beslutninger ennå — trykk "Kjør nå" eller vent på neste cron-tick.',
     failed: 'Grok-feil',
     blueprints: { stocks: 'Aksjer', crypto: 'Krypto', commodities: 'Råvarer' },
@@ -52,7 +52,7 @@ const COPY = {
   },
   en: {
     title: 'Grok thesis',
-    sub: 'Latest decision per blueprint (2 min cadence)',
+    sub: 'Latest decision per blueprint (10 min cadence)',
     none: 'No Grok decisions yet — click "Run now" or wait for the next cron tick.',
     failed: 'Grok error',
     blueprints: { stocks: 'Stocks', crypto: 'Crypto', commodities: 'Commodities' },
@@ -122,12 +122,14 @@ export function GrokThesisCard({ lang }: Props) {
 
       let totalOk = 0;
       let totalErr = 0;
+      let totalSkip = 0;
       const grokErrors: string[] = [];
       const tradeErrors: string[] = [];
+      const tradeSkips: string[] = [];
       for (const bp of (data.blueprints ?? []) as Array<{
         blueprintId: string;
         reason?: string;
-        trades?: Array<{ ticker: string; action: string; status: string; error?: string }>;
+        trades?: Array<{ ticker: string; action: string; status: string; reason?: string; error?: string }>;
       }>) {
         if (bp.reason && bp.reason.startsWith('grok_error')) {
           grokErrors.push(`${bp.blueprintId}: ${bp.reason.slice(0, 100)}`);
@@ -140,6 +142,11 @@ export function GrokThesisCard({ lang }: Props) {
               tradeErrors.push(
                 `${bp.blueprintId}/${tr.ticker} ${tr.action}: ${tr.error ?? 'rejected'}`,
               );
+            }
+          } else if (tr.status === 'SKIP') {
+            totalSkip += 1;
+            if (tradeSkips.length < 8 && tr.action === 'BUY') {
+              tradeSkips.push(`${tr.ticker}: ${tr.reason}`);
             }
           }
         }
@@ -158,7 +165,14 @@ export function GrokThesisCard({ lang }: Props) {
         toast.success(`${t.runOk} — ${totalOk} ordre plassert`);
       }
       if (totalOk === 0 && totalErr === 0 && grokErrors.length === 0) {
-        toast.info('Grok kjørte men ingen ordre ble lagt inn (HOLD-only eller cadence-throttled)', { duration: 8_000 });
+        if (totalSkip > 0 && tradeSkips.length > 0) {
+          toast.info(
+            `Engine hoppet over ${totalSkip} BUYs (anticipatory-filter):\n${tradeSkips.join('\n')}`,
+            { duration: 15_000 },
+          );
+        } else {
+          toast.info('Grok kjørte men ingen ordre ble lagt inn (HOLD-only)', { duration: 8_000 });
+        }
       }
       await load();
     } catch (e) {
