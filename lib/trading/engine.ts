@@ -20,7 +20,7 @@ import { BLUEPRINT_LIST, type AssetClass, type Blueprint } from '@/lib/blueprint
 import { decide, type GrokDecision, type GrokDecisionPayload } from '@/lib/grok';
 import { getLatestDecision, saveDecision } from '@/lib/grok-decisions';
 import { getUserAllocation } from '@/lib/user-allocation';
-import { atr, macd, rsi, sma } from './indicators';
+import { atr, bullishDivergence, macd, rsi, sma, volumeAccumulation } from './indicators';
 
 /**
  * Apex Quantum trading engine — Grok-driven.
@@ -221,6 +221,10 @@ interface IndicatorSnapshot {
   sma_200: number | null;
   macd_hist: number | null;
   atr_14: number | null;
+  /** Bullish RSI divergence vs ~8 bars ago — early reversal signal. */
+  bullish_divergence: boolean;
+  /** Recent 3-bar volume vs prior 20-bar baseline (smart-money accumulation). */
+  volume_accumulation: boolean;
 }
 
 async function buildIndicatorSnapshots(
@@ -239,16 +243,19 @@ async function buildIndicatorSnapshots(
       const p = live || last;
       const ago1 = closes[closes.length - 2] ?? p;
       const ago5 = closes[Math.max(0, closes.length - 6)] ?? p;
+      const rsiVal = rsi(closes, 14);
       snaps.push({
         ticker,
         price: round(p, 6),
         change_24h_pct: ago1 ? round(((p - ago1) / ago1) * 100, 2) : null,
         change_5d_pct: ago5 ? round(((p - ago5) / ago5) * 100, 2) : null,
-        rsi_14: nullableRound(rsi(closes, 14), 1),
+        rsi_14: nullableRound(rsiVal, 1),
         sma_50: nullableRound(sma(closes, 50), 4),
         sma_200: nullableRound(sma(closes, 200), 4),
         macd_hist: nullableRound(macd(closes)?.hist ?? null, 4),
         atr_14: nullableRound(atr(bars, blueprint.params.atrPeriod), 4),
+        bullish_divergence: bullishDivergence(closes, rsiVal),
+        volume_accumulation: volumeAccumulation(bars),
       });
     } catch {
       // skip ticker on fetch error
@@ -265,6 +272,63 @@ function round(n: number, decimals: number): number {
 function nullableRound(n: number | null, decimals: number): number | null {
   if (n == null || !Number.isFinite(n)) return null;
   return round(n, decimals);
+}
+
+/**
+ * Anticipatory signal filter — only let through BUYs where statistics
+ * favor a bounce/breakout rather than a momentum continuation.
+ *
+ * HARD requirements (both must hold):
+ *   1. Price > SMA200 — uptrend confirmed (don't catch falling knives in
+ *      established downtrends).
+ *   2. RSI < 40 OR price within 3 % of SMA50 — at or near a pullback level
+ *      (i.e. a real dip, not a momentum top).
+ *
+ * CONFIRMATION (at least one must hold):
+ *   - Bullish RSI divergence (selling pressure exhausting)
+ *   - Volume accumulation (smart-money buying quietly)
+ *
+ * Without confirmation, oversold can stay oversold for weeks. The
+ * confirmation tilts the probabilities toward a near-term bounce.
+ */
+interface AnticipatorySignal {
+  ok: boolean;
+  reasons: string[];
+}
+
+function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
+  const reasons: string[] = [];
+
+  if (snap.sma_200 == null || snap.price < snap.sma_200) {
+    return { ok: false, reasons: ['not_in_uptrend (price < SMA200)'] };
+  }
+
+  const isOversold = snap.rsi_14 != null && snap.rsi_14 < 40;
+  const nearSupport =
+    snap.sma_50 != null && snap.sma_50 > 0 && snap.price / snap.sma_50 < 1.03;
+  if (!isOversold && !nearSupport) {
+    return {
+      ok: false,
+      reasons: [
+        `not_at_dip_level (RSI ${snap.rsi_14 ?? '?'}, price/SMA50 ${
+          snap.sma_50 ? (snap.price / snap.sma_50).toFixed(3) : '?'
+        })`,
+      ],
+    };
+  }
+  if (isOversold) reasons.push(`oversold_rsi_${snap.rsi_14?.toFixed(1)}`);
+  if (nearSupport) reasons.push('near_sma50_support');
+
+  if (!snap.bullish_divergence && !snap.volume_accumulation) {
+    return {
+      ok: false,
+      reasons: ['no_bullish_confirmation', ...reasons],
+    };
+  }
+  if (snap.bullish_divergence) reasons.push('bullish_rsi_divergence');
+  if (snap.volume_accumulation) reasons.push('volume_accumulation');
+
+  return { ok: true, reasons };
 }
 
 interface PositionSummary {
@@ -531,6 +595,10 @@ interface ExecuteArgs {
   remainingBuyingPower: number;
   /** Whether NYSE regular hours are active. False during pre/after-market. */
   marketIsOpen: boolean;
+  /** Indicator snapshots used to gate Grok BUYs through the anticipatory
+   *  filter. If a ticker isn't in the snapshot map (e.g. failed to fetch
+   *  bars) the BUY is rejected for safety. */
+  snapshots: Map<string, IndicatorSnapshot>;
   payload: GrokDecisionPayload;
   positionsByTicker: Map<string, AlpacaPosition>;
   inFlightTickers: Set<string>;
@@ -549,6 +617,7 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     bucketCapital,
     remainingBuyingPower,
     marketIsOpen,
+    snapshots,
     payload,
     positionsByTicker,
     inFlightTickers,
@@ -677,6 +746,32 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   }
   for (const dec of buyDecs) {
     const ticker = dec.ticker;
+
+    // ── Anticipatory signal filter ───────────────────────────────────────
+    // Hard reject any Grok BUY where the indicator state doesn't match the
+    // dip-buy thesis (uptrend + oversold/near-support + bullish confirmation).
+    // This is what stops the engine from buying momentum tops just because
+    // Grok ranked them by 5-day return.
+    const snap = snapshots.get(ticker);
+    if (!snap) {
+      trades.push(
+        skipTrade(blueprint.id, ticker, 'BUY', 'no_snapshot_for_filter'),
+      );
+      continue;
+    }
+    const signal = isAnticipatorySignal(snap);
+    if (!signal.ok) {
+      trades.push(
+        skipTrade(
+          blueprint.id,
+          ticker,
+          'BUY',
+          `no_anticipatory: ${signal.reasons.join(',')}`,
+        ),
+      );
+      continue;
+    }
+
     // Per-ticker concentration cap: don't let cumulative position exceed
     // maxPctPerPosition. Existing position value counts toward the cap.
     const existing = positionsByTicker.get(ticker);
@@ -1017,12 +1112,16 @@ async function runBlueprint(args: {
   result.thesis = payload.thesis;
 
   // 4. Execute Grok's decisions.
+  const snapshotMap = new Map<string, IndicatorSnapshot>(
+    candidates.map((s) => [s.ticker, s]),
+  );
   const exec = await executeDecisions({
     creds,
     blueprint,
     bucketCapital,
     remainingBuyingPower,
     marketIsOpen: marketClock?.is_open ?? false,
+    snapshots: snapshotMap,
     payload,
     positionsByTicker,
     inFlightTickers,
