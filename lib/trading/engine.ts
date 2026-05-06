@@ -382,10 +382,8 @@ function buildUserPrompt(args: {
   inFlightTickers: string[];
   allocationPct: number;
   account: AccountSnapshot;
-  allPositions: PositionSummary[];
   recentOrders: OrderSummary[];
   marketClock: MarketClockSummary | null;
-  allocationFull: { stocks: number; crypto: number; commodities: number };
 }): string {
   const {
     blueprint,
@@ -397,10 +395,8 @@ function buildUserPrompt(args: {
     inFlightTickers,
     allocationPct,
     account,
-    allPositions,
     recentOrders,
     marketClock,
-    allocationFull,
   } = args;
 
   const isBucketEmpty = positions.length === 0 && inFlightTickers.length === 0;
@@ -452,26 +448,33 @@ function buildUserPrompt(args: {
     `## Brukerens Alpaca-konto`,
     JSON.stringify(account, null, 2),
     ``,
-    `## Markedstid`,
+    `## Markedstid (NYSE)`,
     marketClock
       ? JSON.stringify(marketClock, null, 2)
       : '(ukjent)',
-    `Merk: aksjer og ETFs (incl. BNO/GOLD) handles kun når market er åpent. Krypto handler 24/7.`,
+    `Aksjer/ETF-er handles kun når NYSE er åpen.`,
     ``,
-    `## Allokering på tvers av alle bøtter (% av total equity)`,
-    JSON.stringify(allocationFull, null, 2),
-    ``,
-    `## Alle posisjoner (på tvers av bøtter)`,
-    allPositions.length === 0 ? '(ingen)' : JSON.stringify(allPositions, null, 2),
-    ``,
-    `## Eksisterende posisjoner i denne bøtta`,
+    `## Eksisterende aksje-posisjoner`,
     positions.length === 0 ? '(ingen)' : JSON.stringify(positions, null, 2),
     ``,
     `## Tickere med åpne (uutløste) ordre — IKKE legg inn nye ordre på disse`,
     inFlightTickers.length === 0 ? '(ingen)' : inFlightTickers.join(', '),
     ``,
-    `## Siste 20 ordre (status, fills, outcomes — for kontekst)`,
-    recentOrders.length === 0 ? '(ingen)' : JSON.stringify(recentOrders, null, 2),
+    `## Siste aksje-ordre (filtered til watchlist)`,
+    (() => {
+      const watchSet = new Set<string>(blueprint.watchlist);
+      const bucketOrders = recentOrders.filter((o) => {
+        const sym = o.ticker;
+        if (watchSet.has(sym)) return true;
+        // Match Alpaca's no-slash crypto form even though we filter against
+        // a stocks watchlist — defensive in case Grok needs to see history.
+        const slashed = !sym.includes('/') && /^[A-Z]+USD$/.test(sym) && sym.length >= 6
+          ? `${sym.slice(0, -3)}/USD`
+          : sym;
+        return watchSet.has(slashed);
+      });
+      return bucketOrders.length === 0 ? '(ingen)' : JSON.stringify(bucketOrders, null, 2);
+    })(),
     ``,
     `## Watchlist-kandidater med live indikatorer`,
     JSON.stringify(candidates, null, 2),
@@ -842,7 +845,6 @@ async function runBlueprint(args: {
    *  later blueprints can't request more than Alpaca will actually fund. */
   remainingBuyingPower: number;
   allocationPct: number;
-  allocationFull: { stocks: number; crypto: number; commodities: number };
   allPositions: AlpacaPosition[];
   openOrderSymbols: Set<string>;
   killSwitchOn: boolean;
@@ -859,7 +861,6 @@ async function runBlueprint(args: {
     buyingPower,
     remainingBuyingPower,
     allocationPct,
-    allocationFull,
     allPositions,
     openOrderSymbols,
     killSwitchOn,
@@ -988,10 +989,8 @@ async function runBlueprint(args: {
     inFlightTickers: [...inFlightTickers],
     allocationPct,
     account,
-    allPositions: summarizeAllPositions(allPositions),
     recentOrders,
     marketClock,
-    allocationFull,
   });
 
   const grokRes = await decide({
@@ -1148,7 +1147,6 @@ export async function runScanForUser(
       buyingPower,
       remainingBuyingPower,
       allocationPct: allocPct,
-      allocationFull: allocation,
       allPositions: positions,
       openOrderSymbols,
       killSwitchOn,

@@ -168,8 +168,11 @@ export function GrokThesisCard({ lang }: Props) {
     }
   }, [load, t.runFail, t.runOk]);
 
-  const order: AssetClass[] = ['stocks', 'crypto', 'commodities'];
-  const hasAny = Object.values(latest).some(Boolean);
+  // Match the engine's DISABLED_BLUEPRINTS — only show buckets the engine
+  // is actively trading. When crypto/commodities are re-enabled, add them
+  // back here.
+  const order: AssetClass[] = ['stocks'];
+  const hasAny = order.some((id) => Boolean(latest[id]));
 
   return (
     <div className="panel">
