@@ -17,10 +17,28 @@ import {
   placeOrder,
 } from '@/lib/alpaca';
 import { BLUEPRINT_LIST, type AssetClass, type Blueprint } from '@/lib/blueprints';
+import { sectorOf } from '@/lib/blueprints/sectors';
 import { decide, type GrokDecision, type GrokDecisionPayload } from '@/lib/grok';
-import { getLatestDecision, saveDecision } from '@/lib/grok-decisions';
+import {
+  getLatestDecision,
+  getRecentStopOutTickers,
+  saveDecision,
+} from '@/lib/grok-decisions';
 import { getUserAllocation } from '@/lib/user-allocation';
-import { atr, bullishDivergence, macd, rsi, sma, volumeAccumulation } from './indicators';
+import {
+  atr,
+  bullishDivergence,
+  higherHighs,
+  higherLows,
+  macd,
+  realizedVolatility,
+  risingChannel,
+  rsi,
+  rsiRising,
+  sma,
+  volumeAccumulation,
+} from './indicators';
+import { daysToEarnings, newsCount24h, prefetchNews } from './calendar';
 
 /**
  * Apex Quantum trading engine — Grok-driven.
@@ -101,6 +119,62 @@ const MAX_PER_ORDER_NOTIONAL = 25_000;
 
 function tradingSymbol(symbol: string): string {
   return symbol.replace('/', '');
+}
+
+/**
+ * Macro-regime detection. Fetches SPY daily bars and computes SMA200. When
+ * spot < SMA200, we're in a bear regime — historically 80 % of large equity
+ * drawdowns happen in this state (Faber 2007, Antonacci 2014). The engine
+ * halves position sizes during bear, rather than going fully to cash, so we
+ * still benefit from sharp dip-bounces.
+ *
+ * Returns null when SPY data isn't available — engine treats null as "neutral",
+ * not bear (fail-open: we'd rather trade in unknown regime than freeze).
+ */
+async function detectBearRegime(creds: AlpacaCreds): Promise<{
+  isBear: boolean;
+  spotPrice: number;
+  sma200: number;
+} | null> {
+  try {
+    const r = await getStockBars(creds, 'SPY', { timeframe: '1Day', limit: 220 });
+    if (!r.success || r.data.length < 200) return null;
+    const closes = r.data.map((b) => b.c);
+    const sma200 = sma(closes, 200);
+    if (sma200 == null) return null;
+    const live = await getLatestPrice(creds, 'SPY');
+    const spot = live.success ? live.data : closes[closes.length - 1];
+    return { isBear: spot < sma200, spotPrice: spot, sma200 };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Friday-afternoon BUY blackout. Stop opening NEW positions in the last
+ * 90 min before close on Friday — gap risk over the weekend is empirically
+ * negative-skewed (weekend-effect literature: French 1980, Bessembinder/Hertzel).
+ * We don't trim existing positions yet (more complex; deferred).
+ *
+ * Markets close 16:00 ET. Blackout starts 14:30 ET. Day-of-week is checked
+ * in America/New_York time so daylight-saving transitions don't shift it.
+ */
+function isFridayBlackout(now = new Date()): boolean {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(now);
+  const dow = parts.find((p) => p.type === 'weekday')?.value ?? '';
+  if (dow !== 'Fri') return false;
+  const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
+  const minute = parseInt(parts.find((p) => p.type === 'minute')?.value ?? '0', 10);
+  const minutesPastNoon = hour * 60 + minute;
+  // 14:30 ET = 870 min past midnight
+  return minutesPastNoon >= 14 * 60 + 30;
 }
 
 /**
@@ -225,10 +299,30 @@ interface IndicatorSnapshot {
   sma_200: number | null;
   macd_hist: number | null;
   atr_14: number | null;
-  /** Bullish RSI divergence vs ~8 bars ago — early reversal signal. */
+  /** Bullish RSI divergence vs ~4 bars ago — early reversal signal. */
   bullish_divergence: boolean;
   /** Recent 3-bar volume vs prior 20-bar baseline (smart-money accumulation). */
   volume_accumulation: boolean;
+  /** RSI slope > 0.5 units/bar over last 5 bars — momentum confirmation. */
+  rsi_rising: boolean;
+  /** Recent 10-bar max(high) > prior 10-bar max(high) — uptrend confirmed. */
+  higher_highs: boolean;
+  /** Recent 10-bar min(low) > prior 10-bar min(low) — buyers absorbing dips. */
+  higher_lows: boolean;
+  /** higher_highs && higher_lows — full rising-channel confirmation. */
+  rising_channel: boolean;
+  /** 20-day realized daily-return sigma (e.g. 0.025 = 2.5 %/day). Used for
+   *  volatility-targeted position sizing. Null if insufficient bars. */
+  realized_vol_20d: number | null;
+  /** 1-hour timeframe RSI for multi-timeframe alignment. Null if 1h bars
+   *  weren't fetchable. */
+  rsi_14_1h: number | null;
+  /** 1h timeframe price > 1h SMA50 — short-term-trend confirmation. */
+  uptrend_1h: boolean;
+  /** Days to next earnings (null = unknown / outside 14-day horizon). */
+  days_to_earnings: number | null;
+  /** News articles in the last 24 h — proxy for catalyst sensitivity. */
+  news_count_24h: number;
 }
 
 async function buildIndicatorSnapshots(
@@ -236,6 +330,13 @@ async function buildIndicatorSnapshots(
   blueprint: Blueprint,
 ): Promise<IndicatorSnapshot[]> {
   const snaps: IndicatorSnapshot[] = [];
+
+  // Pre-fetch news in parallel for all tickers — single batch is cheaper
+  // than 46 sequential awaits inside the loop. Fail-soft: if Finnhub key
+  // is missing, prefetchNews returns immediately and per-ticker calls
+  // return 0 (no news signal).
+  await prefetchNews(blueprint.watchlist);
+
   for (const ticker of blueprint.watchlist) {
     try {
       const r = await fetchBars(creds, blueprint, ticker);
@@ -248,6 +349,36 @@ async function buildIndicatorSnapshots(
       const ago1 = closes[closes.length - 2] ?? p;
       const ago5 = closes[Math.max(0, closes.length - 6)] ?? p;
       const rsiVal = rsi(closes, 14);
+      const hh = higherHighs(bars, 10);
+      const hl = higherLows(bars, 10);
+
+      // Multi-timeframe: 1-hour bars for short-term-trend alignment. Only
+      // for non-crypto blueprints (crypto pipeline doesn't use this path).
+      // Fetch 240 h ≈ 10 trading days of hourly bars.
+      let rsi1h: number | null = null;
+      let uptrend1h = false;
+      if (blueprint.id !== 'crypto') {
+        try {
+          const hourly = await getStockBars(creds, ticker, {
+            timeframe: '1Hour',
+            limit: 240,
+          });
+          if (hourly.success && hourly.data.length >= 50) {
+            const hourCloses = hourly.data.map((b) => b.c);
+            rsi1h = rsi(hourCloses, 14);
+            const sma50_1h = sma(hourCloses, 50);
+            uptrend1h =
+              sma50_1h != null && hourCloses[hourCloses.length - 1] > sma50_1h;
+          }
+        } catch {
+          // multi-tf is additive — fall back to 1D-only signal on failure
+        }
+      }
+
+      // Catalyst layer (failure-soft: null/0 when no API key is set)
+      const earnings = await daysToEarnings(ticker).catch(() => null);
+      const news24h = await newsCount24h(ticker).catch(() => 0);
+
       snaps.push({
         ticker,
         price: round(p, 6),
@@ -260,6 +391,15 @@ async function buildIndicatorSnapshots(
         atr_14: nullableRound(atr(bars, blueprint.params.atrPeriod), 4),
         bullish_divergence: bullishDivergence(closes, rsiVal),
         volume_accumulation: volumeAccumulation(bars),
+        rsi_rising: rsiRising(closes, 5, 14, 0.5),
+        higher_highs: hh,
+        higher_lows: hl,
+        rising_channel: hh && hl,
+        realized_vol_20d: nullableRound(realizedVolatility(closes, 20), 5),
+        rsi_14_1h: nullableRound(rsi1h, 1),
+        uptrend_1h: uptrend1h,
+        days_to_earnings: earnings,
+        news_count_24h: news24h,
       });
     } catch {
       // skip ticker on fetch error
@@ -280,20 +420,24 @@ function nullableRound(n: number | null, decimals: number): number | null {
 
 /**
  * Anticipatory signal filter — only let through BUYs where statistics
- * favor a bounce/breakout rather than a momentum continuation.
+ * favor a bounce, pullback, or trend-confirmed continuation. Three paths.
  *
- * HARD requirements (both must hold):
- *   1. Price > SMA200 — uptrend confirmed (don't catch falling knives in
- *      established downtrends).
- *   2. RSI < 40 OR price within 3 % of SMA50 — at or near a pullback level
- *      (i.e. a real dip, not a momentum top).
+ * HARD requirement for ALL paths:
+ *   - Price > SMA200 — never catch falling knives in established downtrends.
  *
- * CONFIRMATION (at least one must hold):
- *   - Bullish RSI divergence (selling pressure exhausting)
- *   - Volume accumulation (smart-money buying quietly)
+ * Path 1 — Deep dip (RSI < 35):
+ *   Pass without confirmation. Statistical bounce probability is already
+ *   high enough on its own.
  *
- * Without confirmation, oversold can stay oversold for weeks. The
- * confirmation tilts the probabilities toward a near-term bounce.
+ * Path 2 — Moderate dip (RSI 35–45 OR price within 3 % of SMA50):
+ *   Pass only with AT LEAST ONE of {bullish_divergence, volume_accumulation,
+ *   MACD positive}. Without confirmation, dips can keep dipping for weeks.
+ *
+ * Path 3 — Trend-confirmed momentum (RSI 50–65 + rising channel) ★ NEW:
+ *   Pass when price action shows a clean rising structure: RSI rising over
+ *   5 bars, higher highs AND higher lows, RSI in healthy 50–65 band (not
+ *   overbought). This catches stocks like SMCI/MU/TSM in established uptrends
+ *   that don't dip but keep grinding higher. No dip required.
  */
 interface AnticipatorySignal {
   ok: boolean;
@@ -303,36 +447,85 @@ interface AnticipatorySignal {
 function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
   const reasons: string[] = [];
 
+  // ── Earnings blackout ─────────────────────────────────────────────────
+  // Earnings releases are binary 60–70 % gambling — skip BUYs in the 3-day
+  // window before earnings. Also skip the day after (immediate-aftermath
+  // volatility). Null = no earnings data → don't block (Finnhub may be
+  // down or ticker has no upcoming earnings within the look-ahead window).
+  if (snap.days_to_earnings != null && snap.days_to_earnings >= -1 && snap.days_to_earnings <= 3) {
+    return {
+      ok: false,
+      reasons: [`earnings_blackout (${snap.days_to_earnings}d)`],
+    };
+  }
+
   if (snap.sma_200 == null || snap.price < snap.sma_200) {
     return { ok: false, reasons: ['not_in_uptrend (price < SMA200)'] };
   }
 
-  const isOversold = snap.rsi_14 != null && snap.rsi_14 < 40;
+  const isDeepOversold = snap.rsi_14 != null && snap.rsi_14 < 35;
+  const isModerateOversold = snap.rsi_14 != null && snap.rsi_14 < 45;
   const nearSupport =
     snap.sma_50 != null && snap.sma_50 > 0 && snap.price / snap.sma_50 < 1.03;
-  if (!isOversold && !nearSupport) {
+
+  // ── Path 3: Trend-confirmed momentum (multi-timeframe aligned) ───────
+  // Checked first so a stock in a clean uptrend doesn't get rejected just
+  // because RSI > 45. Requires the FULL stack PLUS 1h-timeframe alignment
+  // (price above 1h SMA50). 1h-data unavailable falls back to 1D-only —
+  // we don't punish missing data.
+  const rsiInHealthyBand =
+    snap.rsi_14 != null && snap.rsi_14 >= 50 && snap.rsi_14 <= 65;
+  const intradayAligned =
+    snap.rsi_14_1h == null || snap.uptrend_1h; // null = pass; available = require uptrend
+  if (
+    rsiInHealthyBand &&
+    snap.rsi_rising &&
+    snap.rising_channel &&
+    intradayAligned
+  ) {
+    reasons.push(
+      'trend_confirmed_momentum',
+      `rsi_${snap.rsi_14?.toFixed(1)}_rising`,
+      'rising_channel_hh_hl',
+    );
+    if (snap.uptrend_1h) reasons.push('uptrend_1h_aligned');
+    if (snap.volume_accumulation) reasons.push('volume_accumulation');
+    return { ok: true, reasons };
+  }
+
+  // ── Paths 1 & 2: Dip-buy (existing behaviour) ────────────────────────
+  if (!isModerateOversold && !nearSupport) {
     return {
       ok: false,
       reasons: [
-        `not_at_dip_level (RSI ${snap.rsi_14 ?? '?'}, price/SMA50 ${
+        `no_dip_no_trend (RSI ${snap.rsi_14 ?? '?'}, price/SMA50 ${
           snap.sma_50 ? (snap.price / snap.sma_50).toFixed(3) : '?'
-        })`,
+        }, rising_channel=${snap.rising_channel}, rsi_rising=${snap.rsi_rising})`,
       ],
     };
   }
-  if (isOversold) reasons.push(`oversold_rsi_${snap.rsi_14?.toFixed(1)}`);
+  if (isDeepOversold) reasons.push(`deep_oversold_rsi_${snap.rsi_14?.toFixed(1)}`);
+  else if (isModerateOversold) reasons.push(`oversold_rsi_${snap.rsi_14?.toFixed(1)}`);
   if (nearSupport) reasons.push('near_sma50_support');
 
-  if (!snap.bullish_divergence && !snap.volume_accumulation) {
-    return {
-      ok: false,
-      reasons: ['no_bullish_confirmation', ...reasons],
-    };
-  }
   if (snap.bullish_divergence) reasons.push('bullish_rsi_divergence');
   if (snap.volume_accumulation) reasons.push('volume_accumulation');
 
-  return { ok: true, reasons };
+  if (isDeepOversold) {
+    return { ok: true, reasons };
+  }
+  const macdPositive = snap.macd_hist != null && snap.macd_hist > 0;
+  if (snap.bullish_divergence || snap.volume_accumulation || macdPositive) {
+    if (macdPositive && !reasons.includes('bullish_rsi_divergence')) {
+      reasons.push('macd_positive');
+    }
+    return { ok: true, reasons };
+  }
+
+  return {
+    ok: false,
+    reasons: ['no_bullish_confirmation', ...reasons],
+  };
 }
 
 interface PositionSummary {
@@ -606,6 +799,13 @@ interface ExecuteArgs {
   payload: GrokDecisionPayload;
   positionsByTicker: Map<string, AlpacaPosition>;
   inFlightTickers: Set<string>;
+  /** SPY < SMA200 → halve all position sizes (macro bear-filter). */
+  isBearRegime: boolean;
+  /** Tickers stopped out via mechanical stop in the last 5 days. BUYs on
+   *  these are rejected (whipsaw protection). Stocks-bucket only. */
+  cooldownTickers: Set<string>;
+  /** Friday after 14:30 ET — block new equity BUYs to avoid weekend gap risk. */
+  fridayBlackout: boolean;
 }
 
 interface ExecuteResult {
@@ -625,12 +825,32 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     payload,
     positionsByTicker,
     inFlightTickers,
+    isBearRegime,
+    cooldownTickers,
+    fridayBlackout,
   } = args;
   const isCrypto = blueprint.id === 'crypto';
   const watchlistSet = new Set<string>(blueprint.watchlist);
   const trades: TradeResult[] = [];
   let netDeployed = 0;
-  const maxNotionalPerTicker = bucketCapital * (blueprint.params.maxPctPerPosition / 100);
+  // Bear regime → halve allocation per position. Halve, don't zero, so we
+  // still capture sharp dip-bounces but with reduced exposure if SPY rolls.
+  const bearMultiplier = isBearRegime ? 0.5 : 1.0;
+  const maxNotionalPerTicker =
+    bucketCapital * (blueprint.params.maxPctPerPosition / 100) * bearMultiplier;
+
+  // Sector concentration: track sectors already represented (existing kept
+  // positions, plus new BUYs as we accept them). Max 1 BUY per sector this
+  // scan. Existing kept positions count as "sector taken".
+  const sectorTaken = new Set<string>();
+  const sellTickerEarly = new Set(
+    payload.decisions.filter((d) => d.action === 'SELL').map((d) => d.ticker),
+  );
+  for (const [ticker] of positionsByTicker) {
+    if (sellTickerEarly.has(ticker)) continue;
+    const sec = sectorOf(ticker);
+    if (sec) sectorTaken.add(sec);
+  }
 
   // Two-phase execution: SELLs first to free buying power, then BUYs.
   // Without this, a BUY queued right after a SELL hits Alpaca before the
@@ -729,10 +949,14 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   );
   trades.push(...sellResults);
 
-  // Wait for SELLs to settle and free buying power. 2.5s is empirical —
-  // Alpaca paper releases cash from market sells within ~1s but we add
-  // slack so the next BUY doesn't get a stale buying-power snapshot.
-  if (sellDecs.some((d) => d) && buyDecs.length > 0) {
+  // Wait for SELLs to settle and free buying power, but ONLY if at least one
+  // SELL was accepted by Alpaca. Failed SELLs leave positions open and BP
+  // locked — waiting in that case is wasted time, AND the BUYs that follow
+  // will fail anyway since BP wasn't actually freed.
+  // 2.5s is empirical: Alpaca paper releases cash from market sells in ~1s,
+  // but we add slack so the BUY phase doesn't see stale BP snapshots.
+  const anySellAccepted = sellResults.some((r) => r.status === 'OK');
+  if (anySellAccepted && buyDecs.length > 0) {
     await new Promise((resolve) => setTimeout(resolve, 2500));
   }
 
@@ -750,6 +974,37 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   }
   for (const dec of buyDecs) {
     const ticker = dec.ticker;
+
+    // ── Friday-afternoon blackout ────────────────────────────────────────
+    // No new equity BUYs after 14:30 ET on Friday — eliminates exposure to
+    // weekend gap risk on freshly-opened positions. Existing positions are
+    // not affected (intentional — they've already absorbed entry slippage).
+    if (fridayBlackout && !isCrypto) {
+      trades.push(skipTrade(blueprint.id, ticker, 'BUY', 'friday_blackout'));
+      continue;
+    }
+
+    // ── Cool-down filter (whipsaw protection) ────────────────────────────
+    // If this ticker stopped out via mechanical safety in the last 5 days,
+    // skip. Re-entering a stopped name on the same week is the classic
+    // bleed pattern (buy-stop-buy-stop on identical chart shape).
+    if (cooldownTickers.has(ticker)) {
+      trades.push(skipTrade(blueprint.id, ticker, 'BUY', 'cooldown_recent_stopout'));
+      continue;
+    }
+
+    // ── Sector concentration cap ─────────────────────────────────────────
+    // Max 1 NEW position per sector per scan. If a sector is already taken
+    // by a kept position OR an earlier BUY in this loop, skip. Prevents the
+    // "3 picks all in semis" scenario where one bad sector day takes the
+    // whole bucket. Unknown-sector tickers don't trigger or take a slot.
+    const sec = sectorOf(ticker);
+    if (sec && sectorTaken.has(sec)) {
+      trades.push(
+        skipTrade(blueprint.id, ticker, 'BUY', `sector_taken_${sec}`),
+      );
+      continue;
+    }
 
     // ── Anticipatory signal filter ───────────────────────────────────────
     // Hard reject any Grok BUY where the indicator state doesn't match the
@@ -781,7 +1036,34 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     const existing = positionsByTicker.get(ticker);
     const existingValue = existing ? parseFloat(existing.market_value) || 0 : 0;
     const remainingTickerCap = Math.max(0, maxNotionalPerTicker - existingValue);
-    const cappedByTicker = Math.min(perPickNotional, remainingTickerCap);
+
+    // ── Volatility-targeted sizing ───────────────────────────────────────
+    // Scale this pick's notional so its EXPECTED daily-PnL contribution is
+    // roughly constant across all picks (≈ 1 % of bucket). High-vol stocks
+    // get smaller size, low-vol stocks get bigger size, equal "heat" across
+    // the bucket. Reference vol is 2 % daily (≈ S&P-typical) — a stock with
+    // 4 % daily vol gets multiplier 0.5; a stock with 1 % daily vol gets 2.0.
+    // Bounds [0.5, 1.5] prevent extreme sizes from one bar of bad data.
+    const TARGET_DAILY_VOL = 0.02;
+    let volMultiplier = 1.0;
+    if (snap.realized_vol_20d != null && snap.realized_vol_20d > 0) {
+      const raw = TARGET_DAILY_VOL / snap.realized_vol_20d;
+      volMultiplier = Math.max(0.5, Math.min(1.5, raw));
+    }
+
+    // ── News-density adjust ──────────────────────────────────────────────
+    // High news count = ticker in spotlight, vol elevated, gap risk high.
+    // Halve size when news_count_24h > 10 (empirically catches earnings
+    // leaks, M&A rumors, regulatory news days). Doesn't reject — just
+    // reduces exposure. 0 news_count (no API key set) is treated as
+    // "normal", no adjustment.
+    const newsHot = snap.news_count_24h > 10;
+    const newsMultiplier = newsHot ? 0.5 : 1.0;
+
+    const cappedByTicker = Math.min(
+      perPickNotional * volMultiplier * newsMultiplier,
+      remainingTickerCap,
+    );
     const notional = round(cappedByTicker, 2);
     if (notional < MIN_NOTIONAL_USD) {
       trades.push(
@@ -832,7 +1114,11 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
       reason: dec.reason || 'GROK_BUY',
       error: r.success ? undefined : r.error,
     });
-    if (r.success) netDeployed += notional;
+    if (r.success) {
+      netDeployed += notional;
+      // Lock the sector so subsequent BUYs in the same scan can't pile in.
+      if (sec) sectorTaken.add(sec);
+    }
   }
 
   return { trades, netDeployed };
@@ -856,10 +1142,32 @@ function skipTrade(
 }
 
 /**
+ * Trailing-stop ratchet. Drives off the *peak* gain since entry, not current
+ * gain — otherwise a position that spiked to +12 % and pulled back to +6 %
+ * would not trigger because the ratchet would descend with the price.
+ *
+ * Peak-pnl input should be (highest_high_since_entry − entry) / entry.
+ *
+ *   peak  5–10 %  → floor at entry × 1.02 (protect break-even + small profit)
+ *   peak 10–15 %  → floor at entry × 1.05
+ *   peak 15–20 %  → floor at entry × 1.08
+ *   peak ≥ 20 %   → floor at entry × 1.12
+ *
+ * Returns null when peak gain < 5 % (no ratchet yet — ATR-stop still protects).
+ */
+function trailingStopFloor(entry: number, peakPnlPct: number): number | null {
+  if (peakPnlPct < 0.05) return null;
+  if (peakPnlPct < 0.10) return entry * 1.02;
+  if (peakPnlPct < 0.15) return entry * 1.05;
+  if (peakPnlPct < 0.20) return entry * 1.08;
+  return entry * 1.12;
+}
+
+/**
  * Mechanical safety pass — runs every cron tick regardless of Grok cadence.
- * Triggers SELL when a held position hits its ATR-stop or profit-take
- * threshold, so a flash move between Grok calls doesn't blow through the
- * blueprint's risk floor.
+ * Triggers SELL when a held position hits its ATR-stop, profit-take
+ * threshold, or trailing-stop floor, so a flash move between Grok calls
+ * doesn't blow through the blueprint's risk floor.
  */
 async function mechanicalSafetyPass(args: {
   creds: AlpacaCreds;
@@ -890,9 +1198,23 @@ async function mechanicalSafetyPass(args: {
       const stopPrice = entry - blueprint.params.atrStopMult * atrVal;
       const pnlPct = (price - entry) / entry;
 
+      // Peak-pnl since entry. We don't store entry timestamp, so we use the
+      // bars whose high is >= entry × 1.001 as a proxy for "bars after we
+      // opened the position" — the position was opened near or below entry,
+      // so its first day's high is at least a hair above. Take max(high) over
+      // those bars + the live price. Falls back to current price when no bar
+      // shows a peak (e.g. position opened today, no daily-bar print yet).
+      let peakPrice = price;
+      for (const b of bars) {
+        if (b.h >= entry && b.h > peakPrice) peakPrice = b.h;
+      }
+      const peakPnlPct = (peakPrice - entry) / entry;
+      const trailFloor = trailingStopFloor(entry, peakPnlPct);
+
       let reason: string | null = null;
       if (price <= stopPrice) reason = 'MECHANICAL_ATR_STOP';
       else if (pnlPct >= blueprint.params.profitTakeThreshold) reason = 'MECHANICAL_PROFIT_TAKE';
+      else if (trailFloor != null && price < trailFloor) reason = 'MECHANICAL_TRAILING_STOP';
 
       if (!reason) continue;
 
@@ -950,6 +1272,10 @@ async function runBlueprint(args: {
   account: AccountSnapshot;
   recentOrders: OrderSummary[];
   marketClock: MarketClockSummary | null;
+  /** SPY < SMA200 — engine halves position sizes. */
+  isBearRegime: boolean;
+  /** Friday after 14:30 ET — block new equity BUYs. */
+  fridayBlackout: boolean;
 }): Promise<BlueprintRunResult & { deployedNotional: number }> {
   const {
     creds,
@@ -966,6 +1292,8 @@ async function runBlueprint(args: {
     account,
     recentOrders,
     marketClock,
+    isBearRegime,
+    fridayBlackout,
   } = args;
 
   const watchlistSet = new Set<string>(blueprint.watchlist);
@@ -1051,9 +1379,18 @@ async function runBlueprint(args: {
     }
   }
 
-  // 2. Decide whether to call Grok this tick.
+  // 2. Decide whether to call Grok this tick. Defensive parse of decidedAt:
+  // a corrupt DB row with null/invalid timestamp would yield NaN here, and
+  // `Date.now() - NaN >= GROK_CADENCE_MS` is false → we'd fall through to
+  // shouldCallGrok=true on every single tick, blasting the API quota.
+  // Treat unparseable timestamps as "very old" (force one Grok call, then
+  // the new row will have a valid timestamp and cadence kicks back in).
   const last = await getLatestDecision(clerkUserId, blueprint.id);
-  const lastMs = last && !last.failed ? new Date(last.decidedAt).getTime() : 0;
+  let lastMs = 0;
+  if (last && !last.failed) {
+    const t = new Date(last.decidedAt).getTime();
+    lastMs = Number.isFinite(t) ? t : 0;
+  }
   const ageMs = Date.now() - lastMs;
   const shouldCallGrok = !last || last.failed || ageMs >= GROK_CADENCE_MS;
 
@@ -1119,6 +1456,9 @@ async function runBlueprint(args: {
   const snapshotMap = new Map<string, IndicatorSnapshot>(
     candidates.map((s) => [s.ticker, s]),
   );
+  // Pull tickers stopped out in the last 5 days — those get a cool-down so
+  // we don't whipsaw back into the same losing setup.
+  const cooldownTickers = await getRecentStopOutTickers(clerkUserId, blueprint.id, 5);
   const exec = await executeDecisions({
     creds,
     blueprint,
@@ -1129,6 +1469,9 @@ async function runBlueprint(args: {
     payload,
     positionsByTicker,
     inFlightTickers,
+    isBearRegime,
+    cooldownTickers,
+    fridayBlackout,
   });
   result.trades.push(...exec.trades);
   result.positionsHeld = positionsByTicker.size + exec.trades.filter(
@@ -1179,8 +1522,13 @@ export async function runScanForUser(
   if (openOrdersForCleanupRes.success) {
     const now = Date.now();
     for (const o of openOrdersForCleanupRes.data) {
-      const ageMs = now - new Date(o.submitted_at).getTime();
-      if (ageMs > STALE_ORDER_MS) {
+      // Defensive: Alpaca normally always returns submitted_at, but if it's
+      // ever null/undefined or unparseable, NaN comparisons are false → the
+      // stale order would never get cancelled and would lock BP forever.
+      // Treat unparseable timestamps as stale (cancel them).
+      const submittedMs = new Date(o.submitted_at).getTime();
+      const isStale = !Number.isFinite(submittedMs) || now - submittedMs > STALE_ORDER_MS;
+      if (isStale) {
         // Best-effort cancel of stale orders so they don't lock BP forever.
         await alpacaCancelOrder(creds, o.id);
       }
@@ -1225,6 +1573,14 @@ export async function runScanForUser(
 
   const allocation = await getUserAllocation(clerkUserId);
 
+  // Macro regime once per scan — SPY < SMA200 means halve position sizes.
+  // Null result (SPY data unavailable) is treated as neutral, not bear.
+  const bear = await detectBearRegime(creds);
+  const isBearRegime = bear?.isBear ?? false;
+
+  // Friday-afternoon equity-BUY blackout (weekend gap risk).
+  const fridayBlackout = isFridayBlackout();
+
   // Account-wide cap on new BUY notional this scan. Notional/fractional
   // orders on Alpaca draw from non-marginable buying power (≈ cash), not
   // margin × 2. Use cash so each blueprint's deployment stays within the
@@ -1256,6 +1612,8 @@ export async function runScanForUser(
       account,
       recentOrders,
       marketClock,
+      isBearRegime,
+      fridayBlackout,
     });
     remainingBuyingPower = Math.max(0, remainingBuyingPower - result.deployedNotional);
     out.blueprints.push(result);

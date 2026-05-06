@@ -89,6 +89,52 @@ export async function getLatestDecisionsForUser(
   return out;
 }
 
+/**
+ * Tickers that had a mechanical-stop SELL in the recent past — used by the
+ * engine to enforce a cool-down period before re-entering the same name.
+ * Whipsaw protection (bought-stopped-bought-stopped on same ticker is one of
+ * the most reliable ways to bleed gains).
+ *
+ * `lookbackDays` is calendar days, not trading days, for simplicity.
+ */
+export async function getRecentStopOutTickers(
+  clerkUserId: string,
+  blueprintId: AssetClass,
+  lookbackDays = 5,
+): Promise<Set<string>> {
+  const out = new Set<string>();
+  try {
+    const sb = createAdminClient();
+    const since = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000).toISOString();
+    const { data, error } = await sb
+      .from('grok_decisions')
+      .select('trade_outcomes')
+      .eq('clerk_user_id', clerkUserId)
+      .eq('blueprint_id', blueprintId)
+      .gte('decided_at', since)
+      .limit(200);
+    if (error || !data) return out;
+    for (const row of data as Array<{ trade_outcomes: unknown }>) {
+      const outcomes = Array.isArray(row.trade_outcomes)
+        ? (row.trade_outcomes as TradeOutcome[])
+        : [];
+      for (const o of outcomes) {
+        if (o.action !== 'SELL' || o.status !== 'OK') continue;
+        if (!o.reason) continue;
+        if (
+          o.reason.startsWith('MECHANICAL_ATR_STOP') ||
+          o.reason.startsWith('MECHANICAL_TRAILING_STOP')
+        ) {
+          out.add(o.ticker);
+        }
+      }
+    }
+  } catch {
+    // Soft-fail: cool-down is a defense-in-depth layer, not safety-critical.
+  }
+  return out;
+}
+
 interface SaveInput {
   clerkUserId: string;
   blueprintId: AssetClass;

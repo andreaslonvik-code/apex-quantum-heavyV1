@@ -209,6 +209,23 @@ async function callOnce(
   if (!validated.ok) return { success: false, error: validated.error, raw };
 
   const usage = extractUsage(raw);
+
+  // Tool-execution diagnostic: detect if Grok actually ran the live search
+  // tools we declared, or hallucinated a thesis from training data only.
+  // If usage.num_sources_used is 0 OR missing AND the response has no
+  // tool_call items in output, log a warning. Without live search Grok
+  // cannot see today's news / X posts / oil price.
+  const rawObj = raw as { output?: Array<{ type?: string }> };
+  const hasToolUse = Array.isArray(rawObj?.output)
+    ? rawObj.output.some((item) => item?.type === 'tool_call' || item?.type === 'tool_use')
+    : false;
+  const sourceCount = usage?.num_sources_used ?? 0;
+  if (!hasToolUse && sourceCount === 0) {
+    console.warn(
+      `[grok] Live search tools declared but not executed (no tool_call items, num_sources_used=${sourceCount}). Decision is from training data only — may be hallucinated.`,
+    );
+  }
+
   return { success: true, payload: validated.payload, raw, usage };
 }
 

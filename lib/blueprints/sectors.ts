@@ -1,0 +1,91 @@
+/**
+ * Ticker → sector mapping for the stocks watchlist. Used by the engine to
+ * enforce sector-concentration caps (max 1 position per sector across the
+ * bucket), preventing all 3 picks landing in the same sector during sector
+ * crashes (e.g. semis on a DeepSeek-style news day).
+ *
+ * Sector taxonomy is intentionally coarse (8 buckets, not GICS-level 11).
+ * Goal is correlation-based diversification, not academic precision —
+ * NVDA + SMCI + MU all crash together regardless of GICS sub-industry.
+ */
+
+export type Sector =
+  | 'tech_ai'
+  | 'consumer'
+  | 'health'
+  | 'energy'
+  | 'financial'
+  | 'industrial'
+  | 'auto_ev'
+  | 'telecom_media';
+
+const TICKER_TO_SECTOR: Record<string, Sector> = {
+  // Tech / AI / semis — most-correlated cluster
+  AAPL: 'tech_ai',
+  META: 'tech_ai',
+  MSFT: 'tech_ai',
+  NVDA: 'tech_ai',
+  ORCL: 'tech_ai',
+  PANW: 'tech_ai',
+  PLTR: 'tech_ai',
+  NOW: 'tech_ai',
+  SNOW: 'tech_ai',
+  NET: 'tech_ai',
+  SMCI: 'tech_ai',
+  TSM: 'tech_ai',
+  MU: 'tech_ai',
+  QCOM: 'tech_ai',
+
+  // Consumer / staples / retail
+  MCD: 'consumer',
+  NKE: 'consumer',
+  SBUX: 'consumer',
+  WMT: 'consumer',
+  PG: 'consumer',
+  PEP: 'consumer',
+  PM: 'consumer',
+
+  // Health / pharma
+  MRK: 'health',
+  PFE: 'health',
+  TMO: 'health',
+  UNH: 'health',
+  VRTX: 'health',
+
+  // Energy / utilities (oil + nuclear + grid)
+  OET: 'energy',
+  OKLO: 'energy',
+  OXY: 'energy',
+  SLB: 'energy',
+  TLN: 'energy',
+  XOM: 'energy',
+  NEE: 'energy',
+  NEM: 'energy', // gold miner — correlates more with commodities than equities,
+                 // but on bad days trades like a small-cap, treat as own bucket
+
+  // Financial
+  MS: 'financial',
+  SCHW: 'financial',
+  V: 'financial',
+  WFC: 'financial',
+
+  // Industrial / aerospace / power
+  RKLB: 'industrial',
+  RTX: 'industrial',
+  UNP: 'industrial',
+  VRT: 'industrial',
+
+  // Auto / EV
+  TSLA: 'auto_ev',
+
+  // Streaming / media / telco / gig
+  NFLX: 'telecom_media',
+  UBER: 'telecom_media',
+  VZ: 'telecom_media',
+};
+
+/** Returns sector for a ticker, or null if unknown (engine treats unknown as
+ *  "unique sector" — won't block a BUY but won't double-count either). */
+export function sectorOf(ticker: string): Sector | null {
+  return TICKER_TO_SECTOR[ticker] ?? null;
+}

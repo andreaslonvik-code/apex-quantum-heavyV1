@@ -48,7 +48,10 @@ export async function saveUserAllocation(
     throw new Error('Allocation values must be numbers in [0, 100].');
   }
   const sum = values.reduce((a, b) => a + b, 0);
-  if (Math.abs(sum - 100) > 0.5) {
+  // Tight tolerance: the UI uses integer sliders (steps of 1 %), so any sum
+  // other than exactly 100 is a UI bug. 0.01 absorbs IEEE-754 float noise
+  // from JSON round-trips without permitting real drift.
+  if (Math.abs(sum - 100) > 0.01) {
     throw new Error(`Allocation must sum to 100, got ${sum}.`);
   }
   const supabase = createAdminClient();

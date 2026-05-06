@@ -77,7 +77,10 @@ export function macd(closes: number[]): { macd: number; signal: number; hist: nu
 export function bullishDivergence(
   closes: number[],
   currentRsi: number | null,
-  lookback = 8,
+  // 4 bars on a 1Day timeframe = ~1 trading week. Long enough to be
+  // meaningful, short enough to catch early reversal. Was 8 — too long;
+  // missed the "early bounce" we want to catch.
+  lookback = 4,
   rsiPeriod = 14,
 ): boolean {
   if (currentRsi == null) return false;
@@ -94,8 +97,12 @@ export function bullishDivergence(
  * Volume accumulation: recent 3 bars' average volume is meaningfully higher
  * than the prior 20-bar baseline. Indicates smart-money accumulation
  * (institutions buying quietly during a price pullback).
+ *
+ * 1.15× catches early-stage accumulation. 1.3× was too high — by the time
+ * volume crosses 1.3×, the bottom has usually already been put in and the
+ * price is 2–3 % off the lows.
  */
-export function volumeAccumulation(bars: AlpacaBar[], multiplier = 1.3): boolean {
+export function volumeAccumulation(bars: AlpacaBar[], multiplier = 1.15): boolean {
   if (bars.length < 23) return false;
   const recent = bars.slice(-3);
   const baseline = bars.slice(-23, -3);
@@ -103,6 +110,104 @@ export function volumeAccumulation(bars: AlpacaBar[], multiplier = 1.3): boolean
   const baselineAvg = baseline.reduce((s, b) => s + (b.v || 0), 0) / baseline.length;
   if (baselineAvg <= 0) return false;
   return recentAvg > baselineAvg * multiplier;
+}
+
+/**
+ * RSI is rising over the last N bars (positive slope on last N RSI values).
+ * Captures early-stage momentum confirmation — buyers stepping in *before*
+ * RSI hits overbought, not just current oversold. Uses simple linear
+ * regression slope on the last `lookback` RSI values; threshold of 0.5 RSI
+ * units per bar filters out noise (random walk gives ~0–0.2).
+ */
+export function rsiRising(
+  closes: number[],
+  lookback = 5,
+  rsiPeriod = 14,
+  slopeThreshold = 0.5,
+): boolean {
+  if (closes.length < lookback + rsiPeriod + 1) return false;
+  const rsiValues: number[] = [];
+  for (let i = lookback - 1; i >= 0; i--) {
+    const slice = closes.slice(0, closes.length - i);
+    const v = rsi(slice, rsiPeriod);
+    if (v == null) return false;
+    rsiValues.push(v);
+  }
+  const n = rsiValues.length;
+  const meanX = (n - 1) / 2;
+  const meanY = rsiValues.reduce((a, b) => a + b, 0) / n;
+  let num = 0;
+  let den = 0;
+  for (let i = 0; i < n; i++) {
+    num += (i - meanX) * (rsiValues[i] - meanY);
+    den += (i - meanX) ** 2;
+  }
+  const slope = den > 0 ? num / den : 0;
+  return slope > slopeThreshold;
+}
+
+/**
+ * Higher highs over a 2×halfWindow look-back. max(high) of the recent half
+ * exceeds max(high) of the earlier half. Confirms upward price-structure.
+ */
+export function higherHighs(bars: AlpacaBar[], halfWindow = 10): boolean {
+  if (bars.length < 2 * halfWindow) return false;
+  const recent = bars.slice(-halfWindow);
+  const earlier = bars.slice(-2 * halfWindow, -halfWindow);
+  let recentMax = -Infinity;
+  for (const b of recent) if (b.h > recentMax) recentMax = b.h;
+  let earlierMax = -Infinity;
+  for (const b of earlier) if (b.h > earlierMax) earlierMax = b.h;
+  return recentMax > earlierMax;
+}
+
+/**
+ * Higher lows: min(low) of recent half is above min(low) of earlier half.
+ * Buyers absorbing pullbacks at progressively higher levels — the cleanest
+ * "uptrend intact" signal in price action.
+ */
+export function higherLows(bars: AlpacaBar[], halfWindow = 10): boolean {
+  if (bars.length < 2 * halfWindow) return false;
+  const recent = bars.slice(-halfWindow);
+  const earlier = bars.slice(-2 * halfWindow, -halfWindow);
+  let recentMin = Infinity;
+  for (const b of recent) if (b.l < recentMin) recentMin = b.l;
+  let earlierMin = Infinity;
+  for (const b of earlier) if (b.l < earlierMin) earlierMin = b.l;
+  return recentMin > earlierMin;
+}
+
+/**
+ * Rising channel = higher highs AND higher lows. The strongest single
+ * "uptrend confirmed" signal available without full pivot-point fitting.
+ * Used as the gate for trend-confirmed momentum entries (no dip required).
+ */
+export function risingChannel(bars: AlpacaBar[], halfWindow = 10): boolean {
+  return higherHighs(bars, halfWindow) && higherLows(bars, halfWindow);
+}
+
+/**
+ * Realized daily volatility — standard deviation of log returns over the
+ * last N bars, annualized only if needed. Returns the *daily* sigma as a
+ * decimal (e.g. 0.025 = 2.5 % daily). Used for volatility-targeted sizing.
+ *
+ * 20-bar window is the standard quant default — long enough to be stable,
+ * short enough to react to regime shifts within ~1 month.
+ */
+export function realizedVolatility(closes: number[], period = 20): number | null {
+  if (closes.length < period + 1) return null;
+  const slice = closes.slice(-period - 1);
+  const returns: number[] = [];
+  for (let i = 1; i < slice.length; i++) {
+    const prev = slice[i - 1];
+    if (prev <= 0) return null;
+    returns.push(Math.log(slice[i] / prev));
+  }
+  const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+  let varSum = 0;
+  for (const r of returns) varSum += (r - mean) ** 2;
+  const variance = varSum / (returns.length - 1);
+  return Math.sqrt(variance);
 }
 
 /** Wilder's ATR on bar OHLC. Returns null if not enough bars. */
