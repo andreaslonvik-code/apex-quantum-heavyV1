@@ -557,8 +557,11 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   }
 
   // ── Phase 2: BUYs (sequential, all at engine-forced size) ────────────
-  // Engine ignores Grok's notional. Each BUY uses perPickNotional so the
-  // bucket reaches full deployment.
+  // Engine ignores Grok's notional. Each BUY uses perPickNotional, but is
+  // additionally capped per-ticker so cumulative position size never exceeds
+  // maxPctPerPosition × bucket capital. This prevents the "ADA at 34 %" bug
+  // where Grok recommends BUY on the same ticker across consecutive scans
+  // and engine kept stacking on top of an already-full position.
   if (buyDecs.length > 0 && perPickNotional < MIN_NOTIONAL_USD) {
     for (const dec of buyDecs) {
       trades.push(skipTrade(blueprint.id, dec.ticker, 'BUY', 'no_free_capital'));
@@ -567,9 +570,22 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   }
   for (const dec of buyDecs) {
     const ticker = dec.ticker;
-    const notional = round(perPickNotional, 2);
+    // Per-ticker concentration cap: don't let cumulative position exceed
+    // maxPctPerPosition. Existing position value counts toward the cap.
+    const existing = positionsByTicker.get(ticker);
+    const existingValue = existing ? parseFloat(existing.market_value) || 0 : 0;
+    const remainingTickerCap = Math.max(0, maxNotionalPerTicker - existingValue);
+    const cappedByTicker = Math.min(perPickNotional, remainingTickerCap);
+    const notional = round(cappedByTicker, 2);
     if (notional < MIN_NOTIONAL_USD) {
-      trades.push(skipTrade(blueprint.id, ticker, 'BUY', 'below_min_notional'));
+      trades.push(
+        skipTrade(
+          blueprint.id,
+          ticker,
+          'BUY',
+          remainingTickerCap < MIN_NOTIONAL_USD ? 'concentration_cap_reached' : 'below_min_notional',
+        ),
+      );
       continue;
     }
     const r = await placeOrder(creds, {

@@ -186,7 +186,26 @@ export async function GET(req: NextRequest) {
       eq.push(totalValue);
     }
 
-    const windowStart = eq[0];
+    // Pick a clean baseline for the windowed P&L:
+    //   1) For 24H, prefer Alpaca's `last_equity` (previous trading-day close),
+    //      since `portfolio_history` can include anomalous leading samples from
+    //      account funding time → bogus +500 % returns.
+    //   2) Sanity-trim: if the chosen baseline is more than 5× away from the
+    //      current value, the data is almost certainly stale; fall back to
+    //      current value so we display ~0 % rather than a wild number.
+    let windowStart = eq[0];
+    const lastEquity =
+      parseFloat((account as { last_equity?: string }).last_equity ?? '0') || 0;
+    if (tf === '24H' && lastEquity > 0) {
+      windowStart = lastEquity;
+    }
+    if (
+      !Number.isFinite(windowStart) ||
+      windowStart <= 0 ||
+      (totalValue > 0 && (totalValue / windowStart > 5 || windowStart / totalValue > 5))
+    ) {
+      windowStart = totalValue;
+    }
     const windowPnl = totalValue - windowStart;
     const windowPnlPct = windowStart > 0 ? (windowPnl / windowStart) * 100 : 0;
 

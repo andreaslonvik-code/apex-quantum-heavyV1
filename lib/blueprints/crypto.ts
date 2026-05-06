@@ -40,8 +40,13 @@ export const CRYPTO_BLUEPRINT: Blueprint = {
     maxPctPerPosition: 25,
     dailyKillSwitchPct: -0.03,
     atrPeriod: 14,
-    atrStopMult: 1.5,
-    profitTakeThreshold: 0.15,
+    // Tightened from 1.5× → 1.0×: crypto is volatile enough that 1.5 ATR
+    // gives back too much before triggering. 1.0 cuts losses faster.
+    atrStopMult: 1.0,
+    // Lowered from 0.15 → 0.07: crypto rarely runs +15 % intraday, so the
+    // old threshold almost never fired and gains evaporated. 7 % locks in
+    // realistic moves before they reverse.
+    profitTakeThreshold: 0.07,
     timeframe: '1Hour',
     barLimit: 250,
   },
