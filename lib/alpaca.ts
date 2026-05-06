@@ -399,6 +399,17 @@ export function getOrders(
   return alpacaFetch<AlpacaOrder[]>(url, creds);
 }
 
+export function cancelOrder(
+  creds: AlpacaCreds,
+  orderId: string,
+): Promise<AlpacaResult<unknown>> {
+  return alpacaFetch(
+    `${getTradingBase(creds.env)}/orders/${encodeURIComponent(orderId)}`,
+    creds,
+    { method: 'DELETE' },
+  );
+}
+
 export function cancelAllOrders(creds: AlpacaCreds): Promise<AlpacaResult<unknown>> {
   return alpacaFetch(`${getTradingBase(creds.env)}/orders`, creds, { method: 'DELETE' });
 }

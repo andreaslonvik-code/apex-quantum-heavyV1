@@ -5,7 +5,7 @@ import {
   type AlpacaCreds,
   type AlpacaOrder,
   type AlpacaPosition,
-  cancelAllOrders,
+  cancelOrder as alpacaCancelOrder,
   getAccount,
   getClock,
   getCryptoBars,
@@ -1067,12 +1067,23 @@ export async function runScanForUser(
     blueprints: [],
   };
 
-  // Cancel any pending orders from previous scans. Pending notional BUYs
-  // lock buying_power even before they fill; on Alpaca paper this snowballs
-  // across ticks and produces "insufficient buying power" rejections on
-  // perfectly-sized new orders. Fresh state every scan eliminates that.
-  await cancelAllOrders(creds);
-  await new Promise((resolve) => setTimeout(resolve, 1500));
+  // Only cancel STALE pending orders (>5 min old). Cancelling everything
+  // every tick was killing pre-market limit fills before the order could
+  // match thin orderbook liquidity (we saw orders canceled 23 sec after
+  // submission). The engine's inFlightTickers logic prevents duplicate
+  // submissions, so fresh limits don't need to be cleared.
+  const STALE_ORDER_MS = 5 * 60 * 1000;
+  const openOrdersForCleanupRes = await getOrders(creds, { status: 'open', limit: 200 });
+  if (openOrdersForCleanupRes.success) {
+    const now = Date.now();
+    for (const o of openOrdersForCleanupRes.data) {
+      const ageMs = now - new Date(o.submitted_at).getTime();
+      if (ageMs > STALE_ORDER_MS) {
+        // Best-effort cancel of stale orders so they don't lock BP forever.
+        await alpacaCancelOrder(creds, o.id);
+      }
+    }
+  }
 
   const acctRes = await getAccount(creds);
   if (!acctRes.success) {
