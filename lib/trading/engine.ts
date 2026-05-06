@@ -76,6 +76,17 @@ export interface UserScanResult {
 const GROK_CADENCE_MS = 2 * 60 * 1000;
 const INDICATOR_BAR_COUNT = 60; // bars to fetch for indicator summary
 const MIN_NOTIONAL_USD = 1.0;
+
+/**
+ * Hard-disabled blueprints. These buckets will be ignored by the engine —
+ * existing positions will be liquidated on the next tick (bucket capital
+ * forced to 0 → deallocation logic fires) and no new orders placed.
+ *
+ * Currently disabled because the crypto + commodities trading was producing
+ * stop-loss-driven losses in choppy markets. Re-enable by removing entries
+ * here once we've validated each blueprint with backtests.
+ */
+const DISABLED_BLUEPRINTS: ReadonlySet<AssetClass> = new Set(['crypto', 'commodities']);
 // With PDT/DTBP entry-checks relaxed (pdt_check + dtbp_check = "exit"),
 // Alpaca accepts much larger fractional/notional orders. The chat-mirror
 // procedure wants 35–40 % of bucket on the #1 pick; on a $94 k account
@@ -1110,7 +1121,11 @@ export async function runScanForUser(
   let remainingBuyingPower = cash;
 
   for (const blueprint of BLUEPRINT_LIST) {
-    const allocPct = allocation[blueprint.id] ?? 0;
+    // Hard-disabled blueprints get 0 % bucket capital regardless of the
+    // user's saved allocation. The deallocation logic in runBlueprint then
+    // liquidates any positions in this bucket and skips Grok entirely.
+    const isDisabled = DISABLED_BLUEPRINTS.has(blueprint.id);
+    const allocPct = isDisabled ? 0 : allocation[blueprint.id] ?? 0;
     const bucketCapital = (equity * allocPct) / 100;
     const killSwitchOn = dailyPnlPct <= blueprint.params.dailyKillSwitchPct;
     const result = await runBlueprint({
