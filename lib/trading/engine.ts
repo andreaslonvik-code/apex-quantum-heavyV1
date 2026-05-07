@@ -117,13 +117,20 @@ const MIN_NOTIONAL_USD = 1.0;
  * here once we've validated each blueprint with backtests.
  */
 const DISABLED_BLUEPRINTS: ReadonlySet<AssetClass> = new Set(['crypto', 'commodities']);
-// With PDT/DTBP entry-checks relaxed (pdt_check + dtbp_check = "exit"),
-// Alpaca accepts much larger fractional/notional orders. The chat-mirror
-// procedure wants 35–40 % of bucket on the #1 pick; on a $94 k account
-// that is ≈ $33 k, so the cap needs to clear that. $25 k stays under
-// observed Alpaca paper hard limits while letting the chat procedure
-// allocate weighted positions.
-const MAX_PER_ORDER_NOTIONAL = 25_000;
+// Sanity cap on a single order's notional, regardless of bucket size.
+// Originally $25 k from when the account was ~$100 k — way too restrictive
+// at $1 M+ where the chat-mirror procedure wants 35–40 % of bucket = $350–
+// 400 k on the #1 pick.
+//
+// $500 k is a safety ceiling: extended-hours uses whole-share + limit
+// (not fractional notional), so Alpaca's notional-fractional limits don't
+// apply. Regular-hours notional orders up to ~$200 k work in practice
+// with PDT/DTBP relaxed to "exit". $500 k catches any single oversized
+// outlier without bottlenecking realistic per-pick sizes.
+//
+// Per-bucket caps (50 % maxPctPerPosition, freeBucketCapital/N,
+// safeRemainingBP/N) all still apply — they prevent total over-deployment.
+const MAX_PER_ORDER_NOTIONAL = 500_000;
 
 function tradingSymbol(symbol: string): string {
   return symbol.replace('/', '');
