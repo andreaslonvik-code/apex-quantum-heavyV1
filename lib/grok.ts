@@ -80,7 +80,21 @@ export async function decide(req: ChatRequest): Promise<GrokResult> {
   let lastError: GrokResult | null = null;
 
   for (const model of modelsToTry) {
-    const result = await tryWithRetries(apiKey, model, req);
+    let result = await tryWithRetries(apiKey, model, req);
+
+    // If Grok returned an empty-text response, retry once WITHOUT live-search
+    // tools. Symptom: { success: false, error: 'No text content in Responses
+    // API output' }. Most likely cause is that web_search/x_search hung or
+    // returned nothing useful and Grok never produced a final message. Without
+    // tools, the model uses prompt+training only — degraded but functional.
+    const noTextContent =
+      !result.success &&
+      typeof result.error === 'string' &&
+      result.error.includes('No text content');
+    if (noTextContent) {
+      result = await tryWithRetries(apiKey, model, req, { disableTools: true });
+    }
+
     if (result.success) return result;
     lastError = result;
     // Only fall back to the next model on "model not found" / "invalid model"
@@ -95,16 +109,23 @@ export async function decide(req: ChatRequest): Promise<GrokResult> {
   return lastError ?? { success: false, error: 'unknown' };
 }
 
+interface CallOptions {
+  /** When true, omit the `tools` array — fallback path for when live search
+   *  hangs or never produces final text. */
+  disableTools?: boolean;
+}
+
 async function tryWithRetries(
   apiKey: string,
   model: string,
   req: ChatRequest,
+  options: CallOptions = {},
 ): Promise<GrokResult> {
   const maxAttempts = 3;
   let lastError: GrokResult | null = null;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    const r = await callOnce(apiKey, model, req);
+    const r = await callOnce(apiKey, model, req, options);
     if (r.success) return r;
 
     lastError = r;
@@ -128,6 +149,7 @@ async function callOnce(
   apiKey: string,
   model: string,
   req: ChatRequest,
+  options: CallOptions = {},
 ): Promise<GrokResult> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), REQUEST_TIMEOUT_MS);
@@ -142,6 +164,19 @@ async function callOnce(
     //     server-side live search (Grok runs them, returns final answer)
     //   - `text.format` for JSON output (alternative to chat completions'
     //     response_format)
+    // When `disableTools` is set (fallback path on no-text-content), we
+    // omit the tools array entirely — Grok runs prompt-only.
+    const requestBody: Record<string, unknown> = {
+      model,
+      input: [
+        { role: 'system', content: req.systemPrompt },
+        { role: 'user', content: req.userPrompt },
+      ],
+      text: { format: { type: 'json_object' } },
+    };
+    if (!options.disableTools) {
+      requestBody.tools = [{ type: 'web_search' }, { type: 'x_search' }];
+    }
     res = await fetch(GROK_ENDPOINT, {
       method: 'POST',
       headers: {
@@ -149,18 +184,7 @@ async function callOnce(
         'Content-Type': 'application/json',
       },
       signal: ctrl.signal,
-      body: JSON.stringify({
-        model,
-        input: [
-          { role: 'system', content: req.systemPrompt },
-          { role: 'user', content: req.userPrompt },
-        ],
-        tools: [
-          { type: 'web_search' },
-          { type: 'x_search' },
-        ],
-        text: { format: { type: 'json_object' } },
-      }),
+      body: JSON.stringify(requestBody),
     });
   } catch (e) {
     clearTimeout(timer);

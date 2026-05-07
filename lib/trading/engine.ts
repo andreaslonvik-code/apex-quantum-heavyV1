@@ -1002,6 +1002,21 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
           position_intent: 'sell_to_close',
         };
       } else {
+        // Fractional positions can't be sold via extended-hours limit
+        // orders (Alpaca rejects whole-share-only requirement when the
+        // remainder doesn't cleanly close the position). Skip the SELL
+        // until market opens — the next tick at/after 09:30 ET will
+        // submit a regular market order that properly closes any
+        // fractional position.
+        const isFractional = qty !== Math.floor(qty);
+        if (!marketIsOpen && isFractional) {
+          return skipTrade(
+            blueprint.id,
+            ticker,
+            'SELL',
+            'extended_hours_fractional_skip',
+          );
+        }
         const priceRes = await getLatestPrice(creds, tradingSymbol(ticker));
         // Two-step fallback: live price → Alpaca-position's stored
         // current_price. The position object always has a recent price
@@ -1306,6 +1321,23 @@ async function mechanicalSafetyPass(args: {
       else if (trailFloor != null && price < trailFloor) reason = 'MECHANICAL_TRAILING_STOP';
 
       if (!reason) continue;
+
+      // Fractional positions can't sell via extended-hours (Alpaca only
+      // accepts whole-share limit orders out-of-hours). Skip and let the
+      // next tick at/after market open fire a regular market sell.
+      const isFractional = !isCrypto && qty !== Math.floor(qty);
+      if (!isCrypto && !marketIsOpen && isFractional) {
+        trades.push({
+          blueprintId: blueprint.id,
+          ticker,
+          action: 'SELL',
+          qty,
+          notional: 0,
+          status: 'SKIP',
+          reason: `${reason}_deferred_fractional`,
+        });
+        continue;
+      }
 
       const orderReq = isCrypto
         ? ({
