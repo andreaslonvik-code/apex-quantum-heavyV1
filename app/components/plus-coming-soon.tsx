@@ -1,6 +1,7 @@
 'use client';
 
-import { Fragment } from 'react';
+import { Fragment, useState } from 'react';
+import Link from 'next/link';
 import { SignOutButton, useUser } from '@clerk/nextjs';
 import { PageShell } from '@/app/components/marketing/page-shell';
 import type { Lang } from '@/app/components/marketing/types';
@@ -16,39 +17,72 @@ const COPY: Record<
     signedInAs: string;
     signOut: string;
     contact: string;
+    startCta: string;
+    starting: string;
+    price: string;
   }
 > = {
   no: {
     eye: 'BETA — VENTELISTE',
     title: 'Du er på listen.',
-    sub: 'Apex Quantum + er i lukket beta mens vi finjusterer signal-pipelinen. Du får e-post fra oss så snart tilgangen åpnes — uten ekstra ventetid.',
+    sub: 'Apex Quantum + er i lukket beta mens vi finjusterer signal-pipelinen. Du kan starte abonnement nå og få full tilgang så snart beta åpnes for ditt nivå — eller vente til vi åpner bredt.',
     bullets: [
       'Daglige AI-signaler med begrunnelse',
       'Ukentlige markedsrapporter',
       'Spør AI om hvilken som helst aksje',
       'Tilgjengelig globalt — du velger megler',
     ],
-    foot: ['Beta åpner i løpet av kort tid', 'Vi varsler deg på e-post', 'Ingen forhåndsbetaling'],
+    foot: ['Avbryt når som helst', 'Ingen bindingstid', 'Ingen suksesshonorar'],
     signedInAs: 'Pålogget som',
     signOut: 'Logg ut',
     contact: 'Spørsmål? Skriv til',
+    startCta: 'Start abonnement',
+    starting: 'Sender deg til Stripe…',
+    price: '199 kr/mnd',
   },
   en: {
     eye: 'BETA — WAITLIST',
     title: 'You are on the list.',
-    sub: 'Apex Quantum + is in closed beta while we tune the signal pipeline. You will get an email from us the moment access opens — no further waiting.',
+    sub: 'Apex Quantum + is in closed beta while we tune the signal pipeline. You can start a subscription now and get full access the moment beta opens for your tier — or wait until we open widely.',
     bullets: [
       'Daily AI signals with reasoning',
       'Weekly market reports',
       'Ask AI about any stock',
       'Available globally — pick any broker',
     ],
-    foot: ['Beta opens shortly', 'We notify you by email', 'No prepayment'],
+    foot: ['Cancel anytime', 'No commitment period', 'No performance fees'],
     signedInAs: 'Signed in as',
     signOut: 'Sign out',
     contact: 'Questions? Write to',
+    startCta: 'Start subscription',
+    starting: 'Redirecting to Stripe…',
+    price: '199 kr/mo',
   },
 };
+
+function LegalNote({ lang }: { lang: Lang }) {
+  const cyan = { color: 'var(--aq-cyan)' };
+  if (lang === 'no') {
+    return (
+      <>
+        Ved å starte abonnement godtar du{' '}
+        <Link href="/vilkar" style={cyan}>vilkårene</Link>
+        {' og '}
+        <Link href="/personvern" style={cyan}>personvernerklæringen</Link>
+        . Apex Quantum + er ikke individuell investeringsrådgivning.
+      </>
+    );
+  }
+  return (
+    <>
+      By starting a subscription you accept the{' '}
+      <Link href="/vilkar" style={cyan}>terms</Link>
+      {' and '}
+      <Link href="/personvern" style={cyan}>privacy policy</Link>
+      . Apex Quantum + is not individual investment advice.
+    </>
+  );
+}
 
 export function PlusComingSoon() {
   return <PageShell>{(lang: Lang) => <Inner lang={lang} />}</PageShell>;
@@ -58,6 +92,24 @@ function Inner({ lang }: { lang: Lang }) {
   const t = COPY[lang];
   const { user } = useUser();
   const email = user?.emailAddresses[0]?.emailAddress;
+  const [starting, setStarting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleStart = async () => {
+    setStarting(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/plus/checkout', { method: 'POST', credentials: 'include' });
+      const data = await res.json();
+      if (!res.ok || !data.url) {
+        throw new Error(data.error || 'unknown');
+      }
+      window.location.href = data.url;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'unknown');
+      setStarting(false);
+    }
+  };
 
   return (
     <section style={{ padding: '160px 24px 120px' }}>
@@ -107,9 +159,62 @@ function Inner({ lang }: { lang: Lang }) {
           ))}
         </ul>
 
+        <div style={{ marginTop: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+          <button
+            type="button"
+            className="btn-primary-v8 btn-lg"
+            onClick={handleStart}
+            disabled={starting}
+          >
+            {starting ? t.starting : `${t.startCta} — ${t.price}`}
+            {!starting && (
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2">
+                <path d="M5 12h14M12 5l7 7-7 7" />
+              </svg>
+            )}
+          </button>
+          <div className="m-foot-strip" style={{ justifyContent: 'center' }}>
+            {t.foot.map((s, i) => (
+              <Fragment key={i}>
+                <span>{s}</span>
+                {i < t.foot.length - 1 && <span className="m-foot-sep">•</span>}
+              </Fragment>
+            ))}
+          </div>
+          {error && (
+            <div
+              style={{
+                marginTop: 8,
+                padding: '8px 14px',
+                background: 'rgba(239,68,68,0.08)',
+                border: '1px solid rgba(239,68,68,0.30)',
+                borderRadius: 8,
+                fontSize: 13,
+                color: '#F87171',
+              }}
+            >
+              {error}
+            </div>
+          )}
+        </div>
+
+        <p
+          style={{
+            marginTop: 24,
+            maxWidth: 520,
+            marginLeft: 'auto',
+            marginRight: 'auto',
+            fontSize: 12,
+            color: 'rgba(255,255,255,0.45)',
+            lineHeight: 1.55,
+          }}
+        >
+          <LegalNote lang={lang} />
+        </p>
+
         <div
           style={{
-            marginTop: 48,
+            marginTop: 56,
             padding: '20px 24px',
             background: 'rgba(255,255,255,0.025)',
             border: '1px solid var(--aq-border)',
@@ -127,15 +232,6 @@ function Inner({ lang }: { lang: Lang }) {
               {t.signOut}
             </button>
           </SignOutButton>
-        </div>
-
-        <div className="m-foot-strip" style={{ justifyContent: 'center', marginTop: 32 }}>
-          {t.foot.map((s, i) => (
-            <Fragment key={i}>
-              <span>{s}</span>
-              {i < t.foot.length - 1 && <span className="m-foot-sep">•</span>}
-            </Fragment>
-          ))}
         </div>
 
         <p style={{ marginTop: 28, color: 'rgba(255,255,255,0.42)', fontSize: 13 }}>

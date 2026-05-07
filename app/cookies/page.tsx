@@ -7,13 +7,13 @@ const COPY = {
   no: {
     title: 'Cookies',
     updatedLabel: 'Sist oppdatert',
-    updatedDate: '30. april 2026',
+    updatedDate: '8. mai 2026',
     intro:
       'Apex Quantum bruker informasjonskapsler ("cookies") for å holde deg pålogget, sikre tjenesten og forstå bruken av nettstedet. Denne siden forklarer hvilke kapsler vi bruker og hvorfor.',
     sections: [
       [
         'Strengt nødvendige',
-        'Disse er nødvendige for at tjenesten skal fungere. De håndterer pålogging via Clerk og beskytter mot CSRF-angrep. Du kan ikke skru disse av uten å miste tilgangen til kontoen din.',
+        'Disse er nødvendige for at tjenesten skal fungere. De håndterer pålogging via Clerk, sesjonshåndtering og beskytter mot CSRF-angrep. Stripe setter også egne cookies under betalingsflyten (kun på checkout.stripe.com og billing.stripe.com) for svindelforebygging. Du kan ikke skru disse av uten å miste tilgangen til kontoen din eller fullføre betaling.',
       ],
       [
         'Funksjonelle',
@@ -32,13 +32,13 @@ const COPY = {
   en: {
     title: 'Cookies',
     updatedLabel: 'Last updated',
-    updatedDate: 'April 30, 2026',
+    updatedDate: 'May 8, 2026',
     intro:
       'Apex Quantum uses cookies to keep you signed in, secure the service, and understand how the site is used. This page explains which cookies we set and why.',
     sections: [
       [
         'Strictly necessary',
-        'Required for the service to function. They handle Clerk authentication and protect against CSRF. You cannot disable these without losing access to your account.',
+        'Required for the service to function. They handle Clerk authentication, session management and protect against CSRF. Stripe also sets its own cookies during the payment flow (only on checkout.stripe.com and billing.stripe.com) for fraud prevention. You cannot disable these without losing access to your account or being unable to complete payment.',
       ],
       [
         'Functional',

@@ -45,6 +45,8 @@ const COPY = {
     maxCardSub: 'Du har full tilgang som tidlig bruker.',
     maxCardCta: 'Åpne Max',
     signOut: 'Logg ut',
+    manageSub: 'Administrer abonnement',
+    manageError: 'Klarte ikke åpne Stripe',
   },
   en: {
     productTag: 'APEX QUANTUM +',
@@ -53,6 +55,8 @@ const COPY = {
     maxCardSub: 'You have full access as an early user.',
     maxCardCta: 'Open Max',
     signOut: 'Sign out',
+    manageSub: 'Manage subscription',
+    manageError: 'Could not open Stripe',
   },
   de: {
     productTag: 'APEX QUANTUM +',
@@ -61,6 +65,8 @@ const COPY = {
     maxCardSub: 'Sie haben als früher Nutzer vollen Zugang.',
     maxCardCta: 'Max öffnen',
     signOut: 'Abmelden',
+    manageSub: 'Abonnement verwalten',
+    manageError: 'Konnte Stripe nicht öffnen',
   },
   es: {
     productTag: 'APEX QUANTUM +',
@@ -69,6 +75,8 @@ const COPY = {
     maxCardSub: 'Tienes acceso total como usuario temprano.',
     maxCardCta: 'Abrir Max',
     signOut: 'Cerrar sesión',
+    manageSub: 'Administrar suscripción',
+    manageError: 'No se pudo abrir Stripe',
   },
   zh: {
     productTag: 'APEX QUANTUM +',
@@ -77,19 +85,39 @@ const COPY = {
     maxCardSub: '作为早期用户，您拥有完全访问权限。',
     maxCardCta: '打开 Max',
     signOut: '登出',
+    manageSub: '管理订阅',
+    manageError: '无法打开 Stripe',
   },
 } as const;
 
 interface Props {
   allowlisted: boolean;
+  hasSubscription: boolean;
 }
 
-export default function PlusDashboardClient({ allowlisted }: Props) {
+export default function PlusDashboardClient({ allowlisted, hasSubscription }: Props) {
   const [lang, setLang] = useState<PlusLang>('no');
   const [view, setView] = useState<ViewKey>('signals');
   const [navOpen, setNavOpen] = useState(false);
+  const [manageBusy, setManageBusy] = useState(false);
   const { user } = useUser();
   const t = COPY[lang];
+
+  const openPortal = async () => {
+    setManageBusy(true);
+    try {
+      const res = await fetch('/api/plus/portal', { method: 'POST', credentials: 'include' });
+      const data = await res.json();
+      if (res.ok && data.url) {
+        window.location.href = data.url;
+        return;
+      }
+      throw new Error(data.error || 'unknown');
+    } catch {
+      window.alert(t.manageError);
+      setManageBusy(false);
+    }
+  };
 
   const renderView = () => {
     switch (view) {
@@ -193,6 +221,17 @@ export default function PlusDashboardClient({ allowlisted }: Props) {
             <div className="aqp-user-name">
               {user?.firstName ?? user?.username ?? user?.emailAddresses[0]?.emailAddress ?? ''}
             </div>
+            {hasSubscription && (
+              <button
+                type="button"
+                className="aqp-signout"
+                onClick={openPortal}
+                disabled={manageBusy}
+                style={{ marginBottom: 6 }}
+              >
+                {t.manageSub}
+              </button>
+            )}
             <SignOutButton redirectUrl="/">
               <button type="button" className="aqp-signout">
                 {t.signOut}

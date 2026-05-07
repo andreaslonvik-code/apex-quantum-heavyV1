@@ -10,6 +10,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/inngest(.*)',      // Inngest webhooks
   '/api/cron(.*)',         // Vercel cron jobs
   '/api/marketing(.*)',    // Public landing-page endpoints (no PII leaked)
+  '/api/plus/stripe-webhook', // Stripe webhook — verified by signature
   '/om-oss',
   '/kontakt',
   '/blogg',

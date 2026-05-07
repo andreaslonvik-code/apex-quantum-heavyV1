@@ -7,13 +7,17 @@ const COPY = {
   no: {
     title: 'Risikofaktorer',
     updatedLabel: 'Sist oppdatert',
-    updatedDate: '30. april 2026',
+    updatedDate: '8. mai 2026',
     intro:
-      'Apex Quantum er et avansert handelsverktøy. Tjenesten kan tape penger. Les denne siden nøye før du kobler en konto med ekte midler.',
+      'Apex Quantum er et avansert verktøy. Tjenesten kan medføre tap av kapital. Les denne siden nøye før du kobler en konto med ekte midler eller handler basert på våre signaler.',
     sections: [
       [
+        'Apex Quantum + er ikke investeringsrådgivning',
+        'Plus leverer generell markedsanalyse og AI-genererte signaler i pedagogisk øyemed. Innholdet er ikke individuell investeringsrådgivning og er ikke tilpasset din økonomiske situasjon, mål eller risikotoleranse. Du tar alle investeringsbeslutninger selv, og bærer alt ansvar og all risiko for handelsaktivitet utført på din egen meglerkonto.',
+      ],
+      [
         'Markedsrisiko',
-        'Verdipapirer som handles via Alpaca er underlagt vanlig markedsrisiko. Aksjekurser kan falle raskt og betydelig. Det finnes ingen garanti mot tap av kapital, heller ikke gjennom AI-drevet beslutningsstøtte.',
+        'Verdipapirer er underlagt vanlig markedsrisiko. Aksjekurser kan falle raskt og betydelig. Det finnes ingen garanti mot tap av kapital, heller ikke gjennom AI-drevet beslutningsstøtte.',
       ],
       [
         'Modellrisiko',
@@ -21,7 +25,7 @@ const COPY = {
       ],
       [
         'Operasjonell risiko',
-        'Tjenesten avhenger av tredjeparter (Alpaca, Clerk, Supabase, Vercel, Grok). Avbrudd hos disse kan føre til at handler ikke utføres som forventet. Vi varsler om kjente hendelser via e-post, men kan ikke garantere 100 % oppetid.',
+        'Tjenesten avhenger av tredjeparter (Alpaca, Clerk, Supabase, Stripe, Vercel, xAI/Grok). Avbrudd hos disse kan føre til at signaler forsinkes, betalinger ikke gjennomføres, eller at handler i Max ikke utføres som forventet. Vi varsler om kjente hendelser via e-post, men kan ikke garantere 100 % oppetid.',
       ],
       [
         'Likviditetsrisiko',
@@ -48,13 +52,17 @@ const COPY = {
   en: {
     title: 'Risk factors',
     updatedLabel: 'Last updated',
-    updatedDate: 'April 30, 2026',
+    updatedDate: 'May 8, 2026',
     intro:
-      'Apex Quantum is an advanced trading tool. The service can lose money. Please read this page carefully before connecting a real-money account.',
+      'Apex Quantum is an advanced tool. The service can lead to loss of capital. Please read this page carefully before connecting a real-money account or trading based on our signals.',
     sections: [
       [
+        'Apex Quantum + is not investment advice',
+        'Plus delivers general market analysis and AI-generated signals for educational purposes. The content is not individual investment advice and is not tailored to your financial situation, goals or risk tolerance. You make all investment decisions yourself and bear all responsibility and risk for trading activity executed on your own broker account.',
+      ],
+      [
         'Market risk',
-        'Securities traded via Alpaca are subject to ordinary market risk. Equity prices can fall fast and meaningfully. There is no guarantee against capital loss, not even through AI-driven decision support.',
+        'Securities are subject to ordinary market risk. Equity prices can fall fast and meaningfully. There is no guarantee against capital loss, not even through AI-driven decision support.',
       ],
       [
         'Model risk',
@@ -62,7 +70,7 @@ const COPY = {
       ],
       [
         'Operational risk',
-        'The service depends on third parties (Alpaca, Clerk, Supabase, Vercel, Grok). Outages can cause trades to not execute as expected. We notify customers of known incidents by email but cannot guarantee 100% uptime.',
+        'The service depends on third parties (Alpaca, Clerk, Supabase, Stripe, Vercel, xAI/Grok). Outages can delay signals, prevent payments, or cause Max trades to not execute as expected. We notify customers of known incidents by email but cannot guarantee 100% uptime.',
       ],
       [
         'Liquidity risk',
