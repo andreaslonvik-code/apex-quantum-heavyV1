@@ -12,7 +12,7 @@ const COPY = {
     eye: 'APEX QUANTUM +',
     title: 'Bli kjent med aksjemarkedet',
     accent: '— med AI som læremester.',
-    desc: 'Apex Quantum + er en lærings- og analyseplattform for deg som vil forstå hvordan markedet fungerer. Daglige AI-signaler med begrunnelse, ukentlige rapporter, kursmoduler fra nybegynner til avansert, og en risikofri praksisportefølje. Du velger megler selv. Du tar beslutningene.',
+    desc: 'Apex Quantum + er en lærings- og analyseplattform for deg som vil forstå hvordan markedet fungerer. AI-en er drevet av en blueprint utviklet over et år for ekspertise i aksjeanalyse. Daglige signaler med begrunnelse, ukentlige rapporter, kursmoduler fra nybegynner til avansert, og en risikofri praksisportefølje. Du velger megler selv. Du tar beslutningene.',
     bullets: [
       'Daglige signaler med fullstendig begrunnelse',
       'Ukentlige markedsrapporter på norsk',
@@ -105,7 +105,7 @@ const COPY = {
     eye: 'APEX QUANTUM +',
     title: 'Get to know the stock market',
     accent: '— with AI as your tutor.',
-    desc: 'Apex Quantum + is a learning and analysis platform for people who want to understand how markets work. Daily AI signals with reasoning, weekly reports, course modules from beginner to advanced, and a risk-free practice portfolio. You choose your broker. You make the calls.',
+    desc: 'Apex Quantum + is a learning and analysis platform for people who want to understand how markets work. The AI is driven by a blueprint developed over a year for stock-analysis expertise. Daily signals with reasoning, weekly reports, course modules from beginner to advanced, and a risk-free practice portfolio. You choose your broker. You make the calls.',
     bullets: [
       'Daily signals with full reasoning',
       'Weekly market reports',

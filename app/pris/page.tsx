@@ -38,7 +38,7 @@ const COPY = {
       cycle: '/mnd',
       altPrice: '≈ $499/mnd for utenlandske kunder',
       bullets: [
-        'Autonom AI-handel med Grok-4-Heavy',
+        'Autonom AI-handel — drevet av en blueprint utviklet over et år',
         'US equities — NASDAQ, NYSE, ARCA, AMEX',
         'AES-256-GCM krypterte API-nøkler',
         'Live cockpit, P&L og porteføljegraf',
@@ -85,7 +85,7 @@ const COPY = {
       cycle: '/month',
       altPrice: '≈ 4 990 kr/month for Norwegian customers',
       bullets: [
-        'Autonomous AI trading with Grok-4-Heavy',
+        'Autonomous AI trading — driven by a blueprint developed over a year',
         'US equities — NASDAQ, NYSE, ARCA, AMEX',
         'AES-256-GCM encrypted API keys',
         'Live cockpit, P&L and portfolio chart',

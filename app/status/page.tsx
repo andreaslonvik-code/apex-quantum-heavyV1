@@ -5,7 +5,7 @@ import type { Lang } from '@/app/components/marketing/types';
 
 const COMPONENTS_NO = [
   ['Trading-motor (Alpaca)', 'Operativ'],
-  ['AI-analyse (Grok-4-Heavy)', 'Operativ'],
+  ['AI-analyse', 'Operativ'],
   ['Web og dashboard', 'Operativ'],
   ['Autentisering (Clerk)', 'Operativ'],
   ['Database (Supabase)', 'Operativ'],
@@ -13,7 +13,7 @@ const COMPONENTS_NO = [
 
 const COMPONENTS_EN = [
   ['Trading engine (Alpaca)', 'Operational'],
-  ['AI analysis (Grok-4-Heavy)', 'Operational'],
+  ['AI analysis', 'Operational'],
   ['Web and dashboard', 'Operational'],
   ['Authentication (Clerk)', 'Operational'],
   ['Database (Supabase)', 'Operational'],

@@ -9,7 +9,7 @@ const HERO = {
     badge: 'AI-drevet aksjeinnsikt — Plus tilgjengelig nå',
     title: 'Apex Quantum',
     accent: 'AI-drevet aksjeinnsikt for alle nivåer',
-    desc: 'Lær aksjemarkedet med AI som læremester, eller la den fullautomatiske motoren ta over når den lanseres. Apex Quantum + gir deg daglige signaler med begrunnelse, ukentlige rapporter og strukturert læring fra kun 199 kr/mnd. Apex Quantum Max — den autonome trading-motoren — kommer snart.',
+    desc: 'Lær aksjemarkedet med AI som læremester, eller la den fullautomatiske motoren ta over når den lanseres. Drevet av en blueprint utviklet over et år for ekspertise i aksjeanalyse. Apex Quantum + gir deg daglige signaler med begrunnelse, ukentlige rapporter og strukturert læring fra kun 199 kr/mnd. Apex Quantum Max — den autonome trading-motoren — kommer snart.',
     feats: [
       ['→', 'Daglige AI-signaler med fullstendig begrunnelse'],
       ['→', 'Ukentlige markedsrapporter på norsk'],
@@ -26,7 +26,7 @@ const HERO = {
     badge: 'AI-powered market insight — Plus available now',
     title: 'Apex Quantum',
     accent: 'AI-powered market insight at every level',
-    desc: 'Learn the stock market with AI as your tutor, or let the fully autonomous engine take over once it launches. Apex Quantum + gives you daily signals with reasoning, weekly reports and structured learning from just $19/month. Apex Quantum Max — the autonomous trading engine — is coming soon.',
+    desc: 'Learn the stock market with AI as your tutor, or let the fully autonomous engine take over once it launches. Driven by a blueprint developed over a year for stock-analysis expertise. Apex Quantum + gives you daily signals with reasoning, weekly reports and structured learning from just $19/month. Apex Quantum Max — the autonomous trading engine — is coming soon.',
     feats: [
       ['→', 'Daily AI signals with full reasoning'],
       ['→', 'Weekly market reports'],

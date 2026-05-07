@@ -12,7 +12,7 @@ const FEAT = {
     feats: [
       { ic: 'chart' as const,    t: 'US Equities',          d: 'Apex Quantum handler aksjer på NASDAQ, NYSE, ARCA og AMEX gjennom Alpaca Trading API.' },
       { ic: 'stock' as const,    t: 'Kun aksjehandel',       d: 'Fokusert på aksjer (equities). Ingen CFD, futures, options eller andre derivater.' },
-      { ic: 'ai' as const,       t: 'Grok-4-Heavy AI',       d: 'Bruker xAI Grok-4-Heavy for markedsanalyse, signaldeteksjon og porteføljoptimalisering.' },
+      { ic: 'ai' as const,       t: 'AI-drevet analyse',     d: 'Drevet av en blueprint utviklet over et år for ekspertise i aksjeanalyse — markedsanalyse, signaldeteksjon og porteføljoptimalisering.' },
       { ic: 'speed' as const,    t: 'Automatisk handling',   d: 'Handler hvert 2. sekund med optimaliserte strategier og risikostyring.' },
       { ic: 'graph' as const,    t: 'Porteføljegraf',        d: 'Se porteføljeverdi over tid, avkastning i % og USD, live P&L per posisjon.' },
       { ic: 'withdraw' as const, t: 'Ta ut avkastning',      d: 'Realisér gevinster på ett klikk. Selg posisjoner og sett kontoen tilbake til startkapital.' },
@@ -39,7 +39,7 @@ const FEAT = {
     feats: [
       { ic: 'chart' as const,    t: 'US Equities',         d: 'Apex Quantum trades stocks on NASDAQ, NYSE, ARCA, and AMEX through the Alpaca Trading API.' },
       { ic: 'stock' as const,    t: 'Equities Only',        d: 'Focused on stocks (equities). No CFD, futures, options or other derivatives.' },
-      { ic: 'ai' as const,       t: 'Grok-4-Heavy AI',      d: 'Uses xAI Grok-4-Heavy for market analysis, signal detection and portfolio optimization.' },
+      { ic: 'ai' as const,       t: 'AI-driven analysis',   d: 'Driven by a blueprint developed over a year for stock-analysis expertise — market analysis, signal detection and portfolio optimization.' },
       { ic: 'speed' as const,    t: 'Autonomous Trading',   d: 'Trades every 2 seconds with optimized strategies and risk management.' },
       { ic: 'graph' as const,    t: 'Portfolio Chart',      d: 'See portfolio value over time, returns in % and USD, live P&L per position.' },
       { ic: 'withdraw' as const, t: 'Withdraw Profits',     d: 'Realize gains with one click. Sell positions and reset to starting capital.' },

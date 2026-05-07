@@ -10,7 +10,7 @@ const COPY = {
   no: {
     eye: 'I DAG',
     title: 'Dagens signaler',
-    sub: 'AI-genererte signaler fra global watchlist. Hver med begrunnelse, katalysatorer og risiko — slik at du forstår *hvorfor*, ikke bare *hva*.',
+    sub: 'AI-genererte signaler fra global watchlist, drevet av en blueprint utviklet over et år for ekspertise i aksjeanalyse. Hver med begrunnelse, katalysatorer og risiko — slik at du forstår *hvorfor*, ikke bare *hva*.',
     allRegions: 'Alle regioner',
     catalysts: 'Katalysatorer',
     risks: 'Risikofaktorer',
@@ -32,12 +32,12 @@ const COPY = {
     ownershipBannerCta: 'Marker som eid',
     disclaimer:
       'Apex Quantum + er en lærings- og analyseplattform. Innholdet er ikke individuell investeringsrådgivning. Tidligere resultater er ingen garanti for fremtidige resultater.',
-    seedNote: 'Demonstrasjonssignaler — ekte signal-pipeline kobles på når Grok-jobben er live.',
+    seedNote: 'Demonstrasjonssignaler — den ekte AI-pipelinen kobles på når daglig signal-jobb er live.',
   },
   en: {
     eye: 'TODAY',
     title: "Today's signals",
-    sub: 'AI-generated signals from the global watchlist. Each with reasoning, catalysts and risk — so you understand the *why*, not just the *what*.',
+    sub: 'AI-generated signals from the global watchlist, driven by a blueprint developed over a year for stock-analysis expertise. Each with reasoning, catalysts and risk — so you understand the *why*, not just the *what*.',
     allRegions: 'All regions',
     catalysts: 'Catalysts',
     risks: 'Risks',
@@ -59,12 +59,12 @@ const COPY = {
     ownershipBannerCta: 'Mark as owned',
     disclaimer:
       'Apex Quantum + is a learning and analysis platform. Content is not individual investment advice. Past performance is no guarantee of future results.',
-    seedNote: 'Demonstration signals — real pipeline activates once the Grok job is live.',
+    seedNote: 'Demonstration signals — the real AI pipeline activates once the daily signal job is live.',
   },
   de: {
     eye: 'HEUTE',
     title: 'Signale heute',
-    sub: 'KI-generierte Signale aus der globalen Watchlist. Jedes mit Begründung, Katalysatoren und Risiken — damit Sie das *Warum* verstehen, nicht nur das *Was*.',
+    sub: 'KI-generierte Signale aus der globalen Watchlist, getragen von einem über ein Jahr entwickelten Blueprint für Aktienanalyse-Expertise. Jedes mit Begründung, Katalysatoren und Risiken — damit Sie das *Warum* verstehen, nicht nur das *Was*.',
     allRegions: 'Alle Regionen',
     catalysts: 'Katalysatoren',
     risks: 'Risiken',
@@ -86,12 +86,12 @@ const COPY = {
     ownershipBannerCta: 'Als gehalten markieren',
     disclaimer:
       'Apex Quantum + ist eine Lern- und Analyseplattform. Inhalte sind keine individuelle Anlageberatung. Frühere Ergebnisse sind keine Garantie für künftige.',
-    seedNote: 'Demo-Signale — echte Pipeline läuft, sobald der Grok-Job live ist.',
+    seedNote: 'Demo-Signale — die echte KI-Pipeline läuft, sobald der tägliche Signal-Job live ist.',
   },
   es: {
     eye: 'HOY',
     title: 'Señales de hoy',
-    sub: 'Señales generadas por IA de la lista global. Cada una con razonamiento, catalizadores y riesgos — para que entiendas el *por qué*, no solo el *qué*.',
+    sub: 'Señales generadas por IA de la lista global, impulsadas por un blueprint desarrollado durante un año para experiencia en análisis bursátil. Cada una con razonamiento, catalizadores y riesgos — para que entiendas el *por qué*, no solo el *qué*.',
     allRegions: 'Todas las regiones',
     catalysts: 'Catalizadores',
     risks: 'Riesgos',
@@ -113,12 +113,12 @@ const COPY = {
     ownershipBannerCta: 'Marcar como en cartera',
     disclaimer:
       'Apex Quantum + es una plataforma de aprendizaje y análisis. El contenido no es asesoramiento de inversión individual. Resultados pasados no garantizan resultados futuros.',
-    seedNote: 'Señales de demostración — el pipeline real se activa cuando el job de Grok esté en vivo.',
+    seedNote: 'Señales de demostración — el pipeline IA real se activa cuando el job diario de señales esté en vivo.',
   },
   zh: {
     eye: '今日',
     title: '今日信号',
-    sub: 'AI 从全球观察清单生成的信号，附带推理、催化剂与风险——让你理解*为什么*，而不仅仅是*什么*。',
+    sub: 'AI 从全球观察清单生成的信号，由历经一年精心打造、专注于股票分析的蓝图驱动；附带推理、催化剂与风险——让你理解*为什么*，而不仅仅是*什么*。',
     allRegions: '所有地区',
     catalysts: '催化剂',
     risks: '风险',
@@ -140,7 +140,7 @@ const COPY = {
     ownershipBannerCta: '标记为已持有',
     disclaimer:
       'Apex Quantum + 是学习与分析平台。内容非个人投资建议。过往业绩不保证未来表现。',
-    seedNote: '演示信号——真实管线在 Grok 任务上线后启用。',
+    seedNote: '演示信号——真实 AI 管线将在每日信号任务上线后启用。',
   },
 } as const;
 
