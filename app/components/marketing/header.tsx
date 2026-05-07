@@ -19,10 +19,10 @@ export function MHeader({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => v
           </span>
         </Link>
         <nav className="m-nav">
-          <a href="#features">{lang === 'no' ? 'Funksjoner' : 'Features'}</a>
-          <a href="#live">Live</a>
-          <a href="#sikkerhet">{lang === 'no' ? 'Sikkerhet' : 'Security'}</a>
-          <a href="#pris">{lang === 'no' ? 'Pris' : 'Pricing'}</a>
+          <Link href="/plus">Apex Quantum +</Link>
+          <Link href="/#produkter">{lang === 'no' ? 'Produkter' : 'Products'}</Link>
+          <Link href="/#features">{lang === 'no' ? 'Funksjoner' : 'Features'}</Link>
+          <Link href="/pris">{lang === 'no' ? 'Pris' : 'Pricing'}</Link>
         </nav>
         <div className="m-hdr-right">
           <div className="lang-tog">

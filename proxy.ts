@@ -19,6 +19,7 @@ const isPublicRoute = createRouteMatcher([
   '/risikofaktorer',
   '/cookies',
   '/pris',
+  '/plus',
 ]);
 
 export default clerkMiddleware(async (auth, req) => {

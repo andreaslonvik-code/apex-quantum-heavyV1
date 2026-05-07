@@ -15,10 +15,10 @@ export function MFooter({ lang }: { lang: Lang }) {
           orgLabel: 'Org.nr',
           cols: [
             ['Produkt', [
-              ['Funksjoner', '/#features'],
-              ['Live cockpit', '/#live'],
-              ['Sikkerhet', '/#sikkerhet'],
+              ['Apex Quantum +', '/plus'],
+              ['Apex Quantum Max', '/#produkter'],
               ['Pris', '/pris'],
+              ['Funksjoner', '/#features'],
             ]],
             ['Selskap', [
               ['Om oss', '/om-oss'],
@@ -40,10 +40,10 @@ export function MFooter({ lang }: { lang: Lang }) {
           orgLabel: 'Org. no',
           cols: [
             ['Product', [
-              ['Features', '/#features'],
-              ['Live cockpit', '/#live'],
-              ['Security', '/#sikkerhet'],
+              ['Apex Quantum +', '/plus'],
+              ['Apex Quantum Max', '/#produkter'],
               ['Pricing', '/pris'],
+              ['Features', '/#features'],
             ]],
             ['Company', [
               ['About', '/om-oss'],

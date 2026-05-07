@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 
 type Env = 'paper' | 'live';
 
-export default function ConnectAlpacaPage() {
+export default function ConnectAlpacaClient() {
   const router = useRouter();
   const [environment, setEnvironment] = useState<Env>('paper');
   const [apiKey, setApiKey] = useState('');

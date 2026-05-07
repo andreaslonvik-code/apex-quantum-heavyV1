@@ -6,38 +6,38 @@ import type { Lang } from './types';
 
 const HERO = {
   no: {
-    badge: 'Autonom AI-trading på Alpaca',
+    badge: 'AI-drevet aksjeinnsikt — Plus tilgjengelig nå',
     title: 'Apex Quantum',
-    accent: 'Din AI-trader på US-aksjemarkedet',
-    desc: 'Apex Quantum analyserer markedsdynamikk og utfører aksjehandel fullt automatisk på dine vegne via Alpaca. Handler US equities (NASDAQ, NYSE, ARCA, AMEX) med Grok-4-Heavy AI. Lim inn dine egne Alpaca API-nøkler. Vi lagrer dem kryptert (AES-256-GCM) og handler kun på din konto.',
+    accent: 'AI-drevet aksjeinnsikt for alle nivåer',
+    desc: 'Lær aksjemarkedet med AI som læremester, eller la den fullautomatiske motoren ta over når den lanseres. Apex Quantum + gir deg daglige signaler med begrunnelse, ukentlige rapporter og strukturert læring fra kun 199 kr/mnd. Apex Quantum Max — den autonome trading-motoren — kommer snart.',
     feats: [
-      ['→', 'Analyserer US equities (NASDAQ, NYSE, ARCA, AMEX)'],
-      ['→', 'Krypterte API-nøkler (AES-256-GCM)'],
-      ['→', 'Handler hvert 2. sekund automatisk'],
-      ['→', 'Per-bruker isolasjon, Clerk auth'],
-      ['→', 'Porteføljegraf og live P&L'],
-      ['→', 'Ta ut avkastning på ett klikk'],
+      ['→', 'Daglige AI-signaler med fullstendig begrunnelse'],
+      ['→', 'Ukentlige markedsrapporter på norsk'],
+      ['→', 'Læringsmoduler — nybegynner til avansert'],
+      ['→', 'Praksisportefølje med live priser'],
+      ['→', 'Tilgjengelig globalt — du velger megler'],
+      ['→', 'Apex Quantum Max kommer snart'],
     ],
-    cta: 'Koble til Alpaca',
-    cta2: 'Les mer',
-    foot: ['Fra 4 990 kr/mnd', '30 dagers risikofri prøveperiode', 'Krypterte Alpaca-nøkler'],
+    cta: 'Start med Apex Quantum +',
+    cta2: 'Se produktene',
+    foot: ['Apex Quantum + fra 199 kr/mnd', 'Ingen binding', 'Apex Quantum Max — kommer snart'],
   },
   en: {
-    badge: 'Autonomous AI Trading on Alpaca',
+    badge: 'AI-powered market insight — Plus available now',
     title: 'Apex Quantum',
-    accent: 'Your AI Trader on US Equities',
-    desc: 'Apex Quantum analyzes market dynamics and executes equity trading fully automatically via Alpaca. Trades US equities (NASDAQ, NYSE, ARCA, AMEX) with Grok-4-Heavy AI. Paste your own Alpaca API keys. We store them encrypted (AES-256-GCM) and trade only on your account.',
+    accent: 'AI-powered market insight at every level',
+    desc: 'Learn the stock market with AI as your tutor, or let the fully autonomous engine take over once it launches. Apex Quantum + gives you daily signals with reasoning, weekly reports and structured learning from just $19/month. Apex Quantum Max — the autonomous trading engine — is coming soon.',
     feats: [
-      ['→', 'Analyzes US equities (NASDAQ, NYSE, ARCA, AMEX)'],
-      ['→', 'Encrypted API keys (AES-256-GCM)'],
-      ['→', 'Trades every 2 seconds automatically'],
-      ['→', 'Per-user isolation, Clerk auth'],
-      ['→', 'Portfolio chart and live P&L'],
-      ['→', 'Withdraw profits with one click'],
+      ['→', 'Daily AI signals with full reasoning'],
+      ['→', 'Weekly market reports'],
+      ['→', 'Learning modules — beginner to advanced'],
+      ['→', 'Practice portfolio with live prices'],
+      ['→', 'Available globally — pick any broker'],
+      ['→', 'Apex Quantum Max coming soon'],
     ],
-    cta: 'Connect Alpaca',
-    cta2: 'Learn More',
-    foot: ['From $499/month', '30-day risk-free trial', 'Encrypted Alpaca keys'],
+    cta: 'Start with Apex Quantum +',
+    cta2: 'See products',
+    foot: ['Apex Quantum + from $19/month', 'No commitment', 'Apex Quantum Max — coming soon'],
   },
 } as const;
 
@@ -64,13 +64,13 @@ export function Hero({ lang }: { lang: Lang }) {
           ))}
         </div>
         <div className="m-cta-row">
-          <Link href="/connect-alpaca" className="btn-primary-v8 btn-lg">
+          <Link href="/sign-up" className="btn-primary-v8 btn-lg">
             {t.cta}
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2">
               <path d="M5 12h14M12 5l7 7-7 7" />
             </svg>
           </Link>
-          <a href="#features" className="btn-ghost-v8 btn-lg">{t.cta2}</a>
+          <a href="#produkter" className="btn-ghost-v8 btn-lg">{t.cta2}</a>
         </div>
         <div className="m-foot-strip">
           {t.foot.map((s, i) => (
