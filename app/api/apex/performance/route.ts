@@ -48,14 +48,64 @@ async function fetchBenchmark(
   timeframe: BenchTf,
   limit: number,
 ): Promise<number[]> {
-  const key = `${symbol}:${timeframe}:${limit}`;
-  const cached = benchCache.get(key);
-  if (cached && Date.now() - cached.fetchedAt < BENCH_TTL_MS) return cached.values;
+  const series = await fetchBenchmarkSeries(creds, symbol, timeframe, limit);
+  return series.values;
+}
+
+interface BenchSeries {
+  timestamps: number[]; // unix sec, same length as values
+  values: number[];
+}
+const benchSeriesCache: Map<string, { fetchedAt: number; data: BenchSeries }> = new Map();
+
+async function fetchBenchmarkSeries(
+  creds: AlpacaCreds,
+  symbol: string,
+  timeframe: BenchTf,
+  limit: number,
+): Promise<BenchSeries> {
+  const key = `${symbol}:${timeframe}:${limit}:series`;
+  const cached = benchSeriesCache.get(key);
+  if (cached && Date.now() - cached.fetchedAt < BENCH_TTL_MS) return cached.data;
   const r = await getStockBars(creds, symbol, { timeframe, limit });
-  if (!r.success) return cached?.values ?? [];
-  const values = r.data.map((b) => b.c);
-  benchCache.set(key, { fetchedAt: Date.now(), values });
-  return values;
+  if (!r.success) {
+    return cached?.data ?? { timestamps: [], values: [] };
+  }
+  const data: BenchSeries = {
+    timestamps: r.data.map((b) =>
+      typeof b.t === 'string' ? Math.floor(new Date(b.t).getTime() / 1000) : 0,
+    ),
+    values: r.data.map((b) => b.c),
+  };
+  benchSeriesCache.set(key, { fetchedAt: Date.now(), data });
+  // Also cache raw values for `fetchBenchmark` callers.
+  benchCache.set(`${symbol}:${timeframe}:${limit}`, {
+    fetchedAt: Date.now(),
+    values: data.values,
+  });
+  return data;
+}
+
+/**
+ * Re-sample a benchmark series so each output point aligns to a corresponding
+ * equity timestamp. Without this the chart visually stretches a 6.5 h regular-
+ * hours bench bar series across a 16 h pre/regular/after-hours equity window,
+ * which makes the bench line look totally wrong relative to where price
+ * actually was at each equity point.
+ */
+function alignBenchToEquity(
+  bench: BenchSeries,
+  equityTs: number[],
+): number[] {
+  if (bench.timestamps.length < 2 || equityTs.length === 0) return [];
+  const out: number[] = [];
+  let j = 0;
+  for (const t of equityTs) {
+    while (j < bench.timestamps.length - 1 && bench.timestamps[j + 1] <= t) j += 1;
+    // Use the most-recent bench bar at or before this equity timestamp.
+    out.push(bench.values[j]);
+  }
+  return out;
 }
 
 function pctChange(values: number[]): number | null {
@@ -135,18 +185,19 @@ export async function GET(req: NextRequest) {
     const reuseHistoryForDayBar = isIntradayTf && cfg.timeframe === '5Min';
     const reuseSpyChartForDayBar = isIntradayTf && cfg.benchTf === '5Min' && cfg.benchLimit >= 78;
 
-    const [accountRes, positionsRes, historyRes, dayHistoryFetched, spyChartValues, spyDayFetched, qqqValues] = await Promise.all([
+    const [accountRes, positionsRes, historyRes, dayHistoryFetched, spyChartSeries, qqqChartSeries, spyDayFetched, qqqDaySeries] = await Promise.all([
       getAccount(creds),
       getPositions(creds),
       getPortfolioHistory(creds, { period: cfg.period, timeframe: cfg.timeframe, extended_hours: useExtendedHours }),
       reuseHistoryForDayBar
         ? Promise.resolve<AlpacaResult<AlpacaPortfolioHistory> | null>(null)
         : getPortfolioHistory(creds, { period: '1D', timeframe: '5Min', extended_hours: true }),
-      fetchBenchmark(creds, 'SPY', cfg.benchTf, cfg.benchLimit),
+      fetchBenchmarkSeries(creds, 'SPY', cfg.benchTf, cfg.benchLimit),
+      fetchBenchmarkSeries(creds, 'QQQ', cfg.benchTf, cfg.benchLimit),
       reuseSpyChartForDayBar
-        ? Promise.resolve<number[] | null>(null)
-        : fetchBenchmark(creds, 'SPY', '5Min', 80),
-      fetchBenchmark(creds, 'QQQ', '5Min', 80),
+        ? Promise.resolve<BenchSeries | null>(null)
+        : fetchBenchmarkSeries(creds, 'SPY', '5Min', 80),
+      fetchBenchmarkSeries(creds, 'QQQ', '5Min', 80),
     ]);
 
     if (!accountRes.success) {
@@ -223,8 +274,12 @@ export async function GET(req: NextRequest) {
     const chartData = eq.map((v, i) => ({ timestamp: ts[i], value: Math.round(v * 100) / 100 }));
     const xTicks = buildTicks(ts, cfg.tickFormat);
 
-    // ── Benchmark overlay (matched to tf) ───────────────────────────────
-    const benchPctWindow = pctChange(spyChartValues);
+    // ── Benchmarks aligned to equity timestamps (fixes the visual stretch
+    //    bug where 6.5 h SPY bars were spread across 16 h equity series). ──
+    const spyAligned = alignBenchToEquity(spyChartSeries, ts);
+    const qqqAligned = alignBenchToEquity(qqqChartSeries, ts);
+    const benchPctWindow = pctChange(spyChartSeries.values);
+    const qqqPctWindow = pctChange(qqqChartSeries.values);
     const vsBenchPct = benchPctWindow === null ? null : windowPnlPct - benchPctWindow;
 
     // ── BenchmarkBar (always intraday, regardless of tf) ────────────────
@@ -237,9 +292,9 @@ export async function GET(req: NextRequest) {
       }
       apexDayPct = dayEq.length >= 2 ? (dayEq[dayEq.length - 1] / dayEq[0] - 1) * 100 : null;
     }
-    const spyDayValues = spyDayFetched ?? spyChartValues;
+    const spyDayValues = (spyDayFetched ?? spyChartSeries).values;
     const spyDayPct = pctChange(spyDayValues);
-    const qqqDayPct = pctChange(qqqValues);
+    const qqqDayPct = pctChange(qqqDaySeries.values);
 
     return NextResponse.json({
       tf,
@@ -266,9 +321,19 @@ export async function GET(req: NextRequest) {
       xTicks,
       benchmark: {
         symbol: 'SPY',
-        values: spyChartValues,
+        // Equity-timestamp-aligned values so the chart can plot bench
+        // accurately at each equity point. Prefer this over `values`.
+        valuesAligned: spyAligned,
+        // Raw bench bars (legacy / debugging).
+        values: spyChartSeries.values,
         pct: benchPctWindow,
         vsBenchPct,
+      },
+      benchmarkNasdaq: {
+        symbol: 'QQQ',
+        valuesAligned: qqqAligned,
+        values: qqqChartSeries.values,
+        pct: qqqPctWindow,
       },
       benchmarkBar: {
         apexPct: apexDayPct,

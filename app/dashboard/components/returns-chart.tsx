@@ -5,8 +5,10 @@ import { useMemo } from 'react';
 interface Props {
   /** Equity values over time. If empty, renders a placeholder line. */
   points?: number[];
-  /** S&P 500 benchmark series, same length / sampling cadence as `points`. */
-  benchPoints?: number[];
+  /** S&P 500 (SPY) benchmark series, time-aligned to equity. */
+  spyPoints?: number[];
+  /** Nasdaq 100 (QQQ) benchmark series, time-aligned to equity. */
+  qqqPoints?: number[];
   xTicks?: string[];
   /** When set, draws a peak label on the chart at the value's index. */
   peakIndex?: number;
@@ -14,7 +16,40 @@ interface Props {
 
 const DEFAULT_TICKS = ['09:30', '10:30', '11:30', '12:30', '13:30', '14:30', '15:30', '16:00'];
 
-export function ReturnsChart({ points, benchPoints, xTicks = DEFAULT_TICKS, peakIndex }: Props) {
+/**
+ * Re-base a benchmark series so it starts at the same value as the portfolio
+ * series. The chart then visualizes RELATIVE performance (e.g. portfolio +1 %
+ * vs SPY +0.5 %), not absolute price levels. Returns null if data isn't
+ * usable (too short / non-positive starting point).
+ */
+function rebaseToPortfolio(bench: number[] | undefined, pts: number[]): number[] | null {
+  if (!bench || bench.length < 2 || pts.length < 2) return null;
+  const baseB = bench[0];
+  const baseP = pts[0];
+  if (baseB <= 0 || baseP <= 0) return null;
+  // Bench should be the same length as pts (server pre-aligns by timestamp);
+  // if not, fall back to index-stretching as a defensive measure.
+  if (bench.length === pts.length) {
+    return bench.map((v) => baseP * (v / baseB));
+  }
+  const scaled: number[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const idx = Math.min(
+      bench.length - 1,
+      Math.floor((i / (pts.length - 1)) * (bench.length - 1)),
+    );
+    scaled.push(baseP * (bench[idx] / baseB));
+  }
+  return scaled;
+}
+
+export function ReturnsChart({
+  points,
+  spyPoints,
+  qqqPoints,
+  xTicks = DEFAULT_TICKS,
+  peakIndex,
+}: Props) {
   const pts = useMemo(() => {
     if (points && points.length > 1) return points;
     const out: number[] = [];
@@ -26,26 +61,14 @@ export function ReturnsChart({ points, benchPoints, xTicks = DEFAULT_TICKS, peak
     return out;
   }, [points]);
 
-  // Normalise the benchmark to start at the same value as the portfolio so
-  // the visual overlay tracks relative performance, not absolute price.
-  const bench = useMemo(() => {
-    if (!benchPoints || benchPoints.length < 2 || pts.length < 2) return null;
-    const baseB = benchPoints[0];
-    const baseP = pts[0];
-    if (baseB <= 0 || baseP <= 0) return null;
-    const scaled: number[] = [];
-    for (let i = 0; i < pts.length; i++) {
-      const idx = Math.min(benchPoints.length - 1, Math.floor((i / (pts.length - 1)) * (benchPoints.length - 1)));
-      scaled.push(baseP * (benchPoints[idx] / baseB));
-    }
-    return scaled;
-  }, [benchPoints, pts]);
+  const spy = useMemo(() => rebaseToPortfolio(spyPoints, pts), [spyPoints, pts]);
+  const qqq = useMemo(() => rebaseToPortfolio(qqqPoints, pts), [qqqPoints, pts]);
 
   const W = 1200;
   const H = 320;
   const pad = 24;
 
-  const allValues: number[] = [...pts, ...(bench ?? [])];
+  const allValues: number[] = [...pts, ...(spy ?? []), ...(qqq ?? [])];
   const min = Math.min(...allValues);
   const max = Math.max(...allValues);
   const span = max - min || 1;
@@ -53,8 +76,11 @@ export function ReturnsChart({ points, benchPoints, xTicks = DEFAULT_TICKS, peak
   const y = (v: number) => pad + (1 - (v - min) / span) * (H - pad * 2);
   const path = pts.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
   const area = `${path} L${x(pts.length - 1)},${H - pad} L${pad},${H - pad} Z`;
-  const benchPath = bench
-    ? bench.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
+  const spyPath = spy
+    ? spy.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
+    : null;
+  const qqqPath = qqq
+    ? qqq.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
     : null;
 
   // Peak marker.
@@ -88,8 +114,23 @@ export function ReturnsChart({ points, benchPoints, xTicks = DEFAULT_TICKS, peak
           />
         ))}
         <path d={area} fill="url(#rc-grn)" />
-        {benchPath && (
-          <path d={benchPath} stroke="rgba(255,255,255,0.32)" strokeWidth="1.4" fill="none" strokeDasharray="4 5" />
+        {spyPath && (
+          <path
+            d={spyPath}
+            stroke="rgba(255,255,255,0.45)"
+            strokeWidth="1.4"
+            fill="none"
+            strokeDasharray="4 5"
+          />
+        )}
+        {qqqPath && (
+          <path
+            d={qqqPath}
+            stroke="rgba(96,165,250,0.55)"
+            strokeWidth="1.4"
+            fill="none"
+            strokeDasharray="2 3"
+          />
         )}
         <path d={path} stroke="url(#rc-line)" strokeWidth="2" fill="none" />
         <circle cx={x(pts.length - 1)} cy={y(pts[pts.length - 1])} r="4" fill="#34D399">
@@ -112,16 +153,28 @@ export function ReturnsChart({ points, benchPoints, xTicks = DEFAULT_TICKS, peak
             </text>
           </g>
         )}
-        {benchPath && bench && (
+        {spyPath && spy && (
           <text
-            x={x(bench.length - 1) + 4}
-            y={y(bench[bench.length - 1]) + 4}
+            x={x(spy.length - 1) + 4}
+            y={y(spy[spy.length - 1]) + 4}
             fontSize="10"
             fontFamily="JetBrains Mono"
-            fill="rgba(255,255,255,0.5)"
+            fill="rgba(255,255,255,0.6)"
             textAnchor="start"
           >
             S&amp;P 500
+          </text>
+        )}
+        {qqqPath && qqq && (
+          <text
+            x={x(qqq.length - 1) + 4}
+            y={y(qqq[qqq.length - 1]) - 8}
+            fontSize="10"
+            fontFamily="JetBrains Mono"
+            fill="rgba(96,165,250,0.85)"
+            textAnchor="start"
+          >
+            NASDAQ 100
           </text>
         )}
       </svg>

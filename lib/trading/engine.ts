@@ -1199,6 +1199,79 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     await new Promise((resolve) => setTimeout(resolve, 2500));
   }
 
+  // ── Phase 1.5: Autonomous top-up of undersized positions ─────────────
+  // If a kept position is below 75 % of its target size (= bucket /
+  // maxPositions), engine automatically tops it up — regardless of whether
+  // Grok proposed BUY on it. Grok often HOLDs positions that are technically
+  // undersized because PATH C demands strict signals (RSI 55-72 etc.) that
+  // a recently-bought ticker may have outgrown. This bridges the gap so
+  // bucket reaches target deployment within 1-2 ticks.
+  //
+  // Safety: top-up only fires when ticker still passes anticipatory filter
+  // (no buying broken stocks) AND not in cool-down AND not blacklisted.
+  const TARGET_PCT_PER_POSITION = 1 / blueprint.params.maxPositions; // ~0.333
+  const targetPositionValue = bucketCapital * TARGET_PCT_PER_POSITION * 0.95; // 95 % of equal split
+  const TOP_UP_THRESHOLD = 0.75; // top up if below 75 % of target
+  const sellTickerSetForTopup = new Set(sellDecs.map((d) => d.ticker));
+  const buyTickerSetForTopup = new Set(buyDecs.map((d) => d.ticker));
+  for (const [ticker, pos] of positionsByTicker) {
+    if (sellTickerSetForTopup.has(ticker)) continue; // closing this — skip
+    if (buyTickerSetForTopup.has(ticker)) continue; // Grok already BUY — main loop handles
+    if (inFlightTickers.has(ticker)) continue;
+    if (cooldownTickers.has(ticker)) continue;
+    if (fridayBlackout && !isCrypto) continue;
+    const existingValue = parseFloat(pos.market_value) || 0;
+    if (existingValue >= targetPositionValue * TOP_UP_THRESHOLD) continue;
+    const snap = snapshots.get(ticker);
+    if (!snap) continue;
+    const sig = isAnticipatorySignal(snap);
+    if (!sig.ok) continue; // never top up unhealthy positions
+
+    const topUpAmount = Math.min(
+      targetPositionValue - existingValue,
+      maxNotionalPerTicker - existingValue,
+      Math.max(0, remainingBuyingPower) * 0.95 - netDeployed,
+    );
+    const topUpRound = round(topUpAmount, 2);
+    if (topUpRound < MIN_NOTIONAL_USD) continue;
+
+    let orderReq: import('@/lib/alpaca').AlpacaOrderRequest | null;
+    if (isCrypto) {
+      orderReq = {
+        symbol: tradingSymbol(ticker),
+        notional: topUpRound,
+        side: 'buy',
+        type: 'market',
+        time_in_force: 'gtc',
+        position_intent: 'buy_to_open',
+      };
+    } else {
+      const priceRes = await getLatestPrice(creds, tradingSymbol(ticker));
+      const currentPrice =
+        priceRes.success && priceRes.data > 0 ? priceRes.data : snap.price;
+      orderReq = buildStockOrder({
+        symbol: tradingSymbol(ticker),
+        side: 'buy',
+        notional: topUpRound,
+        currentPrice,
+        marketIsOpen,
+      });
+    }
+    if (!orderReq) continue;
+    const r = await placeOrder(creds, orderReq);
+    trades.push({
+      blueprintId: blueprint.id,
+      ticker,
+      action: 'BUY',
+      qty: 0,
+      notional: topUpRound,
+      status: r.success ? 'OK' : 'ERR',
+      reason: 'AUTONOMOUS_TOPUP',
+      error: r.success ? undefined : r.error,
+    });
+    if (r.success) netDeployed += topUpRound;
+  }
+
   // ── Phase 2: BUYs (sequential, all at engine-forced size) ────────────
   // Engine ignores Grok's notional. Each BUY uses perPickNotional, but is
   // additionally capped per-ticker so cumulative position size never exceeds
@@ -1284,7 +1357,11 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     let volMultiplier = 1.0;
     if (snap.realized_vol_20d != null && snap.realized_vol_20d > 0) {
       const raw = TARGET_DAILY_VOL / snap.realized_vol_20d;
-      volMultiplier = Math.max(0.5, Math.min(1.5, raw));
+      // Tighter bounds [0.75, 1.25] (was 0.5-1.5). Less aggressive shrinking
+      // means high-vol stocks like MU/SMCI still get a meaningful position
+      // size — the previous floor of 0.5 was cutting deployment in half on
+      // any vol > 4 % which dominated total bucket utilization.
+      volMultiplier = Math.max(0.75, Math.min(1.25, raw));
     }
 
     // ── News-density adjust ──────────────────────────────────────────────
