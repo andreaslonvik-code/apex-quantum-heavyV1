@@ -102,7 +102,10 @@ function Inner({ lang }: { lang: Lang }) {
       const res = await fetch('/api/plus/checkout', { method: 'POST', credentials: 'include' });
       const data = await res.json();
       if (!res.ok || !data.url) {
-        throw new Error(data.error || 'unknown');
+        const msg = data.detail
+          ? `${data.error || 'error'}: ${data.detail}`
+          : data.error || 'unknown';
+        throw new Error(msg);
       }
       window.location.href = data.url;
     } catch (e) {
