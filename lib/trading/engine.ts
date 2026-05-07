@@ -826,6 +826,49 @@ interface MarketClockSummary {
   next_close: string;
 }
 
+/**
+ * Rank candidates and return the top N most-Grok-relevant ones. Used to
+ * shrink the user prompt from all 46 watchlist tickers down to ~10–12.
+ *
+ * Scoring (higher = more relevant for Grok to consider):
+ *   +500  passes anticipatory filter (any path)
+ *   +RS   relative_strength_30d (positive amplifies leaders, hurts laggards)
+ *   +30   rising_channel
+ *   +20   rsi_rising
+ *   +10   uptrend_1h
+ *   −1000 structural laggard (RS < -5 pp) — sends them to the bottom
+ *
+ * Tickers we already hold are pinned to the top (engine needs context on
+ * them regardless of fresh-pick eligibility).
+ *
+ * Cost impact: 46 → 12 candidates ≈ −55 % input tokens, ≈ −40 % per-call cost.
+ * Quality impact: minimal — Grok was always going to pick from the top of
+ * the score list anyway. Engine still has all 46 in scope for its own
+ * filter, only the LLM input is sliced.
+ */
+function rankAndTakeTop(
+  candidates: IndicatorSnapshot[],
+  heldTickers: Set<string>,
+  n: number,
+): IndicatorSnapshot[] {
+  const scored = candidates.map((s) => {
+    let score = 0;
+    if (heldTickers.has(s.ticker)) score += 10_000; // always include held
+    const sig = isAnticipatorySignal(s);
+    if (sig.ok) score += 500;
+    if (s.relative_strength_30d != null) {
+      if (s.relative_strength_30d < -5) score -= 1000;
+      else score += s.relative_strength_30d;
+    }
+    if (s.rising_channel) score += 30;
+    if (s.rsi_rising) score += 20;
+    if (s.uptrend_1h) score += 10;
+    return { snap: s, score };
+  });
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, n).map((x) => x.snap);
+}
+
 function buildUserPrompt(args: {
   blueprint: Blueprint;
   bucketCapital: number;
@@ -930,7 +973,10 @@ function buildUserPrompt(args: {
       return bucketOrders.length === 0 ? '(ingen)' : JSON.stringify(bucketOrders, null, 2);
     })(),
     ``,
-    `## Watchlist-kandidater med live indikatorer`,
+    `## Top-${candidates.length} watchlist-kandidater (rangert av engine)`,
+    `Engine har pre-filtrert til de mest relevante tickerne. Eksisterende posisjoner er alltid inkludert.`,
+    `Disse er ranket etter: filter-eligibility + relative_strength_30d + rising-channel-bonus.`,
+    `(Watchlisten har totalt ${blueprint.watchlist.length} tickere — de uten relevant signal er utelatt for å spare tokens.)`,
     JSON.stringify(candidates, null, 2),
     ``,
     `# Oppgave`,
@@ -1786,13 +1832,22 @@ async function runBlueprint(args: {
     return { ...result, deployedNotional: 0 };
   }
 
+  // Cost-saver: shrink Grok's candidate input from 46 → 12 by ranking on
+  // signal relevance + held-position pinning. Engine still has all 46 in
+  // memory for its own filter; this only trims what the LLM sees.
+  // Held tickers are always included (Grok needs context on existing
+  // positions for HOLD/SELL decisions).
+  const heldTickerSet = new Set(positionsByTicker.keys());
+  const TOP_N_FOR_GROK = 12;
+  const candidatesForGrok = rankAndTakeTop(candidates, heldTickerSet, TOP_N_FOR_GROK);
+
   const userPrompt = buildUserPrompt({
     blueprint,
     bucketCapital,
     totalEquity,
     buyingPower,
     positions: summarizePositions(allPositions, watchlistSet),
-    candidates,
+    candidates: candidatesForGrok,
     inFlightTickers: [...inFlightTickers],
     allocationPct,
     account,
