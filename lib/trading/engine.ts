@@ -1209,8 +1209,15 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   //
   // Safety: top-up only fires when ticker still passes anticipatory filter
   // (no buying broken stocks) AND not in cool-down AND not blacklisted.
-  const TARGET_PCT_PER_POSITION = 1 / blueprint.params.maxPositions; // ~0.333
-  const targetPositionValue = bucketCapital * TARGET_PCT_PER_POSITION * 0.95; // 95 % of equal split
+  // Top-up target = max-per-position cap × 0.95 (instead of equal-split
+  // 1/maxPositions). On a $1M bucket with maxPctPerPosition=50, target is
+  // 47.5 % per pick. This means: when only 1 pick is held, engine tops it
+  // up to ~47.5 % of bucket (high-conviction concentration). When 3 picks
+  // are held, each can be topped to 47.5 % but freeBucketCapital constrains
+  // the total — so practically 33 % each (equal split, ~100 % deployment).
+  // Aligns with chat-procedure's "35-40 % to #1 pick" allocation rule.
+  const TARGET_PCT_PER_POSITION = (blueprint.params.maxPctPerPosition / 100) * 0.95;
+  const targetPositionValue = bucketCapital * TARGET_PCT_PER_POSITION;
   const TOP_UP_THRESHOLD = 0.75; // top up if below 75 % of target
   const sellTickerSetForTopup = new Set(sellDecs.map((d) => d.ticker));
   const buyTickerSetForTopup = new Set(buyDecs.map((d) => d.ticker));
