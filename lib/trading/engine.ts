@@ -153,21 +153,31 @@ async function detectBearRegime(creds: AlpacaCreds): Promise<{
 
 /**
  * Are we within the trading-relevant window? Returns true when ET wall-clock
- * hour is in [04:00, 20:00) — that's pre-market open through after-hours
- * close. Outside that window (20:00–04:00 ET, ~8 h overnight) Grok is not
- * called, since no fills can happen and indicator drift is negligible.
+ * is on a weekday between [04:00, 20:00) — pre-market open through after-
+ * hours close. Outside that window (overnight 20:00–04:00 ET, OR all day
+ * Saturday/Sunday), Grok is not called: no fills can happen, indicator
+ * drift is negligible, and price-fetch on Alpaca's IEX feed fails when the
+ * full market is closed.
  *
  * Mechanical safety (ATR-stop, trailing-stop) still runs every minute
  * regardless — only the Grok decision call is gated. Crypto is unaffected
  * (24/7 markets) but the crypto bucket is currently disabled.
+ *
+ * NYSE holidays are not handled here — they're rare (~9/year) and Grok
+ * calls on those days simply skip via no_price_for_extended_hours. The
+ * weekend gate catches ~28 % of the calendar at near-zero engineering cost,
+ * which is the bulk of the wasted-call window.
  */
 function isTradingHoursWindow(now = new Date()): boolean {
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/New_York',
+    weekday: 'short',
     hour: 'numeric',
     hour12: false,
   });
   const parts = fmt.formatToParts(now);
+  const dow = parts.find((p) => p.type === 'weekday')?.value ?? '';
+  if (dow === 'Sat' || dow === 'Sun') return false;
   const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
   // Intl.DateTimeFormat may report midnight as "24"; normalize to 0.
   const h = hour === 24 ? 0 : hour;
@@ -944,9 +954,13 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
         };
       } else {
         const priceRes = await getLatestPrice(creds, tradingSymbol(ticker));
-        const currentPrice = priceRes.success
-          ? priceRes.data
-          : parseFloat(held.current_price) || 0;
+        // Two-step fallback: live price → Alpaca-position's stored
+        // current_price. The position object always has a recent price
+        // even when IEX pre-market fetch fails.
+        const livePrice =
+          priceRes.success && priceRes.data > 0 ? priceRes.data : 0;
+        const positionPrice = parseFloat(held.current_price) || 0;
+        const currentPrice = livePrice > 0 ? livePrice : positionPrice;
         orderReq = buildStockOrder({
           symbol: tradingSymbol(ticker),
           side: 'sell',
@@ -1111,10 +1125,14 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
         position_intent: 'buy_to_open',
       };
     } else {
-      // Stocks/commodities: fetch fresh price so extended-hours limit
-      // orders can size whole-share qty + a tight limit price.
+      // Stocks/commodities: try fresh price first (best for limit-pricing).
+      // Pre-market on Alpaca's free-tier IEX feed is flaky — getLatestPrice
+      // commonly fails for less-liquid names at 04:00–09:30 ET. Fall back to
+      // snap.price (live or last close from indicator-snapshot pipeline) so
+      // we don't lose the entire pre-market window over a thin orderbook.
       const priceRes = await getLatestPrice(creds, tradingSymbol(ticker));
-      const currentPrice = priceRes.success ? priceRes.data : 0;
+      const currentPrice =
+        priceRes.success && priceRes.data > 0 ? priceRes.data : snap.price;
       orderReq = buildStockOrder({
         symbol: tradingSymbol(ticker),
         side: 'buy',

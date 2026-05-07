@@ -323,7 +323,9 @@ export function GrokThesisCard({ lang }: Props) {
                               <span style={{ color: 'rgba(255,255,255,0.65)' }}>
                                 {outcome?.error
                                   ? `${d.reason} — ${outcome.error.slice(0, 80)}`
-                                  : d.reason}
+                                  : status === 'SKIP' && outcome?.reason
+                                    ? `${d.reason} — engine: ${outcome.reason.slice(0, 80)}`
+                                    : d.reason}
                               </span>
                             </div>
                           );
