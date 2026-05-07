@@ -62,7 +62,7 @@ export default function ConnectAlpacaClient() {
       toast.success(
         `Tilkoblet ${isLive ? 'LIVE' : 'PAPER'}-konto ${data.accountInfo?.accountId || ''}`
       );
-      router.push('/dashboard');
+      router.push('/max');
     } catch (err) {
       toast.dismiss(toastId);
       const msg = err instanceof Error ? err.message : 'Nettverksfeil';

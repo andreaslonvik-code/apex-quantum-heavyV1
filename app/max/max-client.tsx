@@ -82,7 +82,7 @@ interface AlpacaPositionPayload {
   pnlPercent: number;
 }
 
-export default function DashboardClient() {
+export default function MaxClient() {
   const router = useRouter();
   const [lang, setLang] = useState<Lang>('no');
   const [tf, setTf] = useState<Timeframe>('24H');
