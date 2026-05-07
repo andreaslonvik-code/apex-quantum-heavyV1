@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { askAboutTicker } from '@/lib/grok-plus';
 import { isPlusLang } from '@/lib/i18n/plus-lang';
+import { hasPlusAccess } from '@/lib/access';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
@@ -10,6 +11,9 @@ export async function POST(req: NextRequest) {
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });
+  }
+  if (!(await hasPlusAccess())) {
+    return NextResponse.json({ ok: false, error: 'beta_only' }, { status: 403 });
   }
 
   let body: unknown;
