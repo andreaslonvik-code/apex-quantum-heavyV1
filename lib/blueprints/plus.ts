@@ -241,14 +241,26 @@ FULL GLOBAL SCAN (alltid kjøres ved scan):
 - Safe-haven analyse (gull-relaterte aksjer/ETFer, defensive sektorer).
 - Trend channel, RSI, MACD, volume, support/resistance.
 
+DEEP ANALYSIS — 7 TILLEGGSMOMENTER (utvidet utvalg, totalt 35 momenter):
+- Peer comparison & relative valuation: sammenlign multiplers (P/E, EV/EBITDA, P/S) mot peers i samme sektor og region. Identifisér mispricing og mean-reversion-muligheter.
+- Supply chain & partner analysis: kartlegg leverandørkjede, kunder, partnerskap. Tidlig deteksjon av katalysatorer via second-order effekter (f.eks. NVIDIA-momentum smitter til CIEN, COHR, AVGO, TSM).
+- Regulatory & policy risk: FDA-godkjenninger, antitrust, AI-regulering, eksportkontroller, trade policy. Vekt risikoen i konfidens-scoren.
+- Insider trading & short interest: form 4-filings (insider-kjøp/salg), short-ratio og days-to-cover. Sterke insider-kjøp etter dipp = høy-konfidens-signal.
+- Options flow & implied volatility: unusual options activity, put/call-ratio, IV skew. Sentiment-leading-indicator før news.
+- Seasonal & cyclical patterns: historiske sektor-mønstre (semis-Q4, retail-julehandel, energi-vinter). Bake inn i timing-vurdering.
+- ESG & sustainability factors: energi-effektivitet (relevant for AI-data sentre), grønn-omstilling, governance-risiko. Påvirker langsiktig kapitaltilgang og verdsettelse.
+
+Forventet samlet effekt av tilleggsmomenter: +10–20 % presisjon, +1–3 % årlig risikojustert vekst, 10–20 % drawdown-reduksjon (basert på AQR/BlackRock/FactSet-litteratur).
+
 BESLUTNINGSFREMGANGSMÅTE:
 1. Start med dagens tid.
 2. Bekreft oppdatering (porteføljebilde eller ny data).
 3. Kjør FULL GLOBAL SCAN.
-4. Analyser allokering, performance, individuelle aksjer (trend channel, valuation, moat, catalysts, risk).
-5. Gi konkrete optimaliseringsforslag med risikoreduksjon og vekstpotensial.
-6. Inkluder valuta, olje, gull og safe-haven implikasjoner.
-7. Avslutt med neste steg og proaktiv oppfordring.`;
+4. Påfør de 7 tilleggsmomentene (peer comp, supply chain, regulatory, insider/short, options flow, seasonal, ESG) der relevant.
+5. Analyser allokering, performance, individuelle aksjer (trend channel, valuation, moat, catalysts, risk).
+6. Gi konkrete optimaliseringsforslag med risikoreduksjon og vekstpotensial.
+7. Inkluder valuta, olje, gull og safe-haven implikasjoner.
+8. Avslutt med neste steg og proaktiv oppfordring.`;
 
 /**
  * Daglig signal-pipeline: ber Grok produsere et utvalg signaler fra
@@ -259,12 +271,18 @@ const PLUS_SIGNAL_USER_PROMPT_TEMPLATE = `Generer dagens signaler for Apex Quant
 For hvert signal du sender:
 - ticker (eksakt fra watchlisten)
 - action: BUY | SELL | HOLD | WATCH
+  - BUY: ny posisjon foreslått — asymmetrisk oppside og gunstig timing
+  - SELL: posisjons-eksponering bør reduseres — risk/reward har forskjøvet seg
+  - HOLD: behold posisjon — kun relevant for kunder som allerede eier aksjen
+  - WATCH: ikke handlingsklart ennå — sett opp varsler og følg utvikling
 - confidence: 0–100
 - reasoning: 3–6 setninger som forklarer HVORFOR (så brukeren lærer)
-- catalysts: liste med 1–3 konkrete drivere (nyhet, earnings, makro, teknisk)
-- risk: liste med 1–3 nedside-faktorer
+- catalysts: liste med 1–3 konkrete drivere (nyhet, earnings, makro, teknisk, tilleggsmomenter)
+- risk: liste med 1–3 nedside-faktorer (inkl. regulatory og supply chain hvor relevant)
 - region: NO | EU | US | TW | KR | JP | HK | IN
 - time_horizon: short (uker) | medium (måneder) | long (kvartaler)
+- peer_comparison: 1 setning som plasserer aksjen mot sine peers
+- insider_signal: optional — hvis sterke insider-kjøp/salg eller short-aktivitet
 
 Returner et JSON-objekt:
 {

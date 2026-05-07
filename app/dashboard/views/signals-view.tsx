@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import type { PlusLang } from '@/lib/i18n/plus-lang';
 import { PLUS_WATCHLIST, type PlusRegion } from '@/lib/blueprints/plus';
 import { type PlusAction, SEED_SIGNALS } from './seed-signals';
+import { useOwnedTickers } from './use-owned-tickers';
 
 const COPY = {
   no: {
@@ -15,9 +16,20 @@ const COPY = {
     risks: 'Risikofaktorer',
     horizon: 'Tidshorisont',
     confidence: 'Konfidens',
-    askAi: 'Spør AI',
     horizons: { short: 'Kort (uker)', medium: 'Medium (måneder)', long: 'Lang (kvartaler)' },
     actions: { BUY: 'KJØP', SELL: 'SELG', HOLD: 'HOLD', WATCH: 'OBSERVÉR' },
+    actionExplain: {
+      BUY: 'Asymmetrisk oppside og gunstig timing for ny posisjon.',
+      SELL: 'Risk/reward har blitt negativt — vurder å redusere posisjonen din.',
+      HOLD: 'Behold posisjonen — fundamentene er fortsatt OK. Kun relevant hvis du eier aksjen.',
+      WATCH: 'Ikke handlingsklart ennå. Sett opp varsler og følg utviklingen.',
+    },
+    ownedToggle: 'Marker som eid',
+    ownedActive: 'Eid ✓',
+    ownershipBannerTitle: 'Dette signalet er kun relevant hvis du eier aksjen',
+    ownershipBannerSub:
+      'HOLD og SELG-signaler refererer til aksjer du allerede har i porteføljen. Marker som eid for å aktivere personlige anbefalinger.',
+    ownershipBannerCta: 'Marker som eid',
     disclaimer:
       'Apex Quantum + er en lærings- og analyseplattform. Innholdet er ikke individuell investeringsrådgivning. Tidligere resultater er ingen garanti for fremtidige resultater.',
     seedNote: 'Demonstrasjonssignaler — ekte signal-pipeline kobles på når Grok-jobben er live.',
@@ -31,9 +43,20 @@ const COPY = {
     risks: 'Risks',
     horizon: 'Time horizon',
     confidence: 'Confidence',
-    askAi: 'Ask AI',
     horizons: { short: 'Short (weeks)', medium: 'Medium (months)', long: 'Long (quarters)' },
     actions: { BUY: 'BUY', SELL: 'SELL', HOLD: 'HOLD', WATCH: 'WATCH' },
+    actionExplain: {
+      BUY: 'Asymmetric upside and favorable timing for a new position.',
+      SELL: 'Risk/reward has shifted negative — consider trimming your position.',
+      HOLD: 'Keep the position — fundamentals still intact. Only relevant if you own the stock.',
+      WATCH: 'Not actionable yet. Set up alerts and follow the situation.',
+    },
+    ownedToggle: 'Mark as owned',
+    ownedActive: 'Owned ✓',
+    ownershipBannerTitle: 'This signal is only relevant if you own the stock',
+    ownershipBannerSub:
+      'HOLD and SELL signals refer to stocks you already have in your portfolio. Mark as owned to activate personalized recommendations.',
+    ownershipBannerCta: 'Mark as owned',
     disclaimer:
       'Apex Quantum + is a learning and analysis platform. Content is not individual investment advice. Past performance is no guarantee of future results.',
     seedNote: 'Demonstration signals — real pipeline activates once the Grok job is live.',
@@ -47,9 +70,20 @@ const COPY = {
     risks: 'Risiken',
     horizon: 'Zeithorizont',
     confidence: 'Konfidenz',
-    askAi: 'KI fragen',
     horizons: { short: 'Kurz (Wochen)', medium: 'Mittel (Monate)', long: 'Lang (Quartale)' },
     actions: { BUY: 'KAUFEN', SELL: 'VERKAUFEN', HOLD: 'HALTEN', WATCH: 'BEOBACHTEN' },
+    actionExplain: {
+      BUY: 'Asymmetrische Aufwärts­bewegung und günstiges Timing für eine neue Position.',
+      SELL: 'Risk/Reward hat sich negativ verschoben — Reduzierung erwägen.',
+      HOLD: 'Position halten — Fundamentaldaten weiterhin intakt. Nur relevant wenn Sie die Aktie besitzen.',
+      WATCH: 'Noch nicht handlungsbereit. Alerts einrichten und Entwicklung verfolgen.',
+    },
+    ownedToggle: 'Als gehalten markieren',
+    ownedActive: 'Gehalten ✓',
+    ownershipBannerTitle: 'Dieses Signal ist nur relevant, wenn Sie die Aktie besitzen',
+    ownershipBannerSub:
+      'HOLD- und SELL-Signale beziehen sich auf Aktien, die Sie bereits im Portfolio haben. Als gehalten markieren, um personalisierte Empfehlungen zu aktivieren.',
+    ownershipBannerCta: 'Als gehalten markieren',
     disclaimer:
       'Apex Quantum + ist eine Lern- und Analyseplattform. Inhalte sind keine individuelle Anlageberatung. Frühere Ergebnisse sind keine Garantie für künftige.',
     seedNote: 'Demo-Signale — echte Pipeline läuft, sobald der Grok-Job live ist.',
@@ -63,9 +97,20 @@ const COPY = {
     risks: 'Riesgos',
     horizon: 'Horizonte temporal',
     confidence: 'Confianza',
-    askAi: 'Preguntar IA',
     horizons: { short: 'Corto (semanas)', medium: 'Medio (meses)', long: 'Largo (trimestres)' },
     actions: { BUY: 'COMPRAR', SELL: 'VENDER', HOLD: 'MANTENER', WATCH: 'OBSERVAR' },
+    actionExplain: {
+      BUY: 'Asimetría positiva y momento favorable para nueva posición.',
+      SELL: 'Riesgo/beneficio se ha vuelto negativo — considera reducir.',
+      HOLD: 'Mantener posición — fundamentos siguen sólidos. Solo relevante si posees la acción.',
+      WATCH: 'Aún no accionable. Configura alertas y sigue la evolución.',
+    },
+    ownedToggle: 'Marcar como en cartera',
+    ownedActive: 'En cartera ✓',
+    ownershipBannerTitle: 'Esta señal solo es relevante si posees la acción',
+    ownershipBannerSub:
+      'Las señales HOLD y SELL se refieren a acciones que ya tienes en cartera. Marca como en cartera para recomendaciones personalizadas.',
+    ownershipBannerCta: 'Marcar como en cartera',
     disclaimer:
       'Apex Quantum + es una plataforma de aprendizaje y análisis. El contenido no es asesoramiento de inversión individual. Resultados pasados no garantizan resultados futuros.',
     seedNote: 'Señales de demostración — el pipeline real se activa cuando el job de Grok esté en vivo.',
@@ -79,9 +124,20 @@ const COPY = {
     risks: '风险',
     horizon: '时间范围',
     confidence: '信心',
-    askAi: '问AI',
     horizons: { short: '短期（周）', medium: '中期（月）', long: '长期（季度）' },
     actions: { BUY: '买入', SELL: '卖出', HOLD: '持有', WATCH: '观察' },
+    actionExplain: {
+      BUY: '不对称上行空间与有利的建仓时机。',
+      SELL: '风险/回报已转负——考虑减仓。',
+      HOLD: '继续持有——基本面依然稳健。仅在你已持有该股时相关。',
+      WATCH: '尚不可操作。设置提醒，关注后续。',
+    },
+    ownedToggle: '标记为已持有',
+    ownedActive: '已持有 ✓',
+    ownershipBannerTitle: '此信号仅在你已持有该股时相关',
+    ownershipBannerSub:
+      'HOLD 与 SELL 信号针对你已经持有的股票。标记为已持有以启用个性化建议。',
+    ownershipBannerCta: '标记为已持有',
     disclaimer:
       'Apex Quantum + 是学习与分析平台。内容非个人投资建议。过往业绩不保证未来表现。',
     seedNote: '演示信号——真实管线在 Grok 任务上线后启用。',
@@ -98,26 +154,21 @@ const REGION_LABELS: Record<PlusLang, Record<PlusRegion, string>> = {
 
 const REGIONS: PlusRegion[] = ['NO', 'EU', 'US', 'TW', 'KR', 'JP', 'HK', 'IN'];
 
-function actionColor(action: PlusAction): { bg: string; fg: string; border: string } {
-  switch (action) {
-    case 'BUY':
-      return { bg: 'rgba(16,185,129,0.12)', fg: '#34D399', border: 'rgba(16,185,129,0.35)' };
-    case 'SELL':
-      return { bg: 'rgba(239,68,68,0.12)', fg: '#F87171', border: 'rgba(239,68,68,0.35)' };
-    case 'HOLD':
-      return { bg: 'rgba(245,196,67,0.12)', fg: '#F5C443', border: 'rgba(245,196,67,0.35)' };
-    case 'WATCH':
-      return { bg: 'rgba(0,245,255,0.10)', fg: '#5CFAFF', border: 'rgba(0,245,255,0.30)' };
-  }
-}
+const ACTION_PRIORITY: Record<PlusAction, number> = { BUY: 0, SELL: 1, WATCH: 2, HOLD: 3 };
 
 export function SignalsView({ lang }: { lang: PlusLang }) {
   const t = COPY[lang];
   const [region, setRegion] = useState<PlusRegion | 'ALL'>('ALL');
+  const { isOwned, toggle } = useOwnedTickers();
 
   const filtered = useMemo(() => {
-    if (region === 'ALL') return SEED_SIGNALS;
-    return SEED_SIGNALS.filter((s) => s.region === region);
+    const list = region === 'ALL' ? SEED_SIGNALS : SEED_SIGNALS.filter((s) => s.region === region);
+    return [...list].sort((a, b) => {
+      const ap = ACTION_PRIORITY[a.action];
+      const bp = ACTION_PRIORITY[b.action];
+      if (ap !== bp) return ap - bp;
+      return b.confidence - a.confidence;
+    });
   }, [region]);
 
   return (
@@ -159,22 +210,37 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
 
       <div className="aqp-signal-stack">
         {filtered.map((s) => {
-          const ac = actionColor(s.action);
           const meta = PLUS_WATCHLIST.find((w) => w.ticker === s.ticker);
+          const owned = isOwned(s.ticker);
+          const requiresOwnership = s.action === 'HOLD' || s.action === 'SELL';
+          const showOwnershipBanner = requiresOwnership && !owned;
+          const isBuy = s.action === 'BUY';
+
           return (
-            <article key={s.id} className="aqp-signal-card">
+            <article
+              key={s.id}
+              className={`aqp-signal-card aqp-signal-card--${s.action.toLowerCase()}`}
+            >
               <header className="aqp-signal-head">
                 <div className="aqp-signal-id">
                   <div className="aqp-ticker">{s.ticker}</div>
                   <div className="aqp-ticker-name">{meta?.name ?? s.ticker}</div>
                 </div>
-                <div
-                  className="aqp-action-pill"
-                  style={{ background: ac.bg, color: ac.fg, borderColor: ac.border }}
-                >
-                  {t.actions[s.action]}
+                <div className="aqp-signal-actions">
+                  <button
+                    type="button"
+                    className={`aqp-owned-toggle ${owned ? 'is-on' : ''}`}
+                    onClick={() => toggle(s.ticker)}
+                  >
+                    {owned ? t.ownedActive : t.ownedToggle}
+                  </button>
+                  <div className={`aqp-action-pill aqp-action-pill--${s.action.toLowerCase()} ${isBuy ? 'aqp-action-pill--lg' : ''}`}>
+                    {t.actions[s.action]}
+                  </div>
                 </div>
               </header>
+
+              <div className="aqp-action-explain">{t.actionExplain[s.action]}</div>
 
               <div className="aqp-signal-meta">
                 <span className="aqp-meta-item">
@@ -191,6 +257,23 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
                   <span className="aqp-meta-val">{t.horizons[s.timeHorizon]}</span>
                 </span>
               </div>
+
+              {showOwnershipBanner && (
+                <div className="aqp-own-banner">
+                  <div className="aqp-own-banner-title">{t.ownershipBannerTitle}</div>
+                  <div className="aqp-own-banner-sub">{t.ownershipBannerSub}</div>
+                  <button
+                    type="button"
+                    className="aqp-own-banner-cta"
+                    onClick={() => toggle(s.ticker)}
+                  >
+                    {t.ownershipBannerCta}
+                    <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2">
+                      <path d="M5 12h14M12 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                </div>
+              )}
 
               <p className="aqp-signal-reasoning">{s.reasoning[lang]}</p>
 

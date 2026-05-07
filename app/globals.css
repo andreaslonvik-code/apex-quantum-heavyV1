@@ -1531,3 +1531,104 @@ body {
   .aqp-main { padding: 80px 16px 60px; }
   .aqp-signal-card { padding: 20px; }
 }
+
+/* ============================================================ */
+/* APEX QUANTUM + — Action pills, BUY emphasis, owned toggle    */
+/* ============================================================ */
+
+.aqp-signal-actions { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+
+.aqp-action-pill--buy {
+  background: rgba(16,185,129,0.15);
+  color: #34D399;
+  border-color: rgba(16,185,129,0.40);
+}
+.aqp-action-pill--sell {
+  background: rgba(239,68,68,0.12);
+  color: #F87171;
+  border-color: rgba(239,68,68,0.35);
+}
+.aqp-action-pill--hold {
+  background: rgba(245,196,67,0.12);
+  color: #F5C443;
+  border-color: rgba(245,196,67,0.35);
+}
+.aqp-action-pill--watch {
+  background: rgba(0,245,255,0.10);
+  color: #5CFAFF;
+  border-color: rgba(0,245,255,0.30);
+}
+
+.aqp-action-pill--lg {
+  padding: 10px 18px;
+  font-size: 13px;
+  letter-spacing: 0.14em;
+  background: rgba(16,185,129,0.20);
+  border-color: rgba(16,185,129,0.55);
+  box-shadow:
+    0 0 0 1px rgba(16,185,129,0.25),
+    0 0 24px rgba(16,185,129,0.20);
+}
+
+/* Subtle accent per action on the card edge */
+.aqp-signal-card--buy {
+  border-color: rgba(16,185,129,0.25);
+  background:
+    linear-gradient(180deg, rgba(16,185,129,0.04) 0%, rgba(16,185,129,0) 80%),
+    rgba(255,255,255,0.025);
+}
+.aqp-signal-card--sell { border-color: rgba(239,68,68,0.20); }
+.aqp-signal-card--hold { border-color: rgba(245,196,67,0.18); }
+.aqp-signal-card--watch { border-color: rgba(0,245,255,0.18); }
+
+.aqp-action-explain {
+  font-size: 13px;
+  color: rgba(255,255,255,0.70);
+  margin: 4px 0 14px;
+  line-height: 1.5;
+}
+
+.aqp-owned-toggle {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid var(--aq-border);
+  border-radius: 6px;
+  color: rgba(255,255,255,0.55);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  cursor: pointer;
+  transition: background 0.15s var(--aq-ease), color 0.15s var(--aq-ease), border-color 0.15s var(--aq-ease);
+  white-space: nowrap;
+}
+.aqp-owned-toggle:hover { color: var(--aq-text); border-color: rgba(255,255,255,0.18); }
+.aqp-owned-toggle.is-on {
+  background: rgba(0,245,255,0.07);
+  color: var(--aq-cyan);
+  border-color: rgba(0,245,255,0.30);
+}
+
+.aqp-own-banner {
+  margin: 0 0 18px;
+  padding: 14px 18px;
+  background: rgba(255,196,67,0.05);
+  border: 1px solid rgba(255,196,67,0.20);
+  border-radius: 10px;
+}
+.aqp-own-banner-title { font-size: 13px; font-weight: 600; color: rgba(245,196,67,0.95); margin-bottom: 4px; }
+.aqp-own-banner-sub { font-size: 12px; color: rgba(255,255,255,0.62); line-height: 1.55; margin-bottom: 12px; }
+.aqp-own-banner-cta {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px;
+  background: rgba(245,196,67,0.10);
+  border: 1px solid rgba(245,196,67,0.35);
+  border-radius: 6px;
+  color: rgba(245,196,67,0.95);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s var(--aq-ease);
+}
+.aqp-own-banner-cta:hover { background: rgba(245,196,67,0.18); }
