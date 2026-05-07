@@ -818,6 +818,7 @@ function buildUserPrompt(args: {
     `- Hvis bøtta er tom (ingen posisjoner): returner NØYAKTIG ${blueprint.params.maxPositions} BUY-decisions.`,
     `- Hvis bøtta har N posisjoner og N < ${blueprint.params.maxPositions}: returner ${blueprint.params.maxPositions} − N nye BUYs OG vurder om hver eksisterende posisjon bør HOLD eller SELL.`,
     `- Hvis bøtta er full (${blueprint.params.maxPositions} posisjoner): returner kun HOLD/SELL-decisions for eksisterende posisjoner.`,
+    `- TOP-UP-REGEL: hvis en eksisterende posisjon er < 20 % av bøtte-kapital og fortsatt møter PATH A/B-kriteriene, returner BUY på ticker-en for å øke posisjonen mot target-størrelse (engine vil kalkulere riktig top-up-mengde gjennom konsentrasjons-cap-en).`,
     `- notional_usd: sett bare en placeholder (f.eks. 0 eller bucket_capital/maxPositions). Engine overstyrer den uansett.`,
     `- IGNORER blueprint-tekstens "1.5 % risk per trade"-regler — engine sizer ordrene.`,
     `- HOLD = posisjonen beholdes.`,
@@ -948,13 +949,37 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   // Without this, even a correctly-sized bucket can exceed Alpaca's
   // non-marginable buying power for fractional notional orders.
   const safeRemainingBP = Math.max(0, remainingBuyingPower) * 0.95;
+
+  // ── Pre-flight filter pass ───────────────────────────────────────────
+  // Engine used to size each BUY at freeBucketCapital / buyDecs.length.
+  // Problem: if Grok proposes 3 BUYs but the anticipatory filter rejects
+  // 2, the surviving pick still gets only 1/3 of free capital — 2/3 sits
+  // in cash forever (until next scan). Run a pre-flight to count BUYs
+  // that will ACTUALLY pass all filters, and size based on that count.
+  // Logic mirrors the main BUY-loop's filter checks; if they diverge in
+  // the future we'll over- or under-size, so keep them in sync.
+  let preApproved = 0;
+  const preflightSectorTaken = new Set(sectorTaken);
+  for (const dec of buyDecs) {
+    if (fridayBlackout && !isCrypto) continue;
+    if (cooldownTickers.has(dec.ticker)) continue;
+    const sec = sectorOf(dec.ticker);
+    if (sec && preflightSectorTaken.has(sec)) continue;
+    const snap = snapshots.get(dec.ticker);
+    if (!snap) continue;
+    const sig = isAnticipatorySignal(snap);
+    if (!sig.ok) continue;
+    preApproved += 1;
+    if (sec) preflightSectorTaken.add(sec);
+  }
+
   let perPickNotional = 0;
-  if (buyDecs.length > 0 && freeBucketCapital >= MIN_NOTIONAL_USD) {
+  if (preApproved > 0 && freeBucketCapital >= MIN_NOTIONAL_USD) {
     perPickNotional = Math.min(
-      freeBucketCapital / buyDecs.length,
+      freeBucketCapital / preApproved,
       maxNotionalPerTicker,
-      safeRemainingBP / buyDecs.length,
-      MAX_PER_ORDER_NOTIONAL, // Alpaca paper rejects fractional notional > ~$10–15 k.
+      safeRemainingBP / preApproved,
+      MAX_PER_ORDER_NOTIONAL,
     );
   }
 
@@ -1028,12 +1053,9 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   // maxPctPerPosition × bucket capital. This prevents the "ADA at 34 %" bug
   // where Grok recommends BUY on the same ticker across consecutive scans
   // and engine kept stacking on top of an already-full position.
-  if (buyDecs.length > 0 && perPickNotional < MIN_NOTIONAL_USD) {
-    for (const dec of buyDecs) {
-      trades.push(skipTrade(blueprint.id, dec.ticker, 'BUY', 'no_free_capital'));
-    }
-    return { trades, netDeployed };
-  }
+  // (The previous early-exit "no_free_capital" loop was removed: it tagged
+  // every BUY as no_free_capital even when the real reason was filter-fail.
+  // Now each pick gets its precise rejection reason in the main loop below.)
   for (const dec of buyDecs) {
     const ticker = dec.ticker;
 
@@ -1128,14 +1150,15 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     );
     const notional = round(cappedByTicker, 2);
     if (notional < MIN_NOTIONAL_USD) {
-      trades.push(
-        skipTrade(
-          blueprint.id,
-          ticker,
-          'BUY',
-          remainingTickerCap < MIN_NOTIONAL_USD ? 'concentration_cap_reached' : 'below_min_notional',
-        ),
-      );
+      let reason: string;
+      if (remainingTickerCap < MIN_NOTIONAL_USD) {
+        reason = 'concentration_cap_reached';
+      } else if (perPickNotional < MIN_NOTIONAL_USD) {
+        reason = 'no_free_capital';
+      } else {
+        reason = 'below_min_notional';
+      }
+      trades.push(skipTrade(blueprint.id, ticker, 'BUY', reason));
       continue;
     }
     let orderReq: import('@/lib/alpaca').AlpacaOrderRequest | null;
