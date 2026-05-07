@@ -97,7 +97,14 @@ export interface UserScanResult {
 // stop) still runs every minute independent of Grok, so risk management is
 // unaffected by the longer cadence.
 const GROK_CADENCE_MS = 20 * 60 * 1000;
-const INDICATOR_BAR_COUNT = 60; // bars to fetch for indicator summary
+// 250 bars to support SMA200 computation. With only 60 bars (the previous
+// value), `sma(closes, 200)` always returned null → anticipatory filter
+// rejected EVERY ticker with "not_in_uptrend (price < SMA200)" because the
+// guard `snap.sma_200 == null` short-circuited to "rejected". Symptom: all
+// Grok BUYs got HOPP regardless of actual price/MA relationship.
+// 250 ≈ 1 trading year, comfortably enough for SMA200 + buffer for newer
+// listings that don't have a full year of history yet.
+const INDICATOR_BAR_COUNT = 250;
 const MIN_NOTIONAL_USD = 1.0;
 
 /**
@@ -493,8 +500,18 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
     };
   }
 
-  if (snap.sma_200 == null || snap.price < snap.sma_200) {
-    return { ok: false, reasons: ['not_in_uptrend (price < SMA200)'] };
+  // Two distinct guards so dashboard can tell "engine bug / missing data"
+  // apart from "ticker is genuinely in a downtrend". The 250-bar fetch
+  // should make the first guard rare; if it ever fires we know something
+  // upstream broke.
+  if (snap.sma_200 == null) {
+    return { ok: false, reasons: ['sma200_unavailable (insufficient_bar_history)'] };
+  }
+  if (snap.price < snap.sma_200) {
+    return {
+      ok: false,
+      reasons: [`not_in_uptrend (price ${snap.price} < SMA200 ${snap.sma_200})`],
+    };
   }
 
   const isDeepOversold = snap.rsi_14 != null && snap.rsi_14 < 35;
