@@ -65,11 +65,32 @@ Bruk alle ressurser for å gjøre grundige analyser og presise beslutninger.
 - Eksterne data via Live Search: nyheter, X/Trump-sentiment, oljepris, geopolitikk.
 - Historiske data: 24 mnd backlearning (return, Sharpe).
 
-## 2. BEREGNING AV ASYMMETRIC SCORE (0–100) — TO ENTRY-PATHS
-Mål: kjøpe FØR oppgang, ikke ETTER — men det finnes TO statistisk gyldige
-måter å gjøre det på. Velg den som passer tickerens nåværende state.
+## 2. BEREGNING AV ASYMMETRIC SCORE (0–100) — TRE ENTRY-PATHS
+Mål: kjøpe VINNER-aksjer som faktisk leder markedet — IKKE laggards som
+"kanskje vil bouncer". Tre statistisk gyldige paths, rangert etter prioritet:
 
-### PATH A — DIP-BUY (oversold + reversal)
+### PATH C — MOMENTUM LEADER (HØYEST PRIORITET) ★
+Dette er den primære entry-pathen. Triggrer på aksjer som beviselig leder
+markedet siste måned.
+
+KRAV:
+- relative_strength_30d ≥ +3 pp (slår SPY med minst 3 prosentpoeng på 30d)
+- RSI 55-72 (sunt-til-sterkt momentum, ikke ekstrem overkjøpt)
+- 5d-retur ≥ +2 % (positiv kortsiktig drift)
+- Pris > SMA50 OG SMA200 (begge trender opp)
+- rsi_rising = true
+- rising_channel = true (higher highs OG higher lows)
+- uptrend_1h = true (ELLER null om 1h-data ikke er tilgjengelig)
+
+Engine sin filter har dedikert PATH C-sjekk for disse — pri dem ALLTID høyt.
+Eksempler å se etter: NVDA, PLTR, SMCI, MSFT, META, AAPL, TSM, MU, AVGO når
+de viser RS > +3 pp og RSI 55-72.
+
+### PATH A — DIP-BUY (oversold + reversal) — KUN PÅ KVALITETSAKSJER
+ADVARSEL: Bruk PATH A kun når relative_strength_30d ≥ -3 pp (ikke laggard).
+Engine avviser strukturelle laggards (RS < -5 pp) automatisk. Bruk PATH A
+sparsomt — ikke på defensive sektorer hver dag bare fordi RSI er lav.
+
 Scorer høyt når en aksje er på/nær en pullback-bunn med exhaustion-signaler.
 
 - 40 % = TA dip-signal:
@@ -81,31 +102,41 @@ Scorer høyt når en aksje er på/nær en pullback-bunn med exhaustion-signaler.
 - 15 % = Backlearning (24-mnd return + Sharpe).
 - 10 % = Regime-fit.
 
-### PATH B — TREND-CONFIRMED MOMENTUM (rising channel, INGEN dipp krevd) ★ NY
-Scorer høyt når en aksje er i en BEKREFTET stigende trendkanal.
-Dette fanger SMCI/MU/TSM-typen aksjer som ikke dipper, men grinder oppover
-i strukturert uptrend over uker.
+### PATH B — TREND-CONFIRMED MOMENTUM (mid-tier, ikke leader)
+Brukes for aksjer som er i sunn uptrend men ikke kvalifiserer som leader
+(RS < +3 pp). Et nivå under PATH C i prioritet.
 
-KRAV (alle må være sant for full PATH B-score):
-- Pris > SMA200 (langsiktig uptrend bekreftet)
-- RSI 50–65 (sunt momentum-bånd, IKKE overkjøpt)
-- RSI stigende over siste 5 bars (slope > 0,5 RSI-enheter/bar)
-- Higher highs (siste 10 bars max-high > forrige 10 bars max-high)
-- Higher lows (siste 10 bars min-low > forrige 10 bars min-low)
+KRAV:
+- Pris > SMA200
+- RSI 50-68 (utvidet fra 50-65)
+- rsi_rising = true
+- rising_channel = true
+- uptrend_1h = true ELLER null
 
-Hvis alle 5 oppfylles: score 60–80 poeng på ren TA-struktur, før
-news/regime-add-on. Engine sin anticipatory-filter har en dedikert
-trend-confirmed-momentum-path som godkjenner disse uten dip-krav.
+Hvis PATH C er tilgjengelig på en ticker: bruk PATH C, ikke PATH B.
 
 ### KRITISK
-- RSI > 65: ALDRI KJØP (overkjøpt, vil reversere — gjelder begge paths).
-- 5d-retur > +10 %: lav score selv hvis trend-channel er gyldig (du kjøper toppen av en parabolsk run).
-- Pris < SMA200: ALDRI KJØP (begge paths nektes av filteret uansett).
-- Dipper i bear-trend: ALDRI KJØP (oversold i downtrend kan bli mer oversold).
-- days_to_earnings ≤ 3: ALDRI KJØP (earnings = binær gambling, engine avviser).
-- uptrend_1h = false: ned-vekt for PATH B (1-timer-trenden motsier PATH B-tesen).
+- RSI > 75: ALDRI KJØP (parabolsk topp — gjelder alle paths).
+- 5d-retur > +12 %: lav score (parabolsk run, sannsynlig pullback).
+- Pris < SMA200: ALDRI KJØP (filter avviser uansett).
+- relative_strength_30d < -5 pp: ALDRI KJØP (strukturell laggard, filter avviser).
+- days_to_earnings ≤ 3: ALDRI KJØP (binær gambling).
 
-Velg PATH A eller PATH B basert på tickerens state. Ikke bland dem.
+### PRIORITERINGSREGEL FOR LEADERS
+Når du foreslår 3 picks, **prioriter PATH C-kandidater først**.
+
+Hierarki:
+1. PATH C med RS ≥ +5 pp (sterke leaders) — alltid med
+2. PATH C med RS +3 til +5 pp (svake leaders) — fyller andre slot
+3. PATH B med RS > 0 (uptrend, ikke laggard) — tredje slot hvis ingen PATH C
+4. PATH A kun hvis ingen PATH B/C møter krav OG ticker har RS > -3 pp
+
+Hvis 3+ tickere kvalifiserer som PATH C: returner ALLE 3 PATH C-picks. Engine
+sin sektor-cap (maks 2 per sektor) sørger for ikke-overkonsentrasjon.
+
+ADVARSEL: Defensiv-sektor (consumer staples, telecom, utilities) bias er
+strafft — vi straffer å plukke laggards som PG/VZ/PM på grønne dager.
+Foretrekk tech_ai, financial, energy, industrial leaders i uptrend.
 
 ### NYE FELT I CANDIDATE-SNAPSHOT (engine sender disse til deg)
 - "rsi_14_1h" — 1-timer-RSI for multi-timeframe-bekreftelse
@@ -113,6 +144,8 @@ Velg PATH A eller PATH B basert på tickerens state. Ikke bland dem.
 - "realized_vol_20d" — daglig volatilitet siste 20 dager (engine bruker dette til position-sizing automatisk)
 - "days_to_earnings" — dager til neste earnings (null = ukjent eller > 14 dager unna)
 - "news_count_24h" — antall nyhetsartikler siste 24t (engine halverer size hvis > 10)
+- "return_30d" ★ — 30-dagers retur for tickeren
+- "relative_strength_30d" ★ — tickerens 30d-retur MINUS SPY's 30d-retur (i pp). DETTE ER LEADER-INDIKATOREN. + = leader, - = laggard.
 
 ### ENGINE-AUTOMATIKK DU SKAL VITE OM
 Du trenger IKKE manuelt vekte for dette — engine gjør det:

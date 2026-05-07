@@ -150,6 +150,9 @@ async function detectBearRegime(creds: AlpacaCreds): Promise<{
   isBear: boolean;
   spotPrice: number;
   sma200: number;
+  /** SPY 30-trading-day return (decimal) — benchmark for ticker-level relative
+   *  strength scoring. Null when bar history is insufficient. */
+  return30d: number | null;
 } | null> {
   try {
     const r = await getStockBars(creds, 'SPY', { timeframe: '1Day', limit: 220 });
@@ -159,7 +162,12 @@ async function detectBearRegime(creds: AlpacaCreds): Promise<{
     if (sma200 == null) return null;
     const live = await getLatestPrice(creds, 'SPY');
     const spot = live.success ? live.data : closes[closes.length - 1];
-    return { isBear: spot < sma200, spotPrice: spot, sma200 };
+    let return30d: number | null = null;
+    if (closes.length >= 31) {
+      const past = closes[closes.length - 31];
+      if (past > 0) return30d = (spot - past) / past;
+    }
+    return { isBear: spot < sma200, spotPrice: spot, sma200, return30d };
   } catch {
     return null;
   }
@@ -371,11 +379,19 @@ interface IndicatorSnapshot {
   days_to_earnings: number | null;
   /** News articles in the last 24 h — proxy for catalyst sensitivity. */
   news_count_24h: number;
+  /** 30-trading-day return of this ticker (decimal). Used for relative
+   *  strength vs SPY benchmark. Null if insufficient bar history. */
+  return_30d: number | null;
+  /** Ticker's 30d return MINUS SPY's 30d return, in percentage points.
+   *  Positive = leader (outperforming market); negative = laggard. The
+   *  primary "are we picking winners?" signal. Null if either side missing. */
+  relative_strength_30d: number | null;
 }
 
 async function buildIndicatorSnapshots(
   creds: AlpacaCreds,
   blueprint: Blueprint,
+  spyReturn30d: number | null = null,
 ): Promise<IndicatorSnapshot[]> {
   const snaps: IndicatorSnapshot[] = [];
 
@@ -423,6 +439,17 @@ async function buildIndicatorSnapshots(
         }
       }
 
+      // 30-trading-day return for relative-strength scoring
+      let return30d: number | null = null;
+      if (closes.length >= 31) {
+        const past = closes[closes.length - 31];
+        if (past > 0) return30d = (p - past) / past;
+      }
+      const rs30d =
+        return30d != null && spyReturn30d != null
+          ? (return30d - spyReturn30d) * 100 // pp difference, e.g. +5 = leader
+          : null;
+
       // Catalyst layer (failure-soft: null/0 when no API key is set)
       const earnings = await daysToEarnings(ticker).catch(() => null);
       const news24h = await newsCount24h(ticker).catch(() => 0);
@@ -448,6 +475,8 @@ async function buildIndicatorSnapshots(
         uptrend_1h: uptrend1h,
         days_to_earnings: earnings,
         news_count_24h: news24h,
+        return_30d: nullableRound(return30d, 4),
+        relative_strength_30d: nullableRound(rs30d, 2),
       });
     } catch {
       // skip ticker on fetch error
@@ -526,15 +555,43 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
   const nearSupport =
     snap.sma_50 != null && snap.sma_50 > 0 && snap.price / snap.sma_50 < 1.03;
 
-  // ── Path 3: Trend-confirmed momentum (multi-timeframe aligned) ───────
-  // Checked first so a stock in a clean uptrend doesn't get rejected just
-  // because RSI > 45. Requires the FULL stack PLUS 1h-timeframe alignment
-  // (price above 1h SMA50). 1h-data unavailable falls back to 1D-only —
-  // we don't punish missing data.
-  const rsiInHealthyBand =
-    snap.rsi_14 != null && snap.rsi_14 >= 50 && snap.rsi_14 <= 65;
   const intradayAligned =
     snap.rsi_14_1h == null || snap.uptrend_1h; // null = pass; available = require uptrend
+
+  // ── Path 4: MOMENTUM LEADER (NEW — for picking winners) ──────────────
+  // Highest-priority path. Triggers on tickers that are CLEARLY leading
+  // their cohort: outperforming SPY by ≥ +3 pp on 30 days, RSI in healthy-
+  // strong band 55-72 (rejects only extreme overbought), positive 5d-return
+  // ≥ +2 %, rising channel + intraday aligned.
+  // Captures NVDA/PLTR/SMCI-type leaders on green days while excluding
+  // parabolic blowoff (RSI > 72) and laggards (RS < +3).
+  const isLeader =
+    snap.relative_strength_30d != null && snap.relative_strength_30d >= 3 &&
+    snap.rsi_14 != null && snap.rsi_14 >= 55 && snap.rsi_14 <= 72 &&
+    snap.change_5d_pct != null && snap.change_5d_pct >= 2 &&
+    snap.sma_50 != null && snap.price > snap.sma_50 &&
+    snap.rsi_rising &&
+    snap.rising_channel &&
+    intradayAligned;
+  if (isLeader) {
+    reasons.push(
+      'momentum_leader',
+      `rs30d_+${snap.relative_strength_30d?.toFixed(1)}pp`,
+      `rsi_${snap.rsi_14?.toFixed(1)}_rising`,
+      `5d_+${snap.change_5d_pct?.toFixed(1)}%`,
+      'above_sma50',
+      'rising_channel',
+    );
+    if (snap.uptrend_1h) reasons.push('uptrend_1h_aligned');
+    return { ok: true, reasons };
+  }
+
+  // ── Path 3: Trend-confirmed momentum (expanded RSI band 50-68) ───────
+  // Picks up healthy uptrends that aren't quite leaders (RS < 3 pp) but
+  // still have clean structure. Slightly looser RSI than before so we
+  // don't reject tickers in healthy 65-68 range.
+  const rsiInHealthyBand =
+    snap.rsi_14 != null && snap.rsi_14 >= 50 && snap.rsi_14 <= 68;
   if (
     rsiInHealthyBand &&
     snap.rsi_rising &&
@@ -548,10 +605,29 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
     );
     if (snap.uptrend_1h) reasons.push('uptrend_1h_aligned');
     if (snap.volume_accumulation) reasons.push('volume_accumulation');
+    if (snap.relative_strength_30d != null && snap.relative_strength_30d > 0) {
+      reasons.push(`rs30d_+${snap.relative_strength_30d.toFixed(1)}pp`);
+    }
     return { ok: true, reasons };
   }
 
-  // ── Paths 1 & 2: Dip-buy (existing behaviour) ────────────────────────
+  // ── Paths 1 & 2: Dip-buy (with laggard guard) ────────────────────────
+  // Reject dip-buys on structural laggards (underperforming SPY by ≥ -5 pp
+  // on 30 days). These are not pullbacks in uptrend — they're broken
+  // stocks that keep dripping lower. Buying them is the systematic-loser
+  // bias we needed to fix.
+  if (
+    snap.relative_strength_30d != null &&
+    snap.relative_strength_30d < -5
+  ) {
+    return {
+      ok: false,
+      reasons: [
+        `structural_laggard (RS30d ${snap.relative_strength_30d.toFixed(1)}pp)`,
+      ],
+    };
+  }
+
   if (!isModerateOversold && !nearSupport) {
     return {
       ok: false,
@@ -898,17 +974,19 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   const maxNotionalPerTicker =
     bucketCapital * (blueprint.params.maxPctPerPosition / 100) * bearMultiplier;
 
-  // Sector concentration: track sectors already represented (existing kept
-  // positions, plus new BUYs as we accept them). Max 1 BUY per sector this
-  // scan. Existing kept positions count as "sector taken".
-  const sectorTaken = new Set<string>();
+  // Sector concentration: max 2 positions per sector (was 1). Loosened so
+  // engine can concentrate in leading sectors (e.g. tech_ai when it's the
+  // dominant trend) instead of forcing diversification away from leaders.
+  // Tracks counts (not just presence) so leaders + dip in same sector OK.
+  const SECTOR_CAP_PER_SCAN = 2;
+  const sectorCounts = new Map<string, number>();
   const sellTickerEarly = new Set(
     payload.decisions.filter((d) => d.action === 'SELL').map((d) => d.ticker),
   );
   for (const [ticker] of positionsByTicker) {
     if (sellTickerEarly.has(ticker)) continue;
     const sec = sectorOf(ticker);
-    if (sec) sectorTaken.add(sec);
+    if (sec) sectorCounts.set(sec, (sectorCounts.get(sec) ?? 0) + 1);
   }
 
   // Two-phase execution: SELLs first to free buying power, then BUYs.
@@ -959,18 +1037,18 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   // Logic mirrors the main BUY-loop's filter checks; if they diverge in
   // the future we'll over- or under-size, so keep them in sync.
   let preApproved = 0;
-  const preflightSectorTaken = new Set(sectorTaken);
+  const preflightSectorCounts = new Map(sectorCounts);
   for (const dec of buyDecs) {
     if (fridayBlackout && !isCrypto) continue;
     if (cooldownTickers.has(dec.ticker)) continue;
     const sec = sectorOf(dec.ticker);
-    if (sec && preflightSectorTaken.has(sec)) continue;
+    if (sec && (preflightSectorCounts.get(sec) ?? 0) >= SECTOR_CAP_PER_SCAN) continue;
     const snap = snapshots.get(dec.ticker);
     if (!snap) continue;
     const sig = isAnticipatorySignal(snap);
     if (!sig.ok) continue;
     preApproved += 1;
-    if (sec) preflightSectorTaken.add(sec);
+    if (sec) preflightSectorCounts.set(sec, (preflightSectorCounts.get(sec) ?? 0) + 1);
   }
 
   let perPickNotional = 0;
@@ -1098,9 +1176,9 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     // "3 picks all in semis" scenario where one bad sector day takes the
     // whole bucket. Unknown-sector tickers don't trigger or take a slot.
     const sec = sectorOf(ticker);
-    if (sec && sectorTaken.has(sec)) {
+    if (sec && (sectorCounts.get(sec) ?? 0) >= SECTOR_CAP_PER_SCAN) {
       trades.push(
-        skipTrade(blueprint.id, ticker, 'BUY', `sector_taken_${sec}`),
+        skipTrade(blueprint.id, ticker, 'BUY', `sector_full_${sec}`),
       );
       continue;
     }
@@ -1220,8 +1298,9 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     });
     if (r.success) {
       netDeployed += notional;
-      // Lock the sector so subsequent BUYs in the same scan can't pile in.
-      if (sec) sectorTaken.add(sec);
+      // Increment sector count so subsequent BUYs in the same scan respect
+      // the per-sector cap (currently 2).
+      if (sec) sectorCounts.set(sec, (sectorCounts.get(sec) ?? 0) + 1);
     }
   }
 
@@ -1397,6 +1476,8 @@ async function runBlueprint(args: {
   isBearRegime: boolean;
   /** Friday after 14:30 ET — block new equity BUYs. */
   fridayBlackout: boolean;
+  /** SPY 30-trading-day return — benchmark for ticker relative strength. */
+  spyReturn30d: number | null;
 }): Promise<BlueprintRunResult & { deployedNotional: number }> {
   const {
     creds,
@@ -1415,6 +1496,7 @@ async function runBlueprint(args: {
     marketClock,
     isBearRegime,
     fridayBlackout,
+    spyReturn30d,
   } = args;
 
   const watchlistSet = new Set<string>(blueprint.watchlist);
@@ -1533,7 +1615,7 @@ async function runBlueprint(args: {
   }
 
   // 3. Build context + call Grok.
-  const candidates = await buildIndicatorSnapshots(creds, blueprint);
+  const candidates = await buildIndicatorSnapshots(creds, blueprint, spyReturn30d);
   if (candidates.length === 0) {
     await saveDecision({
       clerkUserId,
@@ -1710,6 +1792,7 @@ export async function runScanForUser(
   // Null result (SPY data unavailable) is treated as neutral, not bear.
   const bear = await detectBearRegime(creds);
   const isBearRegime = bear?.isBear ?? false;
+  const spyReturn30d = bear?.return30d ?? null;
 
   // Friday-afternoon equity-BUY blackout (weekend gap risk).
   const fridayBlackout = isFridayBlackout();
@@ -1747,6 +1830,7 @@ export async function runScanForUser(
       marketClock,
       isBearRegime,
       fridayBlackout,
+      spyReturn30d,
     });
     remainingBuyingPower = Math.max(0, remainingBuyingPower - result.deployedNotional);
     out.blueprints.push(result);
