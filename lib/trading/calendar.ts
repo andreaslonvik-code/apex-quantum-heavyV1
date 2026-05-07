@@ -19,7 +19,10 @@ interface EarningsCache {
 }
 
 interface NewsCache {
-  byTicker: Map<string, { fetchedAt: number; count24h: number }>;
+  byTicker: Map<
+    string,
+    { fetchedAt: number; count24h: number; headlines: string[] }
+  >;
 }
 
 const EARNINGS_TTL_MS = 6 * 60 * 60 * 1000; // 6 h — earnings dates rarely shift intraday
@@ -75,25 +78,46 @@ export async function daysToEarnings(ticker: string): Promise<number | null> {
 }
 
 /**
- * Number of news articles in the last 24 h for a ticker. Cached 30 min.
- * Used as a "catalyst-sensitivity" signal: high count = ticker in spotlight,
- * volatility likely elevated → engine halves position size.
+ * News count + top headlines for a ticker in last 24 h. Cached 30 min.
+ * Top 5 headlines are passed to Grok for sentiment assessment (we don't have
+ * a direct sentiment API on Finnhub free tier, so the LLM does it from
+ * the headline text).
  */
-export async function newsCount24h(ticker: string): Promise<number> {
+async function refreshNewsCache(ticker: string): Promise<{
+  count24h: number;
+  headlines: string[];
+}> {
   const now = Date.now();
   const cached = newsCache.byTicker.get(ticker);
   if (cached && now - cached.fetchedAt < NEWS_TTL_MS) {
-    return cached.count24h;
+    return { count24h: cached.count24h, headlines: cached.headlines };
   }
   const from = isoDateNDaysFromNow(-1);
   const to = isoDateNDaysFromNow(0);
   const articles = await getCompanyNews(ticker, from, to);
-  // Filter to last 24 h precisely (Finnhub returns from-to window, which
-  // may include slightly more if "today" started early).
   const cutoff = (now - 24 * 60 * 60 * 1000) / 1000; // sec
-  const count = articles.filter((a) => a.datetime >= cutoff).length;
-  newsCache.byTicker.set(ticker, { fetchedAt: now, count24h: count });
-  return count;
+  const recent = articles.filter((a) => a.datetime >= cutoff);
+  // Sort by recency, take top 5 headlines (truncated to 100 chars each
+  // to keep prompt size manageable across 46 tickers).
+  recent.sort((a, b) => b.datetime - a.datetime);
+  const headlines = recent
+    .slice(0, 5)
+    .map((a) => (a.headline || '').slice(0, 100))
+    .filter((h) => h.length > 0);
+  newsCache.byTicker.set(ticker, {
+    fetchedAt: now,
+    count24h: recent.length,
+    headlines,
+  });
+  return { count24h: recent.length, headlines };
+}
+
+export async function newsCount24h(ticker: string): Promise<number> {
+  return (await refreshNewsCache(ticker)).count24h;
+}
+
+export async function newsHeadlines24h(ticker: string): Promise<string[]> {
+  return (await refreshNewsCache(ticker)).headlines;
 }
 
 /** Bulk pre-fetch: pull news for all tickers in parallel before snapshot loop. */

@@ -138,14 +138,41 @@ ADVARSEL: Defensiv-sektor (consumer staples, telecom, utilities) bias er
 strafft — vi straffer å plukke laggards som PG/VZ/PM på grønne dager.
 Foretrekk tech_ai, financial, energy, industrial leaders i uptrend.
 
-### NYE FELT I CANDIDATE-SNAPSHOT (engine sender disse til deg)
+### FELT I CANDIDATE-SNAPSHOT (engine sender disse til deg)
 - "rsi_14_1h" — 1-timer-RSI for multi-timeframe-bekreftelse
 - "uptrend_1h" — pris > 1h SMA50 (kortsiktig-trend OK)
 - "realized_vol_20d" — daglig volatilitet siste 20 dager (engine bruker dette til position-sizing automatisk)
 - "days_to_earnings" — dager til neste earnings (null = ukjent eller > 14 dager unna)
 - "news_count_24h" — antall nyhetsartikler siste 24t (engine halverer size hvis > 10)
-- "return_30d" ★ — 30-dagers retur for tickeren
-- "relative_strength_30d" ★ — tickerens 30d-retur MINUS SPY's 30d-retur (i pp). DETTE ER LEADER-INDIKATOREN. + = leader, - = laggard.
+- "return_30d" — 30-dagers retur for tickeren
+- "relative_strength_30d" ★ — tickerens 30d-retur MINUS SPY's 30d-retur (pp). DETTE ER LEADER-INDIKATOREN.
+- "sector_avg_rs_30d" ★ NY — gjennomsnitt RS for alle watchlist-tickere i samme sektor. Indikerer SEKTOR-rotasjon. + = sektor er hot, - = sektor er kald.
+- "sector_rank" ★ NY — rank innen sektor etter RS (1 = leader, 2 = co-leader, 3+ = secondary). Engine REJECTER PATH C hvis rank > 2.
+- "recent_headlines" ★ NY — array med top-5 siste 24t-nyheter for ticker. Tom hvis ingen nyheter / API-key mangler.
+
+### LES NYHETER FOR SENTIMENT (recent_headlines-feltet)
+Når du foreslår BUY på en ticker, sjekk recent_headlines:
+- Positive signaler ("upgrade", "beats earnings", "wins contract", "raises guidance"): BOOST score
+- Negative signaler ("downgrade", "misses earnings", "lawsuit", "guidance cut", "FDA reject"): IKKE KJØP — vent
+- Tom array eller bare nøytrale headlines: ignorer, bruk TA alene
+
+### SEKTOR-ROTASJON (bruk sector_avg_rs_30d)
+Sektorer med høyest sector_avg_rs_30d er i medvind. Prioriter picks fra top-3 sektorer.
+- Sektorer med sector_avg_rs > +3 pp: aggressivt søk etter leaders her
+- Sektorer med sector_avg_rs < -3 pp: unngå (selv om individuelle tickere ser OK ut)
+
+### PYRAMID-UP REGEL ★ NY
+Hvis en eksisterende posisjon viser:
+- P&L > +5 % (vinner)
+- Pris er nær 20-bar high (breakout/new-high-territory)
+- relative_strength_30d > +3 pp
+- RSI < 72 (ikke parabolsk)
+
+Da: returner BUY på ticker for å øke posisjonen. Engine vil legge til mer
+kapital opp til 50%-konsentrasjons-cap. **Vinnere skal ride lenger, ikke lukkes for tidlig.**
+
+Topp-up rangerer over nye picks: hvis NVDA er +8 % og rir trend, top-up
+NVDA fremfor å åpne ny pick i samme sektor.
 
 ### ENGINE-AUTOMATIKK DU SKAL VITE OM
 Du trenger IKKE manuelt vekte for dette — engine gjør det:

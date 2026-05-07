@@ -38,7 +38,12 @@ import {
   sma,
   volumeAccumulation,
 } from './indicators';
-import { daysToEarnings, newsCount24h, prefetchNews } from './calendar';
+import {
+  daysToEarnings,
+  newsCount24h,
+  newsHeadlines24h,
+  prefetchNews,
+} from './calendar';
 
 /**
  * Apex Quantum trading engine — Grok-driven.
@@ -386,6 +391,18 @@ interface IndicatorSnapshot {
    *  Positive = leader (outperforming market); negative = laggard. The
    *  primary "are we picking winners?" signal. Null if either side missing. */
   relative_strength_30d: number | null;
+  /** Average relative_strength_30d of all watchlist tickers in the same
+   *  sector. Used by Grok to identify which sectors are rotating in/out.
+   *  Null if sector unknown or no peers with RS data. */
+  sector_avg_rs_30d: number | null;
+  /** Rank of this ticker by relative_strength_30d within its sector
+   *  (1 = leader, 2 = co-leader, 3+ = secondary). Used by engine to
+   *  reject non-leader picks when better names exist in same sector. */
+  sector_rank: number | null;
+  /** Top 5 most-recent headlines for this ticker (last 24 h, ≤100 chars
+   *  each). Empty if Finnhub key not set or no recent news. Used by Grok
+   *  for sentiment assessment. */
+  recent_headlines: string[];
 }
 
 async function buildIndicatorSnapshots(
@@ -450,9 +467,10 @@ async function buildIndicatorSnapshots(
           ? (return30d - spyReturn30d) * 100 // pp difference, e.g. +5 = leader
           : null;
 
-      // Catalyst layer (failure-soft: null/0 when no API key is set)
+      // Catalyst layer (failure-soft: null/0/[] when no API key is set)
       const earnings = await daysToEarnings(ticker).catch(() => null);
       const news24h = await newsCount24h(ticker).catch(() => 0);
+      const headlines = await newsHeadlines24h(ticker).catch(() => []);
 
       snaps.push({
         ticker,
@@ -477,11 +495,45 @@ async function buildIndicatorSnapshots(
         news_count_24h: news24h,
         return_30d: nullableRound(return30d, 4),
         relative_strength_30d: nullableRound(rs30d, 2),
+        sector_avg_rs_30d: null, // populated in post-processing
+        sector_rank: null, // populated in post-processing
+        recent_headlines: headlines,
       });
     } catch {
       // skip ticker on fetch error
     }
   }
+
+  // ── Post-processing: sector aggregates + per-ticker sector_rank ──────
+  // Group by sector, compute average RS, then rank within sector.
+  const bySector = new Map<string, IndicatorSnapshot[]>();
+  for (const s of snaps) {
+    const sec = sectorOf(s.ticker);
+    if (!sec) continue;
+    if (!bySector.has(sec)) bySector.set(sec, []);
+    bySector.get(sec)!.push(s);
+  }
+  for (const [, arr] of bySector) {
+    // Average RS across sector peers (skip nulls)
+    const rsValues = arr
+      .map((s) => s.relative_strength_30d)
+      .filter((v): v is number => v != null);
+    const avg =
+      rsValues.length > 0
+        ? rsValues.reduce((a, b) => a + b, 0) / rsValues.length
+        : null;
+    // Sort sector by RS desc, assign rank
+    const ranked = [...arr].sort((a, b) => {
+      const ra = a.relative_strength_30d ?? -Infinity;
+      const rb = b.relative_strength_30d ?? -Infinity;
+      return rb - ra;
+    });
+    ranked.forEach((s, idx) => {
+      s.sector_avg_rs_30d = avg != null ? round(avg, 2) : null;
+      s.sector_rank = s.relative_strength_30d != null ? idx + 1 : null;
+    });
+  }
+
   return snaps;
 }
 
@@ -558,13 +610,16 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
   const intradayAligned =
     snap.rsi_14_1h == null || snap.uptrend_1h; // null = pass; available = require uptrend
 
-  // ── Path 4: MOMENTUM LEADER (NEW — for picking winners) ──────────────
-  // Highest-priority path. Triggers on tickers that are CLEARLY leading
-  // their cohort: outperforming SPY by ≥ +3 pp on 30 days, RSI in healthy-
-  // strong band 55-72 (rejects only extreme overbought), positive 5d-return
-  // ≥ +2 %, rising channel + intraday aligned.
-  // Captures NVDA/PLTR/SMCI-type leaders on green days while excluding
-  // parabolic blowoff (RSI > 72) and laggards (RS < +3).
+  // ── Path 4: MOMENTUM LEADER (PATH C — for picking winners) ───────────
+  // Highest-priority path. Multiple confirmations required:
+  //   - relative_strength_30d ≥ +3 pp (outperforming SPY structurally)
+  //   - RSI 55-72 (healthy-to-strong, not extreme overbought)
+  //   - 5d return ≥ +2 % (positive recent drift)
+  //   - Above SMA50 (short-term uptrend)
+  //   - Rising RSI + rising channel + intraday aligned
+  //   - volume_accumulation = true (smart-money confirmation)
+  //   - sector_rank ≤ 2 (top-2 in sector — reject secondary names like
+  //     SMCI when NVDA/MSFT are also available)
   const isLeader =
     snap.relative_strength_30d != null && snap.relative_strength_30d >= 3 &&
     snap.rsi_14 != null && snap.rsi_14 >= 55 && snap.rsi_14 <= 72 &&
@@ -572,7 +627,9 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
     snap.sma_50 != null && snap.price > snap.sma_50 &&
     snap.rsi_rising &&
     snap.rising_channel &&
-    intradayAligned;
+    intradayAligned &&
+    snap.volume_accumulation &&
+    (snap.sector_rank == null || snap.sector_rank <= 2);
   if (isLeader) {
     reasons.push(
       'momentum_leader',
@@ -581,6 +638,8 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
       `5d_+${snap.change_5d_pct?.toFixed(1)}%`,
       'above_sma50',
       'rising_channel',
+      'volume_accumulation',
+      `sector_rank_${snap.sector_rank ?? '?'}`,
     );
     if (snap.uptrend_1h) reasons.push('uptrend_1h_aligned');
     return { ok: true, reasons };
@@ -1378,7 +1437,20 @@ async function mechanicalSafetyPass(args: {
       const atrVal = atr(bars, blueprint.params.atrPeriod);
       if (atrVal == null) continue;
 
-      const stopPrice = entry - blueprint.params.atrStopMult * atrVal;
+      // Leader setups (high RSI, above SMA50) get TIGHTER ATR-stop because
+      // momentum unwinds violently — the same characteristic that gives them
+      // upside also gives them faster reversals. Standard 1.5× ATR for dip-
+      // buys, 1.2× ATR for momentum positions. Inferred from current state
+      // since we don't store entry-path metadata.
+      const closes = bars.map((b) => b.c);
+      const sma50 = sma(closes, 50);
+      const rsiNow = rsi(closes, 14);
+      const isLeaderSetup =
+        rsiNow != null && rsiNow >= 55 && sma50 != null && price > sma50;
+      const stopMult = isLeaderSetup
+        ? blueprint.params.atrStopMult * 0.8 // 1.5 → 1.2
+        : blueprint.params.atrStopMult;
+      const stopPrice = entry - stopMult * atrVal;
       const pnlPct = (price - entry) / entry;
 
       // Peak-pnl since entry. We don't store entry timestamp, so we use the
