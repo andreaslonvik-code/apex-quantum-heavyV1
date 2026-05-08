@@ -39,6 +39,9 @@ const COPY = {
     confidence: 'Konfidens',
     horizons: { short: 'Kort (uker)', medium: 'Medium (måneder)', long: 'Lang (kvartaler)' },
     actions: { BUY: 'KJØP', SELL: 'SELG', HOLD: 'HOLD', WATCH: 'OBSERVÉR' },
+    convictionFilter: 'Kun høy konfidens (≥80%)',
+    actionMixLabel: 'I dag',
+    ownedSection: 'Du eier',
     actionExplain: {
       BUY: 'Asymmetrisk oppside og gunstig timing for ny posisjon.',
       SELL: 'Risk/reward har blitt negativt — vurder å redusere posisjonen din.',
@@ -77,6 +80,9 @@ const COPY = {
     confidence: 'Confidence',
     horizons: { short: 'Short (weeks)', medium: 'Medium (months)', long: 'Long (quarters)' },
     actions: { BUY: 'BUY', SELL: 'SELL', HOLD: 'HOLD', WATCH: 'WATCH' },
+    convictionFilter: 'High conviction only (≥80%)',
+    actionMixLabel: 'Today',
+    ownedSection: 'You own',
     actionExplain: {
       BUY: 'Asymmetric upside and favorable timing for a new position.',
       SELL: 'Risk/reward has shifted negative — consider trimming your position.',
@@ -114,6 +120,9 @@ const COPY = {
     confidence: 'Konfidenz',
     horizons: { short: 'Kurz (Wochen)', medium: 'Mittel (Monate)', long: 'Lang (Quartale)' },
     actions: { BUY: 'KAUFEN', SELL: 'VERKAUFEN', HOLD: 'HALTEN', WATCH: 'BEOBACHTEN' },
+    convictionFilter: 'Nur hohe Konfidenz (≥80%)',
+    actionMixLabel: 'Heute',
+    ownedSection: 'Sie halten',
     actionExplain: {
       BUY: 'Asymmetrische Aufwärts­bewegung und günstiges Timing für eine neue Position.',
       SELL: 'Risk/Reward hat sich negativ verschoben — Reduzierung erwägen.',
@@ -151,6 +160,9 @@ const COPY = {
     confidence: 'Confianza',
     horizons: { short: 'Corto (semanas)', medium: 'Medio (meses)', long: 'Largo (trimestres)' },
     actions: { BUY: 'COMPRAR', SELL: 'VENDER', HOLD: 'MANTENER', WATCH: 'OBSERVAR' },
+    convictionFilter: 'Solo alta confianza (≥80%)',
+    actionMixLabel: 'Hoy',
+    ownedSection: 'En cartera',
     actionExplain: {
       BUY: 'Asimetría positiva y momento favorable para nueva posición.',
       SELL: 'Riesgo/beneficio se ha vuelto negativo — considera reducir.',
@@ -188,6 +200,9 @@ const COPY = {
     confidence: '信心',
     horizons: { short: '短期（周）', medium: '中期（月）', long: '长期（季度）' },
     actions: { BUY: '买入', SELL: '卖出', HOLD: '持有', WATCH: '观察' },
+    convictionFilter: '仅高信心 (≥80%)',
+    actionMixLabel: '今日',
+    ownedSection: '已持有',
     actionExplain: {
       BUY: '不对称上行空间与有利的建仓时机。',
       SELL: '风险/回报已转负——考虑减仓。',
@@ -286,6 +301,7 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
   const t = COPY[lang];
   const [region, setRegion] = useState<PlusRegion | 'ALL'>('ALL');
   const [action, setAction] = useState<PlusAction | 'ALL'>('ALL');
+  const [highConvictionOnly, setHighConvictionOnly] = useState(false);
   const [signals, setSignals] = useState<DisplaySignal[] | null>(null);
   const [meta, setMeta] = useState<ScanMeta>({ generatedAt: null, scanSummary: null, isReal: false });
   const [loading, setLoading] = useState(true);
@@ -334,13 +350,30 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
     let list = signals;
     if (region !== 'ALL') list = list.filter((s) => s.region === region);
     if (action !== 'ALL') list = list.filter((s) => s.action === action);
+    if (highConvictionOnly) list = list.filter((s) => s.confidence >= 80);
     return [...list].sort((a, b) => {
+      // Owned positions surface first regardless of action — these are
+      // the ones the user most needs to act on.
+      const aOwned = isOwned(a.ticker) ? 0 : 1;
+      const bOwned = isOwned(b.ticker) ? 0 : 1;
+      if (aOwned !== bOwned) return aOwned - bOwned;
       const ap = ACTION_PRIORITY[a.action];
       const bp = ACTION_PRIORITY[b.action];
       if (ap !== bp) return ap - bp;
       return b.confidence - a.confidence;
     });
-  }, [signals, region, action]);
+  }, [signals, region, action, highConvictionOnly, isOwned]);
+
+  const actionMix = useMemo(() => {
+    if (!signals) return { BUY: 0, SELL: 0, HOLD: 0, WATCH: 0 };
+    return signals.reduce(
+      (acc, s) => {
+        acc[s.action] += 1;
+        return acc;
+      },
+      { BUY: 0, SELL: 0, HOLD: 0, WATCH: 0 } as Record<PlusAction, number>,
+    );
+  }, [signals]);
 
   return (
     <div className="aqp-content">
@@ -369,6 +402,25 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
 
       {!meta.isReal && !loading && <div className="aqp-seed-note">{t.seedNote}</div>}
 
+      {!loading && signals && signals.length > 0 && (
+        <div className="aqp-action-mix">
+          <span className="aqp-action-mix-label">{t.actionMixLabel}</span>
+          {ACTIONS.map((a) => {
+            const count = actionMix[a];
+            if (count === 0) return null;
+            return (
+              <span
+                key={a}
+                className={`aqp-action-mix-stat aqp-action-mix-stat--${a.toLowerCase()}`}
+              >
+                <span className="aqp-action-mix-num">{count}</span>
+                <span className="aqp-action-mix-key">{t.actions[a]}</span>
+              </span>
+            );
+          })}
+        </div>
+      )}
+
       {/* Action filter */}
       <div className="aqp-filter-row" style={{ marginTop: 16 }}>
         <button
@@ -392,6 +444,14 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
             </button>
           );
         })}
+        <button
+          type="button"
+          className={`aqp-chip aqp-chip--conviction ${highConvictionOnly ? 'is-on' : ''}`}
+          onClick={() => setHighConvictionOnly((v) => !v)}
+          aria-pressed={highConvictionOnly}
+        >
+          {t.convictionFilter}
+        </button>
       </div>
 
       {/* Region filter */}
@@ -435,10 +495,14 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
             const requiresOwnership = s.action === 'HOLD' || s.action === 'SELL';
             const showOwnershipBanner = requiresOwnership && !owned;
             const isBuy = s.action === 'BUY';
+            const confidenceTier =
+              s.confidence >= 80 ? 'high' : s.confidence >= 60 ? 'med' : 'low';
             return (
               <article
                 key={s.id}
-                className={`aqp-signal-card aqp-signal-card--${s.action.toLowerCase()}`}
+                className={`aqp-signal-card aqp-signal-card--${s.action.toLowerCase()} ${
+                  owned ? 'aqp-signal-card--owned' : ''
+                }`}
               >
                 <header className="aqp-signal-head">
                   <div className="aqp-signal-id">
@@ -470,7 +534,11 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
                     <span className="aqp-meta-key">{REGION_LABELS[lang][s.region]}</span>
                   </span>
                   <span className="aqp-meta-sep">·</span>
-                  <span className="aqp-meta-item">
+                  <span className="aqp-meta-item aqp-confidence">
+                    <span
+                      className={`aqp-confidence-dot aqp-confidence-dot--${confidenceTier}`}
+                      aria-hidden="true"
+                    />
                     <span className="aqp-meta-key">{t.confidence}:</span>{' '}
                     <span className="aqp-meta-val">{s.confidence}%</span>
                   </span>

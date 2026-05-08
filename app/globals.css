@@ -1140,6 +1140,22 @@ body {
   border-radius: 4px;
   text-transform: uppercase;
 }
+.aqp-nav-badge--count {
+  font-size: 10px;
+  letter-spacing: 0;
+  padding: 2px 7px;
+  min-width: 18px;
+  text-align: center;
+  background: rgba(0,245,255,0.12);
+  color: var(--aq-cyan);
+  border: 1px solid rgba(0,245,255,0.25);
+  font-weight: 600;
+}
+.aqp-nav-item.is-active .aqp-nav-badge--count {
+  background: rgba(0,245,255,0.20);
+  color: var(--aq-cyan);
+  border-color: rgba(0,245,255,0.45);
+}
 
 .aqp-max-card {
   margin-top: 24px;
@@ -1859,4 +1875,207 @@ body {
 .aqp-module-card--clickable:hover {
   border-color: rgba(0,245,255,0.25);
   background: rgba(255,255,255,0.04);
+}
+
+/* ============================================================ */
+/* APEX QUANTUM + — Onboarding modal                            */
+/* ============================================================ */
+
+.aqp-onb-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(2,8,15,0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: aqpOnbFade 0.18s var(--aq-ease);
+}
+@keyframes aqpOnbFade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.aqp-onb-card {
+  width: min(520px, 100%);
+  background: linear-gradient(180deg, rgba(0,245,255,0.04) 0%, rgba(255,255,255,0.02) 100%), #0a1218;
+  border: 1px solid rgba(0,245,255,0.20);
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow:
+    0 0 0 1px rgba(0,245,255,0.05),
+    0 24px 60px rgba(0,0,0,0.55);
+  animation: aqpOnbRise 0.22s var(--aq-ease);
+}
+@keyframes aqpOnbRise {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.aqp-onb-head { margin-bottom: 24px; }
+.aqp-onb-title {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin: 0;
+}
+.aqp-onb-sub {
+  margin-top: 8px;
+  font-size: 14px;
+  line-height: 1.55;
+  color: rgba(255,255,255,0.62);
+}
+.aqp-onb-step {
+  padding: 18px 20px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--aq-border);
+  border-radius: 12px;
+  margin-bottom: 20px;
+  min-height: 156px;
+}
+.aqp-onb-eye {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--aq-cyan);
+  margin-bottom: 10px;
+}
+.aqp-onb-step-title {
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  margin: 0 0 8px;
+  color: var(--aq-text);
+}
+.aqp-onb-step-body {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: rgba(255,255,255,0.78);
+}
+.aqp-onb-progress {
+  display: flex;
+  gap: 6px;
+  justify-content: center;
+  margin-bottom: 22px;
+}
+.aqp-onb-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.15);
+  transition: background 0.18s var(--aq-ease), transform 0.18s var(--aq-ease);
+}
+.aqp-onb-dot.is-on {
+  background: var(--aq-cyan);
+  transform: scale(1.3);
+  box-shadow: 0 0 8px rgba(0,245,255,0.5);
+}
+.aqp-onb-dot.is-done { background: rgba(0,245,255,0.40); }
+.aqp-onb-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+@media (max-width: 520px) {
+  .aqp-onb-card { padding: 24px; }
+  .aqp-onb-step { padding: 14px 16px; }
+  .aqp-onb-title { font-size: 19px; }
+}
+
+/* ============================================================ */
+/* APEX QUANTUM + — Confidence band, action-mix, owned highlight */
+/* ============================================================ */
+
+.aqp-confidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.aqp-confidence-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  display: inline-block;
+}
+.aqp-confidence-dot--high {
+  background: #34D399;
+  box-shadow: 0 0 6px rgba(16,185,129,0.55);
+}
+.aqp-confidence-dot--med {
+  background: #F5C443;
+  box-shadow: 0 0 6px rgba(245,196,67,0.45);
+}
+.aqp-confidence-dot--low {
+  background: rgba(255,255,255,0.35);
+}
+
+.aqp-signal-card--owned {
+  border-color: rgba(0,245,255,0.30);
+  box-shadow: 0 0 0 1px rgba(0,245,255,0.08);
+  position: relative;
+}
+.aqp-signal-card--owned::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(180deg, rgba(0,245,255,0.6), rgba(0,245,255,0.1));
+  border-top-left-radius: inherit;
+  border-bottom-left-radius: inherit;
+}
+
+.aqp-action-mix {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 18px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--aq-border);
+  border-radius: 10px;
+  margin-bottom: 18px;
+}
+.aqp-action-mix-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+}
+.aqp-action-mix-stat {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 13px;
+}
+.aqp-action-mix-num {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.aqp-action-mix-stat--buy .aqp-action-mix-num { color: #34D399; }
+.aqp-action-mix-stat--sell .aqp-action-mix-num { color: #F87171; }
+.aqp-action-mix-stat--hold .aqp-action-mix-num { color: #F5C443; }
+.aqp-action-mix-stat--watch .aqp-action-mix-num { color: #5CFAFF; }
+.aqp-action-mix-key {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  color: rgba(255,255,255,0.55);
+}
+
+.aqp-chip--conviction.is-on {
+  background: rgba(16,185,129,0.10);
+  border-color: rgba(16,185,129,0.35);
+  color: #34D399;
 }

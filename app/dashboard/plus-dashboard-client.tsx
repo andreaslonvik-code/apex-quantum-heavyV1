@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { SignOutButton, useUser } from '@clerk/nextjs';
 import { PLUS_LANGS, PLUS_LANG_LABELS, type PlusLang } from '@/lib/i18n/plus-lang';
@@ -10,13 +10,13 @@ import { WatchlistView } from './views/watchlist-view';
 import { ReportsView } from './views/reports-view';
 import { LearnView } from './views/learn-view';
 import { JournalView } from './views/journal-view';
+import { OnboardingModal } from './views/onboarding-modal';
 
 type ViewKey = 'signals' | 'ask' | 'watchlist' | 'reports' | 'learn' | 'journal';
 
 interface NavItem {
   key: ViewKey;
   icon: string;
-  badge?: { no: string; en: string; de: string; es: string; zh: string };
 }
 
 const NAV: ReadonlyArray<NavItem> = [
@@ -24,8 +24,8 @@ const NAV: ReadonlyArray<NavItem> = [
   { key: 'ask', icon: 'chat' },
   { key: 'watchlist', icon: 'list' },
   { key: 'reports', icon: 'doc' },
-  { key: 'learn', icon: 'book', badge: { no: 'Snart', en: 'Soon', de: 'Bald', es: 'Pronto', zh: '即将' } },
-  { key: 'journal', icon: 'edit', badge: { no: 'Snart', en: 'Soon', de: 'Bald', es: 'Pronto', zh: '即将' } },
+  { key: 'learn', icon: 'book' },
+  { key: 'journal', icon: 'edit' },
 ];
 
 const NAV_LABELS: Record<ViewKey, Record<PlusLang, string>> = {
@@ -100,8 +100,31 @@ export default function PlusDashboardClient({ allowlisted, hasSubscription }: Pr
   const [view, setView] = useState<ViewKey>('signals');
   const [navOpen, setNavOpen] = useState(false);
   const [manageBusy, setManageBusy] = useState(false);
+  const [signalCount, setSignalCount] = useState<number | null>(null);
   const { user } = useUser();
   const t = COPY[lang];
+
+  // Fetch today's signal count once on mount so the sidebar badge can show
+  // an at-a-glance number. SignalsView still does its own fetch — keeping
+  // it independent so each view stays self-contained.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/plus/signals/today', { credentials: 'include' });
+        const data = await res.json();
+        if (cancelled) return;
+        if (data.ok && Array.isArray(data.signals)) {
+          setSignalCount(data.signals.length);
+        }
+      } catch {
+        /* ignore — badge just won't show */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const openPortal = async () => {
     setManageBusy(true);
@@ -168,7 +191,7 @@ export default function PlusDashboardClient({ allowlisted, hasSubscription }: Pr
           {NAV.map((item) => {
             const label = NAV_LABELS[item.key][lang];
             const isActive = view === item.key;
-            const badge = item.badge?.[lang];
+            const showCount = item.key === 'signals' && signalCount !== null && signalCount > 0;
             return (
               <button
                 key={item.key}
@@ -181,7 +204,7 @@ export default function PlusDashboardClient({ allowlisted, hasSubscription }: Pr
               >
                 <NavIcon type={item.icon} />
                 <span className="aqp-nav-label">{label}</span>
-                {badge && <span className="aqp-nav-badge">{badge}</span>}
+                {showCount && <span className="aqp-nav-badge aqp-nav-badge--count">{signalCount}</span>}
               </button>
             );
           })}
@@ -242,6 +265,8 @@ export default function PlusDashboardClient({ allowlisted, hasSubscription }: Pr
       </aside>
 
       <main className="aqp-main">{renderView()}</main>
+
+      <OnboardingModal lang={lang} />
     </div>
   );
 }
