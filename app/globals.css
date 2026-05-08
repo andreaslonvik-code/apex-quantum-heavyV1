@@ -1632,3 +1632,231 @@ body {
   transition: background 0.15s var(--aq-ease);
 }
 .aqp-own-banner-cta:hover { background: rgba(245,196,67,0.18); }
+
+/* ============================================================ */
+/* Plus dashboard — Phase 2: cadence, summary, journal, reports */
+/* ============================================================ */
+
+.aqp-cadence {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  color: rgba(255,255,255,0.55);
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--aq-border);
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.aqp-summary-card {
+  padding: 24px 28px;
+  background: rgba(0,245,255,0.04);
+  border: 1px solid rgba(0,245,255,0.18);
+  border-radius: 12px;
+  margin-bottom: 24px;
+}
+.aqp-summary-eye {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--aq-cyan);
+  margin-bottom: 12px;
+}
+.aqp-summary-body {
+  font-size: 15px;
+  line-height: 1.7;
+  color: rgba(255,255,255,0.85);
+  margin: 0;
+}
+
+.aqp-lang-note {
+  font-size: 12px;
+  color: rgba(255,196,67,0.85);
+  background: rgba(245,196,67,0.04);
+  border: 1px solid rgba(245,196,67,0.16);
+  padding: 8px 12px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.aqp-extra-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.015);
+  border-radius: 8px;
+  border: 1px solid rgba(255,255,255,0.04);
+}
+.aqp-extra { flex: 1; min-width: 240px; }
+.aqp-extra-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 4px;
+}
+.aqp-extra-body { font-size: 13px; line-height: 1.5; color: rgba(255,255,255,0.78); }
+
+/* Action-filter chips per action color */
+.aqp-chip--buy.is-on { background: rgba(16,185,129,0.10); border-color: rgba(16,185,129,0.35); color: #34D399; }
+.aqp-chip--sell.is-on { background: rgba(239,68,68,0.10); border-color: rgba(239,68,68,0.35); color: #F87171; }
+.aqp-chip--hold.is-on { background: rgba(245,196,67,0.10); border-color: rgba(245,196,67,0.35); color: #F5C443; }
+.aqp-chip--watch.is-on { background: rgba(0,245,255,0.08); border-color: rgba(0,245,255,0.30); color: #5CFAFF; }
+
+/* Journal */
+.aqp-journal-form {
+  padding: 24px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--aq-border);
+  border-radius: 12px;
+  margin-bottom: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.aqp-journal-row { display: flex; gap: 12px; flex-wrap: wrap; }
+.aqp-journal-stack { display: flex; flex-direction: column; gap: 16px; }
+.aqp-journal-card {
+  padding: 20px 24px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--aq-border);
+  border-radius: 12px;
+}
+.aqp-journal-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.aqp-journal-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.aqp-journal-ticker {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--aq-cyan);
+}
+.aqp-journal-date {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: rgba(255,255,255,0.45);
+}
+.aqp-journal-section { margin-top: 12px; }
+.aqp-journal-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  margin-bottom: 4px;
+}
+.aqp-journal-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(255,255,255,0.82);
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+/* Reports */
+.aqp-report-card {
+  padding: 36px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--aq-border);
+  border-radius: 14px;
+}
+.aqp-report-title {
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  margin: 0;
+}
+.aqp-report-body { color: rgba(255,255,255,0.85); }
+.aqp-report-h1 {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 28px 0 12px;
+  color: var(--aq-text);
+}
+.aqp-report-h2 {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 24px 0 10px;
+  color: rgba(255,255,255,0.92);
+}
+.aqp-report-h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 18px 0 8px;
+  color: rgba(255,255,255,0.85);
+}
+.aqp-report-p {
+  font-size: 15px;
+  line-height: 1.7;
+  margin: 0 0 14px;
+  color: rgba(255,255,255,0.82);
+}
+.aqp-report-list {
+  margin: 0 0 14px 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.aqp-report-list li {
+  position: relative;
+  padding-left: 16px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: rgba(255,255,255,0.78);
+}
+.aqp-report-list li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: rgba(255,255,255,0.35);
+}
+
+.aqp-report-history { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+.aqp-report-history-item {
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--aq-border);
+  border-radius: 10px;
+  padding: 14px 18px;
+}
+.aqp-report-history-item summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  font-size: 14px;
+  color: rgba(255,255,255,0.82);
+  list-style: none;
+}
+.aqp-report-history-item summary::-webkit-details-marker { display: none; }
+.aqp-report-history-title { font-weight: 600; }
+
+/* Learn module-card clickable */
+.aqp-module-card--clickable {
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--aq-border);
+  border-radius: 12px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: border-color 0.15s var(--aq-ease), background 0.15s var(--aq-ease);
+}
+.aqp-module-card--clickable:hover {
+  border-color: rgba(0,245,255,0.25);
+  background: rgba(255,255,255,0.04);
+}

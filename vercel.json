@@ -3,10 +3,24 @@
     {
       "path": "/api/cron/tick",
       "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/plus-signals",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/cron/plus-report",
+      "schedule": "0 18 * * 0"
     }
   ],
   "functions": {
     "app/api/cron/tick/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/plus-signals/route.ts": {
+      "maxDuration": 300
+    },
+    "app/api/cron/plus-report/route.ts": {
       "maxDuration": 300
     },
     "app/api/apex/blueprint-tick/route.ts": {
