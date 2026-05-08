@@ -13,7 +13,7 @@ const COPY = {
       {
         eye: 'SIGNALER',
         title: 'Daglig markedsanalyse',
-        body: 'Hver dag kl. 08:00 publiseres et utvalg AI-signaler fra global watchlist — med begrunnelse, katalysatorer og risiko. Du forstår hvorfor, ikke bare hva.',
+        body: 'Hver hele time bygger AI-en en oppdatert modellportefølje per hovedbørs — Oslo, US, EU, Asia — med begrunnelse, katalysatorer og risiko. Du forstår hvorfor, ikke bare hva.',
       },
       {
         eye: 'SPØR AI',
@@ -37,7 +37,7 @@ const COPY = {
       {
         eye: 'SIGNALS',
         title: 'Daily market analysis',
-        body: 'Every day at 08:00 CET we publish a curated set of AI signals from the global watchlist — with reasoning, catalysts and risk. You understand why, not just what.',
+        body: 'Every hour the AI rebuilds a concentrated model portfolio per major exchange — Oslo, US, EU, Asia — with reasoning, catalysts and risk. You understand why, not just what.',
       },
       {
         eye: 'ASK AI',
@@ -61,7 +61,7 @@ const COPY = {
       {
         eye: 'SIGNALE',
         title: 'Tägliche Marktanalyse',
-        body: 'Täglich um 08:00 MEZ veröffentlichen wir KI-Signale aus der globalen Watchlist — mit Begründung, Katalysatoren und Risiken.',
+        body: 'Stündlich erstellt die KI ein konzentriertes Modellportfolio pro Hauptbörse — Oslo, US, EU, Asien — mit Begründung, Katalysatoren und Risiken.',
       },
       {
         eye: 'KI FRAGEN',
@@ -85,7 +85,7 @@ const COPY = {
       {
         eye: 'SEÑALES',
         title: 'Análisis diario',
-        body: 'Cada día a las 08:00 CET publicamos señales IA de la lista global — con razonamiento, catalizadores y riesgos.',
+        body: 'Cada hora la IA reconstruye una cartera modelo concentrada por bolsa principal — Oslo, EE.UU., UE, Asia — con razonamiento, catalizadores y riesgos.',
       },
       {
         eye: 'PREGUNTAR IA',
@@ -109,7 +109,7 @@ const COPY = {
       {
         eye: '信号',
         title: '每日市场分析',
-        body: '每天 CET 08:00 发布来自全球观察清单的 AI 信号——附带推理、催化剂与风险。',
+        body: '每小时 AI 都会按主要交易所（奥斯陆、美国、欧洲、亚洲）重新构建一个集中的模型投资组合——附带推理、催化剂与风险。',
       },
       {
         eye: '问 AI',

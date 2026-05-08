@@ -2079,3 +2079,167 @@ body {
   border-color: rgba(16,185,129,0.35);
   color: #34D399;
 }
+
+/* ============================================================ */
+/* APEX QUANTUM + — Læring: callouts, tables, illustrations     */
+/* ============================================================ */
+
+.aqp-inline-code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 1px 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 4px;
+  color: rgba(255,255,255,0.92);
+}
+
+.aqp-cb {
+  margin: 18px 0;
+  padding: 16px 20px;
+  border-radius: 12px;
+  border: 1px solid;
+  background: rgba(255,255,255,0.02);
+}
+.aqp-cb-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.aqp-cb-body {
+  margin: 4px 0;
+  font-size: 14px;
+  line-height: 1.65;
+  color: rgba(255,255,255,0.85);
+}
+.aqp-cb-body:last-child { margin-bottom: 0; }
+
+.aqp-cb--example {
+  background: rgba(16,185,129,0.05);
+  border-color: rgba(16,185,129,0.25);
+}
+.aqp-cb--example .aqp-cb-label { color: #34D399; }
+
+.aqp-cb--key {
+  background: rgba(0,245,255,0.05);
+  border-color: rgba(0,245,255,0.25);
+}
+.aqp-cb--key .aqp-cb-label { color: var(--aq-cyan); }
+
+.aqp-cb--warn {
+  background: rgba(245,196,67,0.05);
+  border-color: rgba(245,196,67,0.25);
+}
+.aqp-cb--warn .aqp-cb-label { color: #F5C443; }
+
+.aqp-cb--data {
+  background: rgba(255,255,255,0.025);
+  border-color: rgba(255,255,255,0.12);
+}
+.aqp-cb--data .aqp-cb-label { color: rgba(255,255,255,0.75); }
+
+.aqp-cb--formula {
+  background: rgba(255,255,255,0.025);
+  border-color: rgba(255,255,255,0.10);
+  font-family: var(--font-mono);
+}
+.aqp-cb--formula .aqp-cb-label { color: rgba(255,255,255,0.62); }
+.aqp-cb--formula .aqp-cb-body {
+  font-family: var(--font-mono);
+  font-size: 14.5px;
+  letter-spacing: 0.01em;
+}
+
+.aqp-tbl-wrap {
+  margin: 18px 0;
+  overflow-x: auto;
+  border: 1px solid var(--aq-border);
+  border-radius: 10px;
+  background: rgba(255,255,255,0.02);
+}
+.aqp-tbl {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.aqp-tbl th {
+  text-align: left;
+  padding: 10px 14px;
+  background: rgba(0,245,255,0.04);
+  border-bottom: 1px solid var(--aq-border);
+  color: var(--aq-cyan);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+}
+.aqp-tbl td {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.82);
+  vertical-align: top;
+}
+.aqp-tbl tr:last-child td { border-bottom: none; }
+
+.aqp-viz-wrap {
+  margin: 22px 0;
+  padding: 16px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--aq-border);
+  border-radius: 12px;
+  display: flex;
+  justify-content: center;
+}
+.aqp-viz {
+  width: 100%;
+  max-width: 480px;
+  height: auto;
+}
+
+.aqp-report-h3 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 18px 0 8px;
+  color: rgba(255,255,255,0.88);
+}
+
+/* ============================================================ */
+/* APEX QUANTUM + — Per-exchange portfolio grouping             */
+/* ============================================================ */
+
+.aqp-region-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 36px;
+}
+.aqp-region-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.aqp-region-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--aq-border);
+}
+.aqp-region-title {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.015em;
+  margin: 0;
+  color: var(--aq-text);
+}
+.aqp-region-count {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  color: rgba(255,255,255,0.45);
+  text-transform: uppercase;
+}

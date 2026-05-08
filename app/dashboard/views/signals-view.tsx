@@ -42,6 +42,8 @@ const COPY = {
     convictionFilter: 'Kun høy konfidens (≥80%)',
     actionMixLabel: 'I dag',
     ownedSection: 'Du eier',
+    regionPositionsOne: 'posisjon',
+    regionPositionsMany: 'posisjoner',
     actionExplain: {
       BUY: 'Asymmetrisk oppside og gunstig timing for ny posisjon.',
       SELL: 'Risk/reward har blitt negativt — vurder å redusere posisjonen din.',
@@ -61,10 +63,10 @@ const COPY = {
     seedNote:
       'Demonstrasjonssignaler — den ekte AI-pipelinen kobles på når daglig signal-jobb er live.',
     refreshInfo: (last: string, next: string) =>
-      `Sist oppdatert ${last} · neste oppdatering ${next} (kl. 08:00 norsk tid daglig)`,
+      `Sist oppdatert ${last} · neste skann kl. ${next} (kjøres hver hele time)`,
     nowSummary: 'Dagens markedssituasjon',
     loading: 'Henter dagens signaler…',
-    empty: 'Ingen signaler ennå. Neste skann kjører kl. 08:00 norsk tid.',
+    empty: 'Ingen signaler ennå. Neste skann kjører ved neste hele time.',
     refresh: 'Oppdater',
     noteOnLang: 'Signaler genereres på norsk. Oversettelse til andre språk kommer snart.',
   },
@@ -83,6 +85,8 @@ const COPY = {
     convictionFilter: 'High conviction only (≥80%)',
     actionMixLabel: 'Today',
     ownedSection: 'You own',
+    regionPositionsOne: 'position',
+    regionPositionsMany: 'positions',
     actionExplain: {
       BUY: 'Asymmetric upside and favorable timing for a new position.',
       SELL: 'Risk/reward has shifted negative — consider trimming your position.',
@@ -101,10 +105,10 @@ const COPY = {
       'Apex Quantum + is a learning and analysis platform. Content is not individual investment advice. Past performance is no guarantee of future results.',
     seedNote: 'Demonstration signals — the real AI pipeline activates once the daily signal job is live.',
     refreshInfo: (last: string, next: string) =>
-      `Last updated ${last} · next update ${next} (08:00 CET daily)`,
+      `Last updated ${last} · next scan at ${next} (runs every hour)`,
     nowSummary: "Today's market view",
     loading: "Fetching today's signals…",
-    empty: 'No signals yet. Next scan runs at 08:00 CET.',
+    empty: 'No signals yet. Next scan runs at the top of the next hour.',
     refresh: 'Refresh',
     noteOnLang: 'Signals are generated in Norwegian. Translation to other languages coming soon.',
   },
@@ -123,6 +127,8 @@ const COPY = {
     convictionFilter: 'Nur hohe Konfidenz (≥80%)',
     actionMixLabel: 'Heute',
     ownedSection: 'Sie halten',
+    regionPositionsOne: 'Position',
+    regionPositionsMany: 'Positionen',
     actionExplain: {
       BUY: 'Asymmetrische Aufwärts­bewegung und günstiges Timing für eine neue Position.',
       SELL: 'Risk/Reward hat sich negativ verschoben — Reduzierung erwägen.',
@@ -141,10 +147,10 @@ const COPY = {
       'Apex Quantum + ist eine Lern- und Analyseplattform. Inhalte sind keine individuelle Anlageberatung. Frühere Ergebnisse sind keine Garantie für künftige.',
     seedNote: 'Demo-Signale — die echte KI-Pipeline läuft, sobald der tägliche Signal-Job live ist.',
     refreshInfo: (last: string, next: string) =>
-      `Zuletzt aktualisiert ${last} · nächste Aktualisierung ${next} (täglich 08:00 MEZ)`,
+      `Zuletzt aktualisiert ${last} · nächster Scan um ${next} (stündlich)`,
     nowSummary: 'Heutige Marktsicht',
     loading: 'Lade heutige Signale…',
-    empty: 'Noch keine Signale. Nächster Scan läuft um 08:00 MEZ.',
+    empty: 'Noch keine Signale. Nächster Scan zur nächsten vollen Stunde.',
     refresh: 'Aktualisieren',
     noteOnLang: 'Signale werden auf Norwegisch generiert. Übersetzung in andere Sprachen folgt.',
   },
@@ -163,6 +169,8 @@ const COPY = {
     convictionFilter: 'Solo alta confianza (≥80%)',
     actionMixLabel: 'Hoy',
     ownedSection: 'En cartera',
+    regionPositionsOne: 'posición',
+    regionPositionsMany: 'posiciones',
     actionExplain: {
       BUY: 'Asimetría positiva y momento favorable para nueva posición.',
       SELL: 'Riesgo/beneficio se ha vuelto negativo — considera reducir.',
@@ -181,10 +189,10 @@ const COPY = {
       'Apex Quantum + es una plataforma de aprendizaje y análisis. El contenido no es asesoramiento de inversión individual. Resultados pasados no garantizan resultados futuros.',
     seedNote: 'Señales de demostración — el pipeline IA real se activa cuando el job diario de señales esté en vivo.',
     refreshInfo: (last: string, next: string) =>
-      `Actualizado ${last} · próxima actualización ${next} (diaria 08:00 CET)`,
+      `Actualizado ${last} · próximo escaneo a las ${next} (cada hora)`,
     nowSummary: 'Visión del mercado hoy',
     loading: 'Cargando señales de hoy…',
-    empty: 'Aún no hay señales. Próximo escaneo a las 08:00 CET.',
+    empty: 'Aún no hay señales. Próximo escaneo a la próxima hora en punto.',
     refresh: 'Actualizar',
     noteOnLang: 'Las señales se generan en noruego. Traducción a otros idiomas próximamente.',
   },
@@ -203,6 +211,8 @@ const COPY = {
     convictionFilter: '仅高信心 (≥80%)',
     actionMixLabel: '今日',
     ownedSection: '已持有',
+    regionPositionsOne: '个仓位',
+    regionPositionsMany: '个仓位',
     actionExplain: {
       BUY: '不对称上行空间与有利的建仓时机。',
       SELL: '风险/回报已转负——考虑减仓。',
@@ -221,10 +231,10 @@ const COPY = {
       'Apex Quantum + 是学习与分析平台。内容非个人投资建议。过往业绩不保证未来表现。',
     seedNote: '演示信号——真实 AI 管线将在每日信号任务上线后启用。',
     refreshInfo: (last: string, next: string) =>
-      `最近更新 ${last} · 下次更新 ${next}（每日 CET 08:00）`,
+      `最近更新 ${last} · 下次扫描 ${next}（每小时一次）`,
     nowSummary: '今日市场概览',
     loading: '加载今日信号…',
-    empty: '暂无信号。下次扫描时间：CET 08:00。',
+    empty: '暂无信号。下次扫描将在下一个整点运行。',
     refresh: '刷新',
     noteOnLang: '信号目前以挪威语生成，其他语言版本即将推出。',
   },
@@ -239,6 +249,9 @@ const REGION_LABELS: Record<PlusLang, Record<PlusRegion, string>> = {
 };
 
 const REGIONS: PlusRegion[] = ['NO', 'EU', 'US', 'TW', 'KR', 'JP', 'HK', 'IN'];
+// Display order for the per-exchange portfolio view: US first (main market for
+// most signals), then NO (home market), then EU, then Asia regions.
+const REGION_DISPLAY_ORDER: PlusRegion[] = ['US', 'NO', 'EU', 'TW', 'KR', 'JP', 'HK', 'IN'];
 const ACTIONS: PlusAction[] = ['BUY', 'SELL', 'HOLD', 'WATCH'];
 const ACTION_PRIORITY: Record<PlusAction, number> = { BUY: 0, SELL: 1, WATCH: 2, HOLD: 3 };
 
@@ -263,24 +276,16 @@ function formatRelative(iso: string, lang: PlusLang): string {
 }
 
 function formatNextUpdate(lang: PlusLang): string {
-  // Daily 06:00 UTC = 08:00 CET. Compute next occurrence in user's local time.
+  // Hourly cron at minute 0. Next update = next top-of-hour in user's local time.
   const now = new Date();
-  const next = new Date();
-  next.setUTCHours(6, 0, 0, 0);
-  if (next <= now) next.setUTCDate(next.getUTCDate() + 1);
-  const labels = {
-    no: { tomorrow: 'i morgen', today: 'i dag' },
-    en: { tomorrow: 'tomorrow', today: 'today' },
-    de: { tomorrow: 'morgen', today: 'heute' },
-    es: { tomorrow: 'mañana', today: 'hoy' },
-    zh: { tomorrow: '明天', today: '今天' },
-  } as const;
-  const sameDay = next.getUTCDate() === now.getUTCDate();
+  const next = new Date(now);
+  next.setMinutes(0, 0, 0);
+  next.setHours(now.getHours() + 1);
   const time = next.toLocaleTimeString(lang === 'zh' ? 'zh-CN' : lang, {
     hour: '2-digit',
     minute: '2-digit',
   });
-  return `${sameDay ? labels[lang].today : labels[lang].tomorrow} ${time}`;
+  return time;
 }
 
 function seedToDisplay(lang: PlusLang): DisplaySignal[] {
@@ -487,23 +492,51 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
         <div className="aqp-empty">{t.loading}</div>
       ) : filtered.length === 0 ? (
         <div className="aqp-empty">{t.empty}</div>
+      ) : region === 'ALL' ? (
+        <div className="aqp-region-stack">
+          {REGION_DISPLAY_ORDER.map((r) => {
+            const items = filtered.filter((s) => s.region === r);
+            if (items.length === 0) return null;
+            return (
+              <section key={r} className="aqp-region-section">
+                <header className="aqp-region-head">
+                  <h2 className="aqp-region-title">{REGION_LABELS[lang][r]}</h2>
+                  <span className="aqp-region-count">
+                    {items.length} {items.length === 1 ? t.regionPositionsOne : t.regionPositionsMany}
+                  </span>
+                </header>
+                <div className="aqp-signal-stack">
+                  {items.map((s) => renderSignalCard(s))}
+                </div>
+              </section>
+            );
+          })}
+        </div>
       ) : (
         <div className="aqp-signal-stack">
-          {filtered.map((s) => {
-            const meta = PLUS_WATCHLIST.find((w) => w.ticker === s.ticker);
-            const owned = isOwned(s.ticker);
-            const requiresOwnership = s.action === 'HOLD' || s.action === 'SELL';
-            const showOwnershipBanner = requiresOwnership && !owned;
-            const isBuy = s.action === 'BUY';
-            const confidenceTier =
-              s.confidence >= 80 ? 'high' : s.confidence >= 60 ? 'med' : 'low';
-            return (
-              <article
-                key={s.id}
-                className={`aqp-signal-card aqp-signal-card--${s.action.toLowerCase()} ${
-                  owned ? 'aqp-signal-card--owned' : ''
-                }`}
-              >
+          {filtered.map((s) => renderSignalCard(s))}
+        </div>
+      )}
+
+      <p className="aqp-disclaimer">{t.disclaimer}</p>
+    </div>
+  );
+
+  function renderSignalCard(s: DisplaySignal) {
+    const meta = PLUS_WATCHLIST.find((w) => w.ticker === s.ticker);
+    const owned = isOwned(s.ticker);
+    const requiresOwnership = s.action === 'HOLD' || s.action === 'SELL';
+    const showOwnershipBanner = requiresOwnership && !owned;
+    const isBuy = s.action === 'BUY';
+    const confidenceTier =
+      s.confidence >= 80 ? 'high' : s.confidence >= 60 ? 'med' : 'low';
+    return (
+      <article
+        key={s.id}
+        className={`aqp-signal-card aqp-signal-card--${s.action.toLowerCase()} ${
+          owned ? 'aqp-signal-card--owned' : ''
+        }`}
+      >
                 <header className="aqp-signal-head">
                   <div className="aqp-signal-id">
                     <div className="aqp-ticker">{s.ticker}</div>
@@ -597,25 +630,19 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
                       ))}
                     </ul>
                   </div>
-                  <div className="aqp-signal-block">
-                    <div className="aqp-block-head">
-                      <span className="aqp-block-dot aqp-block-dot--risk" />
-                      {t.risks}
-                    </div>
-                    <ul className="aqp-block-list">
-                      {s.risks.map((r, i) => (
-                        <li key={i}>{r}</li>
-                      ))}
-                    </ul>
-                  </div>
-                </div>
-              </article>
-            );
-          })}
+          <div className="aqp-signal-block">
+            <div className="aqp-block-head">
+              <span className="aqp-block-dot aqp-block-dot--risk" />
+              {t.risks}
+            </div>
+            <ul className="aqp-block-list">
+              {s.risks.map((r, i) => (
+                <li key={i}>{r}</li>
+              ))}
+            </ul>
+          </div>
         </div>
-      )}
-
-      <p className="aqp-disclaimer">{t.disclaimer}</p>
-    </div>
-  );
+      </article>
+    );
+  }
 }

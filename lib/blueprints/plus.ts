@@ -263,19 +263,34 @@ BESLUTNINGSFREMGANGSMÅTE:
 8. Avslutt med neste steg og proaktiv oppfordring.`;
 
 /**
- * Daglig signal-pipeline: ber Grok produsere et utvalg signaler fra
- * watchlisten med begrunnelse, konfidens og kontekst.
+ * Time-basert signal-pipeline: ber Grok produsere en konsentrert
+ * modellportefølje per hovedbørs. Konsentrasjon > diversifisering —
+ * kun de sterkeste navnene per region overlever filteret.
  */
-const PLUS_SIGNAL_USER_PROMPT_TEMPLATE = `Generer dagens signaler for Apex Quantum + sin watchlist.
+const PLUS_SIGNAL_USER_PROMPT_TEMPLATE = `Bygg en oppdatert modellportefølje for Apex Quantum + på tvers av hovedbørsene.
 
-For hvert signal du sender:
+Filosofi: konsentrasjon > diversifisering. Kun de sterkeste, mest tidsriktige navnene per region overlever — vi er ute etter momentum og asymmetrisk oppside, ikke "balansert eksponering".
+
+KVOTE PER REGION (hold deg innenfor disse rammene):
+- US (S&P / NASDAQ / NYSE): 3–4 navn — dette er hovedmarkedet, prioriter de største/mest momentum-tunge
+- NO (Oslo Børs): 3–4 navn — vårt hjemmemarked, prioriter de mest momentum-tunge
+- EU (utenfor Norge): 2–3 navn
+- TW: 1–2 navn
+- KR: 1–2 navn
+- JP: 1–2 navn
+- HK: 0–2 navn (kun hvis sterk overbevisning)
+- IN: 0–1 navn (kun hvis sterk overbevisning)
+
+Total: 12–18 signaler.
+
+For hvert signal:
 - ticker (eksakt fra watchlisten)
 - action: BUY | SELL | HOLD | WATCH
-  - BUY: ny posisjon foreslått — asymmetrisk oppside og gunstig timing
+  - BUY: ny posisjon foreslått — asymmetrisk oppside og gunstig timing nå
   - SELL: posisjons-eksponering bør reduseres — risk/reward har forskjøvet seg
   - HOLD: behold posisjon — kun relevant for kunder som allerede eier aksjen
   - WATCH: ikke handlingsklart ennå — sett opp varsler og følg utvikling
-- confidence: 0–100
+- confidence: 0–100 (kun signaler med ≥65 inkluderes)
 - reasoning: 3–6 setninger som forklarer HVORFOR (så brukeren lærer)
 - catalysts: liste med 1–3 konkrete drivere (nyhet, earnings, makro, teknisk, tilleggsmomenter)
 - risk: liste med 1–3 nedside-faktorer (inkl. regulatory og supply chain hvor relevant)
@@ -284,13 +299,14 @@ For hvert signal du sender:
 - peer_comparison: 1 setning som plasserer aksjen mot sine peers
 - insider_signal: optional — hvis sterke insider-kjøp/salg eller short-aktivitet
 
+Siden scanen kjører hver time skal scan_summary fokusere på hva som har endret seg siden forrige time/økt — ikke generisk markedsbeskrivelse. Hvis det er tidlig morgen i Norge og US-markedene var stengte, kommenter Asia-overnight og pre-market action. Hvis Oslo er åpent, kommenter Oslo-spesifikke flyt.
+
 Returner et JSON-objekt:
 {
-  "scan_summary": "kort makro/marked sammendrag i 4–8 setninger",
+  "scan_summary": "4–8 setninger om hva som har endret seg denne timen og hvilken børs som er mest aktiv akkurat nå",
   "signals": [...]
 }
 
-Plukk 8–15 signaler totalt, balansert på tvers av regioner og temaer.
 Du skal IKKE gi individuell investeringsrådgivning — kun forklare og utdanne.`;
 
 /**
