@@ -5,7 +5,7 @@ import type { PlusLang } from '@/lib/i18n/plus-lang';
 
 interface Report {
   id: string;
-  weekStartsOn: string;
+  reportDate: string;
   title: string;
   body: string;
   publishedAt: string;
@@ -13,57 +13,57 @@ interface Report {
 
 const COPY = {
   no: {
-    eye: 'RAPPORTER',
-    title: 'Ukentlige markedsrapporter',
-    sub: 'Hver søndag publiseres en regional gjennomgang: hva som beveget kursene, sektorrotasjoner, makro-faktorer og hva modellen følger med på neste uke.',
-    cadence: 'Publiseres søndag kl. 20:00 norsk tid',
+    eye: 'MORGENBRIEF',
+    title: 'Daglig markedsrapport',
+    sub: 'Hver morgen før kl. 08:00 leverer modellen en oppdatert gjennomgang: hva skjedde overnight, dagens hovedsak, hvilke sektorer som åpner sterkt, og hva som er verdt å følge med på i dag.',
+    cadence: 'Publiseres ca. kl. 07:00 norsk tid hver morgen',
     loading: 'Laster rapporter…',
-    empty: 'Ingen rapporter publisert ennå',
-    emptySub: 'Første rapport publiseres første søndag etter lansering. Du blir varslet på e-post.',
+    empty: 'Ingen rapport publisert ennå',
+    emptySub: 'Første rapport leveres morgenen etter lansering. Du blir varslet på e-post.',
     history: 'Tidligere rapporter',
     publishedOn: 'Publisert',
   },
   en: {
-    eye: 'REPORTS',
-    title: 'Weekly market reports',
-    sub: 'Every Sunday a regional review: what moved prices, sector rotations, macro factors, and what the model is watching next week.',
-    cadence: 'Published Sunday 20:00 CET',
+    eye: 'MORNING BRIEF',
+    title: 'Daily market report',
+    sub: 'Every morning before 08:00 CET the model delivers an updated review: what happened overnight, today\'s headline, which sectors open strong, and what to watch through the day.',
+    cadence: 'Published around 07:00 CET each morning',
     loading: 'Loading reports…',
-    empty: 'No reports published yet',
-    emptySub: 'The first report ships the Sunday after launch. You will be notified by email.',
+    empty: 'No report published yet',
+    emptySub: 'The first report ships the morning after launch. You will be notified by email.',
     history: 'Previous reports',
     publishedOn: 'Published',
   },
   de: {
-    eye: 'BERICHTE',
-    title: 'Wöchentliche Marktberichte',
-    sub: 'Jeden Sonntag eine regionale Übersicht: Was die Kurse bewegte, Sektorrotationen, Makrofaktoren und was das Modell für nächste Woche beobachtet.',
-    cadence: 'Veröffentlicht Sonntag 20:00 MEZ',
+    eye: 'MORGEN-BRIEFING',
+    title: 'Tägliche Marktberichte',
+    sub: 'Jeden Morgen vor 08:00 MEZ liefert das Modell eine aktualisierte Übersicht: Was geschah über Nacht, das Tagesthema, welche Sektoren stark öffnen und worauf Sie heute achten sollten.',
+    cadence: 'Veröffentlicht ca. 07:00 MEZ jeden Morgen',
     loading: 'Lade Berichte…',
-    empty: 'Noch keine Berichte veröffentlicht',
-    emptySub: 'Der erste Bericht erscheint am Sonntag nach dem Launch. Sie erhalten eine E-Mail.',
+    empty: 'Noch kein Bericht veröffentlicht',
+    emptySub: 'Der erste Bericht erscheint am Morgen nach dem Launch. Sie erhalten eine E-Mail.',
     history: 'Frühere Berichte',
     publishedOn: 'Veröffentlicht',
   },
   es: {
-    eye: 'INFORMES',
-    title: 'Informes semanales',
-    sub: 'Cada domingo una revisión regional: qué movió los precios, rotación sectorial, macro y qué vigila el modelo la próxima semana.',
-    cadence: 'Publicado domingos 20:00 CET',
+    eye: 'INFORME MATINAL',
+    title: 'Informe diario del mercado',
+    sub: 'Cada mañana antes de las 08:00 CET el modelo entrega una revisión actualizada: qué pasó durante la noche, el tema del día, qué sectores abren fuertes y qué seguir hoy.',
+    cadence: 'Publicado alrededor de las 07:00 CET cada mañana',
     loading: 'Cargando informes…',
-    empty: 'Aún no hay informes',
-    emptySub: 'El primer informe se publica el domingo posterior al lanzamiento. Te avisaremos por email.',
+    empty: 'Aún no hay informe',
+    emptySub: 'El primer informe se publica la mañana posterior al lanzamiento. Te avisaremos por email.',
     history: 'Informes anteriores',
     publishedOn: 'Publicado',
   },
   zh: {
-    eye: '报告',
-    title: '每周市场报告',
-    sub: '每周日发布区域回顾：价格驱动因素、行业轮动、宏观因素，以及模型下周关注的方向。',
-    cadence: '每周日 CET 20:00 发布',
+    eye: '晨报',
+    title: '每日市场报告',
+    sub: '每天早晨 CET 08:00 之前，模型会发布最新综述：隔夜动态、今日主题、哪些行业强势开盘，以及今天值得关注的内容。',
+    cadence: '每天早晨 CET 07:00 左右发布',
     loading: '加载报告…',
     empty: '尚未发布报告',
-    emptySub: '首份报告将在产品发布后的第一个周日发布。我们会通过邮件通知。',
+    emptySub: '首份报告将在产品发布后的次日清晨发布。我们会通过邮件通知。',
     history: '过往报告',
     publishedOn: '发布',
   },
@@ -123,7 +123,10 @@ export function ReportsView({ lang }: { lang: PlusLang }) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/plus/reports', { credentials: 'include' });
+        const apiLang = lang === 'no' ? 'no' : 'en';
+        const res = await fetch(`/api/plus/reports?lang=${apiLang}`, {
+          credentials: 'include',
+        });
         const data = await res.json();
         if (cancelled) return;
         if (data.ok && Array.isArray(data.reports)) {
@@ -138,7 +141,7 @@ export function ReportsView({ lang }: { lang: PlusLang }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [lang]);
 
   const latest = reports && reports.length > 0 ? reports[0] : null;
   const history = reports && reports.length > 1 ? reports.slice(1) : [];

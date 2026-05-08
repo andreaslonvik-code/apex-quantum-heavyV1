@@ -11,6 +11,7 @@ export interface PlusScanRow {
   generated_at: string;
   status: ScanStatus;
   scan_summary: string | null;
+  scan_summary_en: string | null;
   signal_count: number;
   duration_ms: number | null;
   error_message: string | null;
@@ -28,18 +29,25 @@ export interface PlusSignalRow {
   confidence: number;
   time_horizon: PlusHorizon;
   reasoning: string;
+  reasoning_en: string | null;
   catalysts: string[];
+  catalysts_en: string[] | null;
   risks: string[];
+  risks_en: string[] | null;
   peer_comparison: string | null;
+  peer_comparison_en: string | null;
   insider_signal: string | null;
+  insider_signal_en: string | null;
   created_at: string;
 }
 
 export interface PlusReportRow {
   id: string;
-  week_starts_on: string;
+  report_date: string;
   title: string;
+  title_en: string | null;
   body: string;
+  body_en: string | null;
   published_at: string;
 }
 
@@ -74,16 +82,22 @@ export interface SignalInsert {
   confidence: number;
   time_horizon: PlusHorizon;
   reasoning: string;
+  reasoning_en?: string | null;
   catalysts: string[];
+  catalysts_en?: string[] | null;
   risks: string[];
+  risks_en?: string[] | null;
   peer_comparison?: string | null;
+  peer_comparison_en?: string | null;
   insider_signal?: string | null;
+  insider_signal_en?: string | null;
 }
 
 export async function finishScanSuccess(
   scanId: string,
   args: {
     scanSummary: string;
+    scanSummaryEn?: string | null;
     signals: SignalInsert[];
     durationMs: number;
     promptTokens?: number;
@@ -104,6 +118,7 @@ export async function finishScanSuccess(
     .update({
       status: 'success',
       scan_summary: args.scanSummary,
+      scan_summary_en: args.scanSummaryEn ?? null,
       signal_count: args.signals.length,
       duration_ms: args.durationMs,
       prompt_tokens: args.promptTokens ?? null,
@@ -181,22 +196,26 @@ export async function listReports(limit = 8): Promise<PlusReportRow[]> {
 }
 
 export async function insertReport(report: {
-  weekStartsOn: string;
+  reportDate: string;
   title: string;
+  titleEn?: string | null;
   body: string;
+  bodyEn?: string | null;
   promptTokens?: number;
   completionTokens?: number;
 }): Promise<void> {
   const sb = createAdminClient();
   const { error } = await sb.from('plus_reports').upsert(
     {
-      week_starts_on: report.weekStartsOn,
+      report_date: report.reportDate,
       title: report.title,
+      title_en: report.titleEn ?? null,
       body: report.body,
+      body_en: report.bodyEn ?? null,
       prompt_tokens: report.promptTokens ?? null,
       completion_tokens: report.completionTokens ?? null,
     },
-    { onConflict: 'week_starts_on' },
+    { onConflict: 'report_date' },
   );
   if (error) throw new Error(`insertReport: ${error.message}`);
 }

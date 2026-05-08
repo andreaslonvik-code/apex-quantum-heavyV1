@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
 
     await finishScanSuccess(scanId, {
       scanSummary: result.scanSummary || '',
+      scanSummaryEn: result.scanSummaryEn ?? null,
       signals: result.signals || [],
       durationMs: Date.now() - startedAt,
       promptTokens: result.promptTokens,

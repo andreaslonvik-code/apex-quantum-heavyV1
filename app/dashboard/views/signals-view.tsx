@@ -316,7 +316,10 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
     let cancelled = false;
     (async () => {
       try {
-        const res = await fetch('/api/plus/signals/today', { credentials: 'include' });
+        const apiLang = lang === 'no' ? 'no' : 'en';
+        const res = await fetch(`/api/plus/signals/today?lang=${apiLang}`, {
+          credentials: 'include',
+        });
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         if (cancelled) return;
@@ -483,10 +486,6 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
           );
         })}
       </div>
-
-      {meta.isReal && lang !== 'no' && (
-        <div className="aqp-lang-note">{t.noteOnLang}</div>
-      )}
 
       {loading ? (
         <div className="aqp-empty">{t.loading}</div>

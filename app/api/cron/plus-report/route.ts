@@ -6,9 +6,9 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 /**
- * Weekly Plus market report. Triggered by Vercel cron Sunday 18:00 UTC.
- * Generates a 600–900 word market wrap via Grok and stores in plus_reports.
- * Idempotent per (week_starts_on) — re-runs replace the existing row.
+ * Daily Plus morning brief. Triggered by Vercel cron 05:00 UTC every day
+ * (≈07:00 norsk tid) so the report is in the dashboard before 08:00.
+ * Idempotent per (report_date) — re-runs on the same day replace the row.
  */
 export async function GET(req: NextRequest) {
   const expected = process.env.CRON_SECRET;
@@ -24,25 +24,19 @@ export async function GET(req: NextRequest) {
     if (!result.ok) {
       return NextResponse.json({ ok: false, error: result.error }, { status: 502 });
     }
-    const weekStart = mondayOfThisWeek();
+    const today = new Date().toISOString().slice(0, 10);
     await insertReport({
-      weekStartsOn: weekStart,
-      title: result.title || 'Ukentlig markedsrapport',
+      reportDate: today,
+      title: result.title || 'Daglig morgenbrief',
+      titleEn: result.titleEn ?? null,
       body: result.body || '',
+      bodyEn: result.bodyEn ?? null,
       promptTokens: result.promptTokens,
       completionTokens: result.completionTokens,
     });
-    return NextResponse.json({ ok: true, weekStartsOn: weekStart });
+    return NextResponse.json({ ok: true, reportDate: today });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });
   }
-}
-
-function mondayOfThisWeek(): string {
-  const d = new Date();
-  const day = d.getUTCDay(); // 0 = Sunday
-  const diff = day === 0 ? -6 : 1 - day; // back to Monday
-  d.setUTCDate(d.getUTCDate() + diff);
-  return d.toISOString().slice(0, 10);
 }

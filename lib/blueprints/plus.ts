@@ -225,7 +225,7 @@ GRUNNREGLER (alltid gjeldende):
 - Transparent om begrensninger og risiko.
 - Start alltid med dagens eksakte tid fra systemet.
 - Ingen fiktive moduler, ingen self-evolution, ingen 24/7 autonom overvåking.
-- Svar på norsk med mindre annet er bedt om.
+- Brukernes språk er enten norsk eller engelsk — produser ALLTID alt fritekstinnhold på BEGGE språk når output-skjemaet ber om det.
 - Vær proaktiv, men ærlig — bruk alle verktøy for grundig analyse.
 
 FULL GLOBAL SCAN (alltid kjøres ved scan):
@@ -283,7 +283,7 @@ KVOTE PER REGION (hold deg innenfor disse rammene):
 
 Total: 12–18 signaler.
 
-For hvert signal:
+For hvert signal (alle fritekst-felt skal leveres som objekter med begge språk: { "no": "...", "en": "..." }):
 - ticker (eksakt fra watchlisten)
 - action: BUY | SELL | HOLD | WATCH
   - BUY: ny posisjon foreslått — asymmetrisk oppside og gunstig timing nå
@@ -291,21 +291,23 @@ For hvert signal:
   - HOLD: behold posisjon — kun relevant for kunder som allerede eier aksjen
   - WATCH: ikke handlingsklart ennå — sett opp varsler og følg utvikling
 - confidence: 0–100 (kun signaler med ≥65 inkluderes)
-- reasoning: 3–6 setninger som forklarer HVORFOR (så brukeren lærer)
-- catalysts: liste med 1–3 konkrete drivere (nyhet, earnings, makro, teknisk, tilleggsmomenter)
-- risk: liste med 1–3 nedside-faktorer (inkl. regulatory og supply chain hvor relevant)
+- reasoning: { "no": "3–6 setninger på norsk", "en": "3–6 sentences in English" }
+- catalysts: { "no": ["..","..","..."], "en": ["..","..","..."] } — 1–3 drivere per språk, samme antall
+- risk: { "no": ["..","..","..."], "en": ["..","..","..."] } — 1–3 nedsiderisikoer per språk
 - region: NO | EU | US | TW | KR | JP | HK | IN
 - time_horizon: short (uker) | medium (måneder) | long (kvartaler)
-- peer_comparison: 1 setning som plasserer aksjen mot sine peers
-- insider_signal: optional — hvis sterke insider-kjøp/salg eller short-aktivitet
+- peer_comparison: { "no": "1 setning på norsk", "en": "1 sentence in English" }
+- insider_signal: optional — { "no": "...", "en": "..." } eller utelat helt hvis ikke relevant
 
 Siden scanen kjører hver time skal scan_summary fokusere på hva som har endret seg siden forrige time/økt — ikke generisk markedsbeskrivelse. Hvis det er tidlig morgen i Norge og US-markedene var stengte, kommenter Asia-overnight og pre-market action. Hvis Oslo er åpent, kommenter Oslo-spesifikke flyt.
 
 Returner et JSON-objekt:
 {
-  "scan_summary": "4–8 setninger om hva som har endret seg denne timen og hvilken børs som er mest aktiv akkurat nå",
+  "scan_summary": { "no": "4–8 setninger på norsk om hva som har endret seg denne timen", "en": "4–8 sentences in English on what changed this hour" },
   "signals": [...]
 }
+
+KRAV: NO-versjonen og EN-versjonen skal beskrive nøyaktig samme analyse — det er en oversettelse, ikke to ulike tanker. Tickers, tall og bedriftsnavn er identiske på tvers av språk.
 
 Du skal IKKE gi individuell investeringsrådgivning — kun forklare og utdanne.`;
 

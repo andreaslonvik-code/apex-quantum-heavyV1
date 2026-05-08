@@ -117,6 +117,7 @@ ${question.trim()}`;
 export interface ScanGenerationResult {
   ok: boolean;
   scanSummary?: string;
+  scanSummaryEn?: string | null;
   signals?: SignalInsert[];
   promptTokens?: number;
   completionTokens?: number;
@@ -200,6 +201,7 @@ ${tickerList}`;
     return {
       ok: true,
       scanSummary: validated.scanSummary,
+      scanSummaryEn: validated.scanSummaryEn,
       signals: validated.signals,
       promptTokens: usage?.input_tokens,
       completionTokens: usage?.output_tokens,
@@ -214,6 +216,7 @@ ${tickerList}`;
 interface ValidatedScan {
   ok: true;
   scanSummary: string;
+  scanSummaryEn: string | null;
   signals: SignalInsert[];
 }
 interface ValidatedScanError {
@@ -221,11 +224,45 @@ interface ValidatedScanError {
   error: string;
 }
 
+/**
+ * Read a field that may be either a plain string (legacy / single-lang) or
+ * a bilingual `{ no: string, en: string }` object. Returns `[no, en]` where
+ * `en` is `null` if missing, so callers can fall back gracefully on display.
+ */
+function readBilingual(v: unknown): [string, string | null] {
+  if (typeof v === 'string') return [v.trim(), null];
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    const no = typeof o.no === 'string' ? o.no.trim() : '';
+    const en = typeof o.en === 'string' ? o.en.trim() : '';
+    return [no, en || null];
+  }
+  return ['', null];
+}
+
+function readBilingualArray(v: unknown, max = 5): [string[], string[] | null] {
+  if (Array.isArray(v)) {
+    const arr = v.filter((c): c is string => typeof c === 'string').slice(0, max);
+    return [arr, null];
+  }
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    const noArr = Array.isArray(o.no)
+      ? o.no.filter((c): c is string => typeof c === 'string').slice(0, max)
+      : [];
+    const enArr = Array.isArray(o.en)
+      ? o.en.filter((c): c is string => typeof c === 'string').slice(0, max)
+      : [];
+    return [noArr, enArr.length > 0 ? enArr : null];
+  }
+  return [[], null];
+}
+
 function validateSignalsPayload(v: unknown): ValidatedScan | ValidatedScanError {
   if (!v || typeof v !== 'object') return { ok: false, error: 'payload not an object' };
   const obj = v as Record<string, unknown>;
 
-  const scanSummary = typeof obj.scan_summary === 'string' ? obj.scan_summary : '';
+  const [scanSummary, scanSummaryEn] = readBilingual(obj.scan_summary);
   const rawSignals = Array.isArray(obj.signals) ? obj.signals : [];
 
   const signals: SignalInsert[] = [];
@@ -250,20 +287,16 @@ function validateSignalsPayload(v: unknown): ValidatedScan | ValidatedScanError 
     const finalRegion = VALID_REGIONS.has(region) ? region : tickerToRegion.get(ticker);
     if (!finalRegion) continue;
 
-    const reasoning = typeof o.reasoning === 'string' ? o.reasoning.trim() : '';
+    const [reasoning, reasoningEn] = readBilingual(o.reasoning);
     if (!reasoning) continue;
 
-    const catalysts = Array.isArray(o.catalysts)
-      ? o.catalysts.filter((c): c is string => typeof c === 'string').slice(0, 5)
-      : [];
-    const risks = Array.isArray(o.risk)
-      ? o.risk.filter((r): r is string => typeof r === 'string').slice(0, 5)
-      : Array.isArray(o.risks)
-        ? o.risks.filter((r): r is string => typeof r === 'string').slice(0, 5)
-        : [];
+    // Accept either `risk` (legacy) or `risks` for the array; try both.
+    const [catalysts, catalystsEn] = readBilingualArray(o.catalysts);
+    const riskRaw = o.risk ?? o.risks;
+    const [risks, risksEn] = readBilingualArray(riskRaw);
 
-    const peerComparison = typeof o.peer_comparison === 'string' ? o.peer_comparison : null;
-    const insiderSignal = typeof o.insider_signal === 'string' ? o.insider_signal : null;
+    const [peerComparison, peerComparisonEn] = readBilingual(o.peer_comparison);
+    const [insiderSignal, insiderSignalEn] = readBilingual(o.insider_signal);
 
     signals.push({
       ticker,
@@ -272,14 +305,19 @@ function validateSignalsPayload(v: unknown): ValidatedScan | ValidatedScanError 
       confidence,
       time_horizon: horizon as SignalInsert['time_horizon'],
       reasoning,
+      reasoning_en: reasoningEn,
       catalysts,
+      catalysts_en: catalystsEn,
       risks,
-      peer_comparison: peerComparison,
-      insider_signal: insiderSignal,
+      risks_en: risksEn,
+      peer_comparison: peerComparison || null,
+      peer_comparison_en: peerComparisonEn,
+      insider_signal: insiderSignal || null,
+      insider_signal_en: insiderSignalEn,
     });
   }
 
-  return { ok: true, scanSummary, signals };
+  return { ok: true, scanSummary, scanSummaryEn, signals };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -289,33 +327,42 @@ function validateSignalsPayload(v: unknown): ValidatedScan | ValidatedScanError 
 export interface ReportResult {
   ok: boolean;
   title?: string;
+  titleEn?: string | null;
   body?: string;
+  bodyEn?: string | null;
   promptTokens?: number;
   completionTokens?: number;
   error?: string;
 }
 
-const REPORT_USER_PROMPT = `Skriv en ukentlig markedsrapport for Apex Quantum +.
+const REPORT_USER_PROMPT = `Skriv en daglig morgenbrief for Apex Quantum + — leveres før 08:00 norsk tid hver morgen.
 
-Strukturer rapporten med tydelige overskrifter og 600–900 ord totalt:
+Briefen skal ha tydelige overskrifter og 500–800 ord totalt PER SPRÅK. Du leverer hele briefen på BÅDE norsk og engelsk.
 
-# UKENS HOVEDSAK
-Den viktigste markedsbevegelsen denne uken — hva skjedde og hvorfor det betyr noe.
+Struktur (samme i begge språk):
 
-## Sektorrotasjon
-Hvilke sektorer ledet og hvilke hang etter? Konkrete eksempler fra global watchlist.
+# OVERNIGHT
+Hva skjedde i Asia-økten og US after-hours siden Oslo Børs stengte i går? Konkrete kursutslag på relevante navn fra watchlisten.
 
-## Makro og geopolitikk
-FX, råvarer, sentralbankrenter, viktige nyheter som påvirker markedene.
+## Dagens hovedsak
+Den viktigste makro/markeds-saken som driver dagens åpning. Earnings, sentralbank, geopolitikk eller sektor-katalysator.
 
-## Fokus neste uke
-Earnings, makro-utgivelser, og aksjer modellen vil følge særlig nøye.
+## Sektor-fokus
+Hvilke sektorer åpner sterkt og hvilke svakt? Konkrete tickere fra watchlisten.
+
+## Hva å følge i dag
+Earnings, makro-utgivelser, technicals — det modellen vil overvåke gjennom dagen.
 
 ## Læringspunkt
-Et konkret begrep eller mønster fra ukens hendelser som leseren kan ta med seg.
+Ett konkret begrep eller mønster fra natten/morgenen som leseren kan ta med seg.
 
-Returner ren JSON: { "title": "kort tittel maks 80 tegn", "body": "rapporten i markdown" }
-Skriv på norsk. Ikke individuell investeringsrådgivning.`;
+Returner JSON med følgende form:
+{
+  "title": { "no": "kort norsk tittel maks 80 tegn", "en": "short English title max 80 chars" },
+  "body":  { "no": "hele briefen på norsk i markdown", "en": "the full brief in English markdown" }
+}
+
+KRAV: Norsk og engelsk versjon skal beskrive nøyaktig samme analyse — én oversettelse av samme innhold, ikke to forskjellige rapporter. Tickers, tall og bedriftsnavn er identiske. Ikke individuell investeringsrådgivning.`;
 
 export async function generateWeeklyReport(): Promise<ReportResult> {
   const apiKey = process.env.XAI_API_KEY;
@@ -367,15 +414,17 @@ export async function generateWeeklyReport(): Promise<ReportResult> {
       return { ok: false, error: 'payload not an object' };
     }
     const p = parsed as Record<string, unknown>;
-    const title = typeof p.title === 'string' ? p.title.slice(0, 200) : null;
-    const body = typeof p.body === 'string' ? p.body : null;
+    const [title, titleEn] = readBilingual(p.title);
+    const [body, bodyEn] = readBilingual(p.body);
     if (!title || !body) return { ok: false, error: 'missing title or body' };
 
     const usage = (raw as { usage?: { input_tokens?: number; output_tokens?: number } }).usage;
     return {
       ok: true,
-      title,
+      title: title.slice(0, 200),
+      titleEn: titleEn ? titleEn.slice(0, 200) : null,
       body,
+      bodyEn,
       promptTokens: usage?.input_tokens,
       completionTokens: usage?.output_tokens,
     };

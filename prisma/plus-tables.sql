@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS plus_scans (
   generated_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   status          TEXT NOT NULL CHECK (status IN ('running','success','failed')),
   scan_summary    TEXT,
+  scan_summary_en TEXT,
   signal_count    INTEGER NOT NULL DEFAULT 0,
   duration_ms     INTEGER,
   error_message   TEXT,
@@ -25,19 +26,24 @@ CREATE INDEX IF NOT EXISTS plus_scans_status_idx ON plus_scans (status);
 -- plus_signals — individual signals tied to a scan
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS plus_signals (
-  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  scan_id         UUID NOT NULL REFERENCES plus_scans(id) ON DELETE CASCADE,
-  ticker          TEXT NOT NULL,
-  region          TEXT NOT NULL CHECK (region IN ('NO','EU','US','TW','KR','JP','HK','IN')),
-  action          TEXT NOT NULL CHECK (action IN ('BUY','SELL','HOLD','WATCH')),
-  confidence      INTEGER NOT NULL CHECK (confidence BETWEEN 0 AND 100),
-  time_horizon    TEXT NOT NULL CHECK (time_horizon IN ('short','medium','long')),
-  reasoning       TEXT NOT NULL,
-  catalysts       JSONB NOT NULL DEFAULT '[]'::jsonb,
-  risks           JSONB NOT NULL DEFAULT '[]'::jsonb,
-  peer_comparison TEXT,
-  insider_signal  TEXT,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                 UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  scan_id            UUID NOT NULL REFERENCES plus_scans(id) ON DELETE CASCADE,
+  ticker             TEXT NOT NULL,
+  region             TEXT NOT NULL CHECK (region IN ('NO','EU','US','TW','KR','JP','HK','IN')),
+  action             TEXT NOT NULL CHECK (action IN ('BUY','SELL','HOLD','WATCH')),
+  confidence         INTEGER NOT NULL CHECK (confidence BETWEEN 0 AND 100),
+  time_horizon       TEXT NOT NULL CHECK (time_horizon IN ('short','medium','long')),
+  reasoning          TEXT NOT NULL,
+  reasoning_en       TEXT,
+  catalysts          JSONB NOT NULL DEFAULT '[]'::jsonb,
+  catalysts_en       JSONB DEFAULT '[]'::jsonb,
+  risks              JSONB NOT NULL DEFAULT '[]'::jsonb,
+  risks_en           JSONB DEFAULT '[]'::jsonb,
+  peer_comparison    TEXT,
+  peer_comparison_en TEXT,
+  insider_signal     TEXT,
+  insider_signal_en  TEXT,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS plus_signals_scan_id_idx ON plus_signals (scan_id);
@@ -46,17 +52,21 @@ CREATE INDEX IF NOT EXISTS plus_signals_action_idx ON plus_signals (action);
 CREATE INDEX IF NOT EXISTS plus_signals_created_at_idx ON plus_signals (created_at DESC);
 
 -- ─────────────────────────────────────────────────────────────────────────────
--- plus_reports — weekly market reports
+-- plus_reports — daily morning market briefs (one row per calendar day).
+-- The `report_date` column previously held a week-start date; semantics
+-- changed to a daily cadence published before 08:00 norsk tid.
 -- ─────────────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS plus_reports (
   id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  week_starts_on  DATE NOT NULL,
+  report_date     DATE NOT NULL,
   title           TEXT NOT NULL,
+  title_en        TEXT,
   body            TEXT NOT NULL,
+  body_en         TEXT,
   published_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   prompt_tokens   INTEGER,
   completion_tokens INTEGER,
-  UNIQUE (week_starts_on)
+  UNIQUE (report_date)
 );
 
 CREATE INDEX IF NOT EXISTS plus_reports_published_at_idx ON plus_reports (published_at DESC);
