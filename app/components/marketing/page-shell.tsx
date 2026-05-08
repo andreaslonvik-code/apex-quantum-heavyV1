@@ -1,17 +1,32 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { MHeader } from './header';
 import { MFooter } from './footer';
 import type { Lang } from './types';
+import { readLangCookie } from '@/lib/i18n/lang-cookie';
 
 /**
  * Shared chrome for sub-pages reached from the marketing footer / header.
  * Mirrors the structure of `app/page.tsx` so headers, ambient effects, and
  * footers stay aligned across all marketing surfaces.
+ *
+ * Initial render uses `'no'` so SSR HTML matches between server and client.
+ * After hydration we read the `aq-lang` cookie (set by the homepage's
+ * server-side geo detection or by the user's explicit toggle) and switch.
+ * Direct sub-page landings from foreign IPs without a cookie show NO for
+ * one paint then flip — acceptable since marketing entry flows through `/`.
  */
 export function PageShell({ children }: { children: (lang: Lang) => ReactNode }) {
   const [lang, setLang] = useState<Lang>('no');
+
+  useEffect(() => {
+    const cookieLang = readLangCookie();
+    if (cookieLang && cookieLang !== lang) setLang(cookieLang);
+    // Run once on mount.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <>
       <div className="ambient" aria-hidden="true" />

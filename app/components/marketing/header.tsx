@@ -3,8 +3,13 @@
 import Link from 'next/link';
 import { SignedIn, SignedOut, SignOutButton } from '@clerk/nextjs';
 import type { Lang } from './types';
+import { writeLangCookie } from '@/lib/i18n/lang-cookie';
 
 export function MHeader({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
+  const choose = (next: Lang) => {
+    setLang(next);
+    writeLangCookie(next);
+  };
   return (
     <header className="m-hdr">
       <div className="m-hdr-inner">
@@ -26,8 +31,8 @@ export function MHeader({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => v
         </nav>
         <div className="m-hdr-right">
           <div className="lang-tog">
-            <button className={lang === 'no' ? 'is-on' : ''} onClick={() => setLang('no')}>NO</button>
-            <button className={lang === 'en' ? 'is-on' : ''} onClick={() => setLang('en')}>EN</button>
+            <button className={lang === 'no' ? 'is-on' : ''} onClick={() => choose('no')}>NO</button>
+            <button className={lang === 'en' ? 'is-on' : ''} onClick={() => choose('en')}>EN</button>
           </div>
           <SignedOut>
             <Link href="/sign-in" className="btn-ghost-v8 btn-sm">

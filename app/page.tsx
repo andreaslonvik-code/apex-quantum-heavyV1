@@ -1,32 +1,7 @@
-'use client';
+import { detectMarketingLang } from '@/lib/i18n/detect-lang';
+import { LandingClient } from './landing-client';
 
-import { useState } from 'react';
-import { MHeader } from './components/marketing/header';
-import { Hero } from './components/marketing/hero';
-import { ProductCards } from './components/marketing/product-cards';
-import { Stats } from './components/marketing/stats';
-import { Features } from './components/marketing/features';
-import { LiveReport } from './components/marketing/live-report';
-import { CTA } from './components/marketing/cta';
-import { MFooter } from './components/marketing/footer';
-import type { Lang } from './components/marketing/types';
-
-export default function LandingPage() {
-  const [lang, setLang] = useState<Lang>('no');
-  return (
-    <>
-      <div className="ambient" aria-hidden="true" />
-      <div className="grain" aria-hidden="true" />
-      <MHeader lang={lang} setLang={setLang} />
-      <main className="relative" style={{ zIndex: 2 }}>
-        <Hero lang={lang} />
-        <ProductCards lang={lang} />
-        <Stats lang={lang} />
-        <Features lang={lang} />
-        <LiveReport lang={lang} />
-        <CTA lang={lang} />
-        <MFooter lang={lang} />
-      </main>
-    </>
-  );
+export default async function LandingPage() {
+  const initialLang = await detectMarketingLang();
+  return <LandingClient initialLang={initialLang} />;
 }

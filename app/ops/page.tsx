@@ -3,11 +3,18 @@
  * Live-probes every external dependency Apex Quantum runs on so triage
  * is one URL away when the trader stops working.
  *
- * Auth: Clerk middleware 404s logged-out users. We additionally check the
- * primary email against ADMIN_EMAILS and notFound() on mismatch — so a
- * regular paying customer can't stumble onto it.
+ * Auth strategy (in priority order):
+ *   1. `?ops_secret=<OPS_EMERGENCY_SECRET>` — emergency bypass that does
+ *      NOT depend on Clerk. Critical because Clerk itself is one of the
+ *      services this page probes; if Clerk is down, the gate must still
+ *      let an operator in.
+ *   2. Logged-in admin email (in ADMIN_EMAILS) — normal path.
+ *   3. Logged out → redirect to /sign-in so the operator knows what to do
+ *      instead of seeing an opaque 404.
+ *   4. Logged in but not admin → notFound() preserves obscurity from
+ *      regular paying customers stumbling on the URL.
  */
-import { notFound } from 'next/navigation';
+import { notFound, redirect } from 'next/navigation';
 import { currentUser } from '@clerk/nextjs/server';
 import { clerkClient } from '@clerk/nextjs/server';
 import { createAdminClient } from '@/utils/supabase/admin';
@@ -347,11 +354,28 @@ function ProbeCard({ p }: { p: Probe }) {
   );
 }
 
-export default async function OpsPage() {
-  const user = await currentUser();
-  const email = user?.primaryEmailAddress?.emailAddress?.toLowerCase();
-  if (!email || !ADMIN_EMAILS.has(email)) {
-    notFound();
+export default async function OpsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ ops_secret?: string }>;
+}) {
+  const sp = await searchParams;
+  const emergencySecret = process.env.OPS_EMERGENCY_SECRET;
+  const bypass =
+    !!emergencySecret && !!sp.ops_secret && sp.ops_secret === emergencySecret;
+
+  let email = bypass ? 'emergency-bypass' : '';
+  if (!bypass) {
+    const user = await currentUser();
+    if (!user) {
+      // Logged out: send to sign-in so the operator gets a clear next step
+      // rather than an opaque 404. The sign-in page will redirect back here.
+      redirect('/sign-in?redirect_url=/ops');
+    }
+    email = user.primaryEmailAddress?.emailAddress?.toLowerCase() ?? '';
+    if (!email || !ADMIN_EMAILS.has(email)) {
+      notFound();
+    }
   }
 
   const [supabase, xai, clerk, inngest, dbActivity] = await Promise.all([
