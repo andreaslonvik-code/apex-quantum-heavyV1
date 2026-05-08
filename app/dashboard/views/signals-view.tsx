@@ -18,6 +18,27 @@ interface DisplaySignal {
   risks: string[];
   peerComparison?: string | null;
   insiderSignal?: string | null;
+  priceAtSignal?: number | null;
+  priceCurrency?: string | null;
+  createdAt?: string;
+}
+
+interface LivePrice {
+  price: number;
+  currency: string;
+  previousClose: number | null;
+  changeFromPrevClose: number | null;
+}
+
+interface TrackRecord {
+  total: number;
+  closed: number;
+  open: number;
+  wins: number;
+  losses: number;
+  winRate: number | null;
+  avgWinPct: number | null;
+  avgLossPct: number | null;
 }
 
 interface ScanMeta {
@@ -44,6 +65,17 @@ const COPY = {
     ownedSection: 'Du eier',
     regionPositionsOne: 'posisjon',
     regionPositionsMany: 'posisjoner',
+    sinceSignal: 'siden signal',
+    livePriceLabel: 'Live',
+    trackRecordEye: 'Track-record siste 30 dager',
+    trackRecordWinRate: 'Treffprosent',
+    trackRecordWins: 'vinnere',
+    trackRecordLosses: 'tapere',
+    trackRecordOpen: 'åpne',
+    trackRecordAvgWin: 'snitt på vinner',
+    trackRecordAvgLoss: 'snitt på taper',
+    trackRecordEmpty:
+      'Track-record bygges opp etter hvert som nye signaler lukkes (≥7 dager gamle). Sjekk tilbake snart.',
     actionExplain: {
       BUY: 'Asymmetrisk oppside og gunstig timing for ny posisjon.',
       SELL: 'Risk/reward har blitt negativt — vurder å redusere posisjonen din.',
@@ -87,6 +119,17 @@ const COPY = {
     ownedSection: 'You own',
     regionPositionsOne: 'position',
     regionPositionsMany: 'positions',
+    sinceSignal: 'since signal',
+    livePriceLabel: 'Live',
+    trackRecordEye: 'Track record · last 30 days',
+    trackRecordWinRate: 'Win rate',
+    trackRecordWins: 'wins',
+    trackRecordLosses: 'losses',
+    trackRecordOpen: 'open',
+    trackRecordAvgWin: 'avg win',
+    trackRecordAvgLoss: 'avg loss',
+    trackRecordEmpty:
+      'Track record builds up as new signals close (after ≥7 days). Check back soon.',
     actionExplain: {
       BUY: 'Asymmetric upside and favorable timing for a new position.',
       SELL: 'Risk/reward has shifted negative — consider trimming your position.',
@@ -129,6 +172,17 @@ const COPY = {
     ownedSection: 'Sie halten',
     regionPositionsOne: 'Position',
     regionPositionsMany: 'Positionen',
+    sinceSignal: 'seit Signal',
+    livePriceLabel: 'Live',
+    trackRecordEye: 'Trefferquote · letzte 30 Tage',
+    trackRecordWinRate: 'Trefferquote',
+    trackRecordWins: 'Treffer',
+    trackRecordLosses: 'Fehlschläge',
+    trackRecordOpen: 'offen',
+    trackRecordAvgWin: '⌀ Treffer',
+    trackRecordAvgLoss: '⌀ Fehlschlag',
+    trackRecordEmpty:
+      'Die Trefferstatistik baut sich auf, sobald Signale älter als 7 Tage sind. Bald wieder vorbeischauen.',
     actionExplain: {
       BUY: 'Asymmetrische Aufwärts­bewegung und günstiges Timing für eine neue Position.',
       SELL: 'Risk/Reward hat sich negativ verschoben — Reduzierung erwägen.',
@@ -171,6 +225,17 @@ const COPY = {
     ownedSection: 'En cartera',
     regionPositionsOne: 'posición',
     regionPositionsMany: 'posiciones',
+    sinceSignal: 'desde señal',
+    livePriceLabel: 'Live',
+    trackRecordEye: 'Track record · últimos 30 días',
+    trackRecordWinRate: 'Tasa de acierto',
+    trackRecordWins: 'aciertos',
+    trackRecordLosses: 'errores',
+    trackRecordOpen: 'abiertos',
+    trackRecordAvgWin: 'media acierto',
+    trackRecordAvgLoss: 'media error',
+    trackRecordEmpty:
+      'El historial se construye a medida que las señales cierran (≥7 días). Vuelve pronto.',
     actionExplain: {
       BUY: 'Asimetría positiva y momento favorable para nueva posición.',
       SELL: 'Riesgo/beneficio se ha vuelto negativo — considera reducir.',
@@ -213,6 +278,16 @@ const COPY = {
     ownedSection: '已持有',
     regionPositionsOne: '个仓位',
     regionPositionsMany: '个仓位',
+    sinceSignal: '自信号以来',
+    livePriceLabel: '实时',
+    trackRecordEye: '过去 30 天战绩',
+    trackRecordWinRate: '胜率',
+    trackRecordWins: '胜',
+    trackRecordLosses: '败',
+    trackRecordOpen: '进行中',
+    trackRecordAvgWin: '平均胜幅',
+    trackRecordAvgLoss: '平均亏幅',
+    trackRecordEmpty: '当信号关闭（≥7 天）后将累积战绩，请稍后再来。',
     actionExplain: {
       BUY: '不对称上行空间与有利的建仓时机。',
       SELL: '风险/回报已转负——考虑减仓。',
@@ -310,6 +385,9 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
   const [signals, setSignals] = useState<DisplaySignal[] | null>(null);
   const [meta, setMeta] = useState<ScanMeta>({ generatedAt: null, scanSummary: null, isReal: false });
   const [loading, setLoading] = useState(true);
+  const [livePrices, setLivePrices] = useState<Record<string, LivePrice>>({});
+  const [trackRecord, setTrackRecord] = useState<TrackRecord | null>(null);
+  const [openTicker, setOpenTicker] = useState<string | null>(null);
   const { isOwned, toggle } = useOwnedTickers();
 
   useEffect(() => {
@@ -352,6 +430,48 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
   useEffect(() => {
     if (!meta.isReal) setSignals(seedToDisplay(lang));
   }, [lang, meta.isReal]);
+
+  // Fetch live prices for the displayed tickers. Re-runs when signal set changes.
+  useEffect(() => {
+    if (!signals || signals.length === 0) return;
+    let cancelled = false;
+    const tickers = Array.from(new Set(signals.map((s) => s.ticker)));
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/plus/prices?tickers=${encodeURIComponent(tickers.join(','))}`,
+          { credentials: 'include' },
+        );
+        const data = await res.json();
+        if (!cancelled && data.ok && data.prices) {
+          setLivePrices(data.prices as Record<string, LivePrice>);
+        }
+      } catch {
+        /* graceful — UI renders without live prices */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [signals]);
+
+  // Fetch track-record summary once on mount. Cheap to recompute on each visit
+  // since the API is server-cached behind Yahoo's response.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/plus/track-record?days=30', { credentials: 'include' });
+        const data = await res.json();
+        if (!cancelled && data.ok) setTrackRecord(data as TrackRecord);
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = useMemo(() => {
     if (!signals) return [];
@@ -405,6 +525,54 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
         <div className="aqp-summary-card">
           <div className="aqp-summary-eye">{t.nowSummary}</div>
           <p className="aqp-summary-body">{meta.scanSummary}</p>
+        </div>
+      )}
+
+      {trackRecord && trackRecord.total > 0 && (
+        <div className="aqp-track-card">
+          <div className="aqp-track-eye">{t.trackRecordEye}</div>
+          {trackRecord.closed === 0 ? (
+            <p className="aqp-track-empty">{t.trackRecordEmpty}</p>
+          ) : (
+            <div className="aqp-track-grid">
+              <div className="aqp-track-stat aqp-track-stat--hero">
+                <div className="aqp-track-num">
+                  {trackRecord.winRate !== null
+                    ? `${Math.round(trackRecord.winRate * 100)}%`
+                    : '—'}
+                </div>
+                <div className="aqp-track-key">{t.trackRecordWinRate}</div>
+              </div>
+              <div className="aqp-track-stat">
+                <div className="aqp-track-num aqp-track-num--win">{trackRecord.wins}</div>
+                <div className="aqp-track-key">{t.trackRecordWins}</div>
+              </div>
+              <div className="aqp-track-stat">
+                <div className="aqp-track-num aqp-track-num--loss">{trackRecord.losses}</div>
+                <div className="aqp-track-key">{t.trackRecordLosses}</div>
+              </div>
+              <div className="aqp-track-stat">
+                <div className="aqp-track-num">{trackRecord.open}</div>
+                <div className="aqp-track-key">{t.trackRecordOpen}</div>
+              </div>
+              {trackRecord.avgWinPct !== null && (
+                <div className="aqp-track-stat">
+                  <div className="aqp-track-num aqp-track-num--win">
+                    +{(trackRecord.avgWinPct * 100).toFixed(1)}%
+                  </div>
+                  <div className="aqp-track-key">{t.trackRecordAvgWin}</div>
+                </div>
+              )}
+              {trackRecord.avgLossPct !== null && (
+                <div className="aqp-track-stat">
+                  <div className="aqp-track-num aqp-track-num--loss">
+                    {(trackRecord.avgLossPct * 100).toFixed(1)}%
+                  </div>
+                  <div className="aqp-track-key">{t.trackRecordAvgLoss}</div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
@@ -518,6 +686,16 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
       )}
 
       <p className="aqp-disclaimer">{t.disclaimer}</p>
+
+      {openTicker && (
+        <TickerModal
+          ticker={openTicker}
+          onClose={() => setOpenTicker(null)}
+          live={livePrices[openTicker.toUpperCase()]}
+          allSignals={signals ?? []}
+          lang={lang}
+        />
+      )}
     </div>
   );
 
@@ -537,10 +715,15 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
         }`}
       >
                 <header className="aqp-signal-head">
-                  <div className="aqp-signal-id">
+                  <button
+                    type="button"
+                    className="aqp-signal-id aqp-signal-id--clickable"
+                    onClick={() => setOpenTicker(s.ticker)}
+                    aria-label={`Open ${s.ticker} details`}
+                  >
                     <div className="aqp-ticker">{s.ticker}</div>
                     <div className="aqp-ticker-name">{meta?.name ?? s.ticker}</div>
-                  </div>
+                  </button>
                   <div className="aqp-signal-actions">
                     <button
                       type="button"
@@ -560,6 +743,13 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
                 </header>
 
                 <div className="aqp-action-explain">{t.actionExplain[s.action]}</div>
+
+                <PriceRow
+                  signal={s}
+                  live={livePrices[s.ticker.toUpperCase()]}
+                  sinceLabel={t.sinceSignal}
+                  liveLabel={t.livePriceLabel}
+                />
 
                 <div className="aqp-signal-meta">
                   <span className="aqp-meta-item">
@@ -644,4 +834,216 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
       </article>
     );
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PriceRow — live price + change-since-signal pill on each card
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PriceRow({
+  signal,
+  live,
+  sinceLabel,
+  liveLabel,
+}: {
+  signal: DisplaySignal;
+  live?: LivePrice;
+  sinceLabel: string;
+  liveLabel: string;
+}) {
+  if (!live) return null;
+  const priceStr = formatPrice(live.price, live.currency);
+  const dayPct = live.changeFromPrevClose;
+  const sinceSignalPct =
+    signal.priceAtSignal && signal.priceAtSignal > 0
+      ? (live.price - signal.priceAtSignal) / signal.priceAtSignal
+      : null;
+  return (
+    <div className="aqp-price-row">
+      <div className="aqp-price-now">
+        <span className="aqp-price-label">{liveLabel}</span>
+        <span className="aqp-price-value">{priceStr}</span>
+        {dayPct !== null && (
+          <span className={`aqp-price-day ${dayPct >= 0 ? 'is-up' : 'is-down'}`}>
+            {dayPct >= 0 ? '+' : ''}
+            {(dayPct * 100).toFixed(2)}%
+          </span>
+        )}
+      </div>
+      {sinceSignalPct !== null && (
+        <div className={`aqp-price-since ${sinceSignalPct >= 0 ? 'is-up' : 'is-down'}`}>
+          {sinceSignalPct >= 0 ? '+' : ''}
+          {(sinceSignalPct * 100).toFixed(2)}% {sinceLabel}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function formatPrice(price: number, currency: string): string {
+  const decimals = price >= 100 ? 2 : price >= 10 ? 2 : 3;
+  const num = price.toFixed(decimals);
+  // Avoid currency-code clutter on common ones — use symbol where natural.
+  if (currency === 'USD') return `$${num}`;
+  if (currency === 'EUR') return `€${num}`;
+  if (currency === 'GBP') return `£${num}`;
+  if (currency === 'NOK') return `kr ${num}`;
+  return `${num} ${currency}`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TickerModal — ticker deep-dive: sparkline + all signals on this ticker
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface ChartPoint {
+  t: number;
+  c: number;
+}
+
+function TickerModal({
+  ticker,
+  onClose,
+  live,
+  allSignals,
+  lang,
+}: {
+  ticker: string;
+  onClose: () => void;
+  live?: LivePrice;
+  allSignals: DisplaySignal[];
+  lang: PlusLang;
+}) {
+  const [chart, setChart] = useState<ChartPoint[] | null>(null);
+  const [loadingChart, setLoadingChart] = useState(true);
+  const meta = PLUS_WATCHLIST.find((w) => w.ticker === ticker);
+  const onTicker = allSignals.filter((s) => s.ticker === ticker);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoadingChart(true);
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/plus/chart?ticker=${encodeURIComponent(ticker)}&range=3mo`,
+          { credentials: 'include' },
+        );
+        const data = await res.json();
+        if (!cancelled && data.ok) setChart(data.points as ChartPoint[]);
+      } catch {
+        if (!cancelled) setChart([]);
+      } finally {
+        if (!cancelled) setLoadingChart(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ticker]);
+
+  // Close on ESC
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const t = COPY[lang];
+
+  return (
+    <div className="aqp-modal-overlay" role="dialog" aria-modal="true" onClick={onClose}>
+      <div className="aqp-modal" onClick={(e) => e.stopPropagation()}>
+        <button
+          type="button"
+          className="aqp-modal-close"
+          onClick={onClose}
+          aria-label="Close"
+        >
+          ✕
+        </button>
+
+        <header className="aqp-modal-head">
+          <div className="aqp-modal-ticker">{ticker}</div>
+          <div className="aqp-modal-name">{meta?.name ?? ticker}</div>
+          {live && (
+            <div className="aqp-modal-price">
+              <span className="aqp-modal-price-value">
+                {formatPrice(live.price, live.currency)}
+              </span>
+              {live.changeFromPrevClose !== null && (
+                <span
+                  className={`aqp-modal-price-change ${
+                    live.changeFromPrevClose >= 0 ? 'is-up' : 'is-down'
+                  }`}
+                >
+                  {live.changeFromPrevClose >= 0 ? '+' : ''}
+                  {(live.changeFromPrevClose * 100).toFixed(2)}%
+                </span>
+              )}
+            </div>
+          )}
+        </header>
+
+        <div className="aqp-modal-chart">
+          {loadingChart ? (
+            <div className="aqp-empty">{t.loading}</div>
+          ) : chart && chart.length > 1 ? (
+            <Sparkline points={chart} />
+          ) : (
+            <div className="aqp-empty">—</div>
+          )}
+        </div>
+
+        <div className="aqp-modal-signals">
+          {onTicker.length === 0 ? (
+            <div className="aqp-empty">{t.empty}</div>
+          ) : (
+            onTicker.map((s) => (
+              <div key={s.id} className="aqp-modal-signal-row">
+                <span
+                  className={`aqp-action-pill aqp-action-pill--${s.action.toLowerCase()}`}
+                >
+                  {t.actions[s.action]}
+                </span>
+                <span className="aqp-modal-signal-conf">{s.confidence}%</span>
+                <p className="aqp-modal-signal-reason">{s.reasoning}</p>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Sparkline({ points }: { points: ChartPoint[] }) {
+  const width = 600;
+  const height = 160;
+  const pad = 8;
+  const xs = points.map((p) => p.t);
+  const ys = points.map((p) => p.c);
+  const minY = Math.min(...ys);
+  const maxY = Math.max(...ys);
+  const minX = Math.min(...xs);
+  const maxX = Math.max(...xs);
+  const yRange = maxY - minY || 1;
+  const xRange = maxX - minX || 1;
+  const path = points
+    .map((p, i) => {
+      const x = pad + ((p.t - minX) / xRange) * (width - 2 * pad);
+      const y = height - pad - ((p.c - minY) / yRange) * (height - 2 * pad);
+      return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    })
+    .join(' ');
+  const lastUp = ys[ys.length - 1] >= ys[0];
+  const stroke = lastUp ? '#34D399' : '#F87171';
+  const fill = lastUp ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.10)';
+  const areaPath = `${path} L${(width - pad).toFixed(1)},${(height - pad).toFixed(1)} L${pad},${(height - pad).toFixed(1)} Z`;
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="aqp-spark-svg">
+      <path d={areaPath} fill={fill} />
+      <path d={path} stroke={stroke} strokeWidth="2" fill="none" />
+    </svg>
+  );
 }

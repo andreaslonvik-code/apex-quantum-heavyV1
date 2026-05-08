@@ -2081,6 +2081,260 @@ body {
 }
 
 /* ============================================================ */
+/* APEX QUANTUM + — Track-record card                            */
+/* ============================================================ */
+
+.aqp-track-card {
+  margin-bottom: 24px;
+  padding: 20px 24px;
+  background: linear-gradient(180deg, rgba(0,245,255,0.04), rgba(255,255,255,0.02));
+  border: 1px solid rgba(0,245,255,0.18);
+  border-radius: 12px;
+}
+.aqp-track-eye {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--aq-cyan);
+  margin-bottom: 14px;
+}
+.aqp-track-empty {
+  font-size: 13px;
+  color: rgba(255,255,255,0.62);
+  line-height: 1.55;
+  margin: 0;
+}
+.aqp-track-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 18px;
+}
+.aqp-track-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.aqp-track-stat--hero .aqp-track-num {
+  font-size: 28px;
+  color: var(--aq-cyan);
+}
+.aqp-track-num {
+  font-family: var(--font-mono);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--aq-text);
+}
+.aqp-track-num--win { color: #34D399; }
+.aqp-track-num--loss { color: #F87171; }
+.aqp-track-key {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+}
+
+/* ============================================================ */
+/* APEX QUANTUM + — Live price row on each signal card          */
+/* ============================================================ */
+
+.aqp-price-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 0 0 12px;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 8px;
+}
+.aqp-price-now {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.aqp-price-label {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.45);
+  padding: 2px 6px;
+  background: rgba(0,245,255,0.10);
+  border-radius: 4px;
+  color: var(--aq-cyan);
+  align-self: center;
+}
+.aqp-price-value {
+  font-family: var(--font-mono);
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--aq-text);
+}
+.aqp-price-day {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+}
+.aqp-price-day.is-up { color: #34D399; }
+.aqp-price-day.is-down { color: #F87171; }
+.aqp-price-since {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  margin-left: auto;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+.aqp-price-since.is-up {
+  background: rgba(16,185,129,0.10);
+  color: #34D399;
+}
+.aqp-price-since.is-down {
+  background: rgba(239,68,68,0.10);
+  color: #F87171;
+}
+
+.aqp-signal-id--clickable {
+  background: transparent;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  padding: 0;
+  font: inherit;
+  transition: opacity 0.15s var(--aq-ease);
+}
+.aqp-signal-id--clickable:hover { opacity: 0.7; }
+
+/* ============================================================ */
+/* APEX QUANTUM + — Ticker deep-dive modal                      */
+/* ============================================================ */
+
+.aqp-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  background: rgba(2,8,15,0.78);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: aqpOnbFade 0.18s var(--aq-ease);
+}
+.aqp-modal {
+  position: relative;
+  width: min(720px, 100%);
+  max-height: 86vh;
+  overflow-y: auto;
+  background: linear-gradient(180deg, rgba(0,245,255,0.03) 0%, rgba(255,255,255,0.02) 100%), #0a1218;
+  border: 1px solid rgba(0,245,255,0.20);
+  border-radius: 16px;
+  padding: 32px;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.55);
+  animation: aqpOnbRise 0.22s var(--aq-ease);
+}
+.aqp-modal-close {
+  position: absolute;
+  top: 14px;
+  right: 14px;
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--aq-border);
+  background: rgba(255,255,255,0.04);
+  color: rgba(255,255,255,0.7);
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s var(--aq-ease);
+}
+.aqp-modal-close:hover { background: rgba(255,255,255,0.10); color: var(--aq-text); }
+.aqp-modal-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 20px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--aq-border);
+}
+.aqp-modal-ticker {
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--aq-cyan);
+}
+.aqp-modal-name {
+  font-size: 14px;
+  color: rgba(255,255,255,0.62);
+}
+.aqp-modal-price {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 12px;
+}
+.aqp-modal-price-value {
+  font-family: var(--font-mono);
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.aqp-modal-price-change {
+  font-family: var(--font-mono);
+  font-size: 14px;
+  font-weight: 600;
+}
+.aqp-modal-price-change.is-up { color: #34D399; }
+.aqp-modal-price-change.is-down { color: #F87171; }
+.aqp-modal-chart {
+  margin-bottom: 24px;
+  padding: 16px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--aq-border);
+  border-radius: 12px;
+}
+.aqp-spark-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+.aqp-modal-signals {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.aqp-modal-signal-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr;
+  gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--aq-border);
+  border-radius: 10px;
+}
+.aqp-modal-signal-conf {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 600;
+  color: rgba(255,255,255,0.7);
+  align-self: center;
+}
+.aqp-modal-signal-reason {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: rgba(255,255,255,0.78);
+}
+
+/* ============================================================ */
 /* APEX QUANTUM + — Læring: callouts, tables, illustrations     */
 /* ============================================================ */
 

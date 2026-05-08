@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { generateDailySignals } from '@/lib/grok-plus';
 import { startScan, finishScanSuccess, finishScanFailed } from '@/lib/plus-db';
+import { fetchQuotes } from '@/lib/yahoo-finance';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -32,10 +33,24 @@ export async function GET(req: NextRequest) {
       );
     }
 
+    // Capture price-at-signal so the dashboard can show change-since-signal
+    // and the track-record can compute hit-rate. Failures here are non-fatal:
+    // we still ship the signals, just without enriched prices.
+    const signals = result.signals || [];
+    const tickers = Array.from(new Set(signals.map((s) => s.ticker)));
+    const quotes = await fetchQuotes(tickers);
+    for (const s of signals) {
+      const q = quotes[s.ticker.toUpperCase()];
+      if (q) {
+        s.price_at_signal = q.price;
+        s.price_currency = q.currency;
+      }
+    }
+
     await finishScanSuccess(scanId, {
       scanSummary: result.scanSummary || '',
       scanSummaryEn: result.scanSummaryEn ?? null,
-      signals: result.signals || [],
+      signals,
       durationMs: Date.now() - startedAt,
       promptTokens: result.promptTokens,
       completionTokens: result.completionTokens,

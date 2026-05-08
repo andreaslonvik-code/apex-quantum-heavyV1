@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS plus_signals (
   peer_comparison_en TEXT,
   insider_signal     TEXT,
   insider_signal_en  TEXT,
+  price_at_signal    NUMERIC(14, 4),
+  price_currency     TEXT,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 

@@ -38,6 +38,8 @@ export interface PlusSignalRow {
   peer_comparison_en: string | null;
   insider_signal: string | null;
   insider_signal_en: string | null;
+  price_at_signal: number | null;
+  price_currency: string | null;
   created_at: string;
 }
 
@@ -91,6 +93,8 @@ export interface SignalInsert {
   peer_comparison_en?: string | null;
   insider_signal?: string | null;
   insider_signal_en?: string | null;
+  price_at_signal?: number | null;
+  price_currency?: string | null;
 }
 
 export async function finishScanSuccess(
@@ -169,6 +173,23 @@ export async function getLatestScan(): Promise<{ scan: PlusScanRow; signals: Plu
     scan: scan as PlusScanRow,
     signals: ((signals ?? []) as PlusSignalRow[]),
   };
+}
+
+/**
+ * Returns recent priced signals (those with `price_at_signal` populated)
+ * for track-record computation. Used by `/api/plus/track-record`.
+ */
+export async function listPricedSignalsSince(daysBack = 30): Promise<PlusSignalRow[]> {
+  const sb = createAdminClient();
+  const since = new Date(Date.now() - daysBack * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await sb
+    .from('plus_signals')
+    .select('*')
+    .not('price_at_signal', 'is', null)
+    .gte('created_at', since)
+    .order('created_at', { ascending: false });
+  if (error) throw new Error(`listPricedSignalsSince: ${error.message}`);
+  return ((data ?? []) as PlusSignalRow[]);
 }
 
 /** Most recent published report. */

@@ -56,6 +56,9 @@ export async function GET(req: NextRequest) {
           ? (s.peer_comparison_en ?? s.peer_comparison)
           : s.peer_comparison,
         insiderSignal: wantEn ? (s.insider_signal_en ?? s.insider_signal) : s.insider_signal,
+        priceAtSignal: s.price_at_signal,
+        priceCurrency: s.price_currency,
+        createdAt: s.created_at,
       })),
     });
   } catch (e) {
