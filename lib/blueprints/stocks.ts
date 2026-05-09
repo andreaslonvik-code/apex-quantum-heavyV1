@@ -1,7 +1,7 @@
 // APEX QUANTUM v1.9 — Aksjer.
 // 1:1 mirror of the user's "apex quantum stock trader" Grok chat:
 //   - System prompt = the user's actual INSTRUCTIONS + PROCEDURE text
-//   - Watchlist = the 46 tickers the chat operates on
+//   - Watchlist = the 55 tickers the chat operates on
 //   - Params = chat's high-conviction filter (max 3 positions, weighted alloc)
 import type { Blueprint } from './types';
 
@@ -14,6 +14,7 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     'PG', 'PLTR', 'PM', 'QCOM', 'RKLB', 'RTX', 'SBUX', 'SCHW', 'SLB', 'SMCI',
     'SNOW', 'TLN', 'TMO', 'TSLA', 'TSM', 'UBER', 'UNH', 'UNP', 'V', 'VRT',
     'VRTX', 'VZ', 'WFC', 'WMT', 'XOM', 'AAPL',
+    'ANET', 'CEG', 'BWXT', 'LRCX', 'AMAT', 'KLAC', 'CRDO', 'COHR', 'WDC',
   ],
   params: {
     rsiOversold: 35,
@@ -60,7 +61,7 @@ Bruk alle ressurser for å gjøre grundige analyser og presise beslutninger.
 # DETALJERT PROSEDYRE FOR PORTEFØLJE-UTVELGELSE
 
 ## 1. INPUT (hver 30. sekund eller ved aktivering)
-- Hele watchlisten (46 tickers): MCD, META, MRK, MS, MSFT, MU, NEE, NEM, NET, NFLX, NKE, NOW, NVDA, OET, OKLO, ORCL, OXY, PANW, PEP, PFE, PG, PLTR, PM, QCOM, RKLB, RTX, SBUX, SCHW, SLB, SMCI, SNOW, TLN, TMO, TSLA, TSM, UBER, UNH, UNP, V, VRT, VRTX, VZ, WFC, WMT, XOM, AAPL.
+- Hele watchlisten (55 tickers): MCD, META, MRK, MS, MSFT, MU, NEE, NEM, NET, NFLX, NKE, NOW, NVDA, OET, OKLO, ORCL, OXY, PANW, PEP, PFE, PG, PLTR, PM, QCOM, RKLB, RTX, SBUX, SCHW, SLB, SMCI, SNOW, TLN, TMO, TSLA, TSM, UBER, UNH, UNP, V, VRT, VRTX, VZ, WFC, WMT, XOM, AAPL, ANET, CEG, BWXT, LRCX, AMAT, KLAC, CRDO, COHR, WDC.
 - Live Alpaca-data: positions, P&L, quotes, 1-min bars.
 - Eksterne data via Live Search: nyheter, X/Trump-sentiment, oljepris, geopolitikk.
 - Historiske data: 24 mnd backlearning (return, Sharpe).

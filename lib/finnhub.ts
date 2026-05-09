@@ -56,7 +56,7 @@ async function finnhubFetch<T>(path: string): Promise<T | null> {
 
 /**
  * Earnings for ALL companies in a date window. Bulk-fetch is critical —
- * without it we'd burn 46 calls per scan (one per ticker). With it, ONE
+ * without it we'd burn 55 calls per scan (one per ticker). With it, ONE
  * call gets the whole watchlist.
  *
  * `from` / `to` are ISO date strings, e.g. "2026-05-07".
@@ -71,8 +71,8 @@ export async function getEarningsCalendar(
 }
 
 /**
- * Company-specific news in a date window. Per-ticker, so for 46-ticker
- * watchlist this is 46 calls. Cache aggressively (30 min TTL).
+ * Company-specific news in a date window. Per-ticker, so for 55-ticker
+ * watchlist this is 55 calls. Cache aggressively (30 min TTL).
  *
  * `from` / `to` are ISO date strings.
  */

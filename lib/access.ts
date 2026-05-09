@@ -3,6 +3,7 @@ import { currentUser } from '@clerk/nextjs/server';
 export const MAX_ALLOWLIST_EMAILS: readonly string[] = [
   'post@apex-quantum.com',
   'andreas.lonvik@gmail.com',
+  'andreas.lonvik@icloud.com',
   'p.lonvik@gmail.com',
 ];
 

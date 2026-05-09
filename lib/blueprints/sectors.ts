@@ -35,6 +35,13 @@ const TICKER_TO_SECTOR: Record<string, Sector> = {
   TSM: 'tech_ai',
   MU: 'tech_ai',
   QCOM: 'tech_ai',
+  ANET: 'tech_ai',  // AI-networking — moves with NVDA/AVGO cluster
+  LRCX: 'tech_ai',  // semi-cap-equip — same cycle as AMAT/KLAC
+  AMAT: 'tech_ai',
+  KLAC: 'tech_ai',
+  CRDO: 'tech_ai',  // AI-interconnect SerDes — semis cluster
+  COHR: 'tech_ai',  // photonics/lasers for AI infra
+  WDC: 'tech_ai',   // storage — moves with semis on AI capex cycles
 
   // Consumer / staples / retail
   MCD: 'consumer',
@@ -60,6 +67,8 @@ const TICKER_TO_SECTOR: Record<string, Sector> = {
   TLN: 'energy',
   XOM: 'energy',
   NEE: 'energy',
+  CEG: 'energy',  // nuclear utility — moves with TLN/OKLO on AI-power thesis
+  BWXT: 'energy', // small-modular-reactor — clusters with nuclear cohort
   NEM: 'energy', // gold miner — correlates more with commodities than equities,
                  // but on bad days trades like a small-cap, treat as own bucket
 
