@@ -212,6 +212,30 @@ function isTradingHoursWindow(now = new Date()): boolean {
 }
 
 /**
+ * Inside US regular trading hours (RTH = 09:30–16:00 ET, weekdays). Cost-
+ * saving lever: Grok cadence stretches 2× during extended hours (pre 04:00–
+ * 09:30, after 16:00–20:00 ET) because indicators drift less, news flow
+ * is thinner, and fills are limited. RTH stays at full cadence.
+ */
+function isRegularTradingHours(now = new Date()): boolean {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(now);
+  const dow = parts.find((p) => p.type === 'weekday')?.value ?? '';
+  if (dow === 'Sat' || dow === 'Sun') return false;
+  const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
+  const minute = parseInt(parts.find((p) => p.type === 'minute')?.value ?? '0', 10);
+  const h = hour === 24 ? 0 : hour;
+  const minutesIntoDay = h * 60 + minute;
+  return minutesIntoDay >= 9 * 60 + 30 && minutesIntoDay < 16 * 60; // [09:30, 16:00)
+}
+
+/**
  * Friday-afternoon BUY blackout. Stop opening NEW positions in the last
  * 90 min before close on Friday — gap risk over the weekend is empirically
  * negative-skewed (weekend-effect literature: French 1980, Bessembinder/Hertzel).
@@ -638,6 +662,48 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
       `5d_+${snap.change_5d_pct?.toFixed(1)}%`,
       'above_sma50',
       'rising_channel',
+      'volume_accumulation',
+      `sector_rank_${snap.sector_rank ?? '?'}`,
+    );
+    if (snap.uptrend_1h) reasons.push('uptrend_1h_aligned');
+    return { ok: true, reasons };
+  }
+
+  // ── Path 5: EXTREME MOMENTUM LEADER (PATH D) ─────────────────────────
+  // Parabolic-breakout leaders that fail PATH C's rising_channel because
+  // price violated the upper channel resistance during a strong run. By
+  // PATH C standards they "broke the chart pattern", but by relative-
+  // strength standards they ARE the leaders the strategy text wants us
+  // to ride (NVDA-2023 type, MU/RKLB right now).
+  //
+  // Guards picked to catch shallow-pullback entries inside the bigger run,
+  // not blow-off-tops:
+  //   - RS30d ≥ +15 pp (proven structural leader — far above PATH C's +3)
+  //   - RSI 45-72 (includes shallow pullbacks like MU at 47, blocks
+  //     fully-parabolic > 72)
+  //   - 5d return in [-5 %, +15 %] (not crashing, not blow-off-topping)
+  //   - Price > SMA50 (still in uptrend even if channel pattern broke)
+  //   - Volume accumulation = true (smart money still buying)
+  //   - Sector rank ≤ 3 (relax PATH C's ≤ 2 to allow co-leaders)
+  //
+  // Post-fill risk-management still applies: 1.5× ATR stop-loss, 15 %
+  // profit-take threshold, trailing-stop, daily kill-switch (-3 %). These
+  // are bucket-level guards that don't care which entry path opened the
+  // position.
+  const isExtremeLeader =
+    snap.relative_strength_30d != null && snap.relative_strength_30d >= 15 &&
+    snap.rsi_14 != null && snap.rsi_14 >= 45 && snap.rsi_14 <= 72 &&
+    snap.change_5d_pct != null && snap.change_5d_pct >= -5 && snap.change_5d_pct <= 15 &&
+    snap.sma_50 != null && snap.price > snap.sma_50 &&
+    snap.volume_accumulation &&
+    (snap.sector_rank == null || snap.sector_rank <= 3);
+  if (isExtremeLeader) {
+    reasons.push(
+      'extreme_momentum_leader_pathD',
+      `rs30d_+${snap.relative_strength_30d?.toFixed(1)}pp`,
+      `rsi_${snap.rsi_14?.toFixed(1)}`,
+      `5d_${snap.change_5d_pct?.toFixed(1)}%`,
+      'above_sma50',
       'volume_accumulation',
       `sector_rank_${snap.sector_rank ?? '?'}`,
     );
@@ -1803,14 +1869,22 @@ async function runBlueprint(args: {
   // safety still ran above. Crypto bucket would override this if active
   // (24/7 markets), but crypto is currently disabled — guard for the future.
   const inTradingWindow = blueprint.id === 'crypto' || isTradingHoursWindow();
+  // Stretch cadence 2× during extended hours (pre-04:00–09:30, post-16:00–
+  // 20:00 ET). Pre/post have thinner news flow and limited fills, so each
+  // Grok call delivers less marginal signal. RTH keeps full cadence so we
+  // react fast during the high-signal window.
+  const effectiveCadenceMs =
+    blueprint.id === 'crypto' || isRegularTradingHours()
+      ? GROK_CADENCE_MS
+      : GROK_CADENCE_MS * 2;
   const shouldCallGrok =
-    inTradingWindow && (!last || last.failed || ageMs >= GROK_CADENCE_MS);
+    inTradingWindow && (!last || last.failed || ageMs >= effectiveCadenceMs);
 
   if (!shouldCallGrok) {
     result.thesis = last?.thesis ?? undefined;
     if (!inTradingWindow) {
       result.reason = 'outside_trading_hours';
-    } else if (last && !last.failed && ageMs < GROK_CADENCE_MS) {
+    } else if (last && !last.failed && ageMs < effectiveCadenceMs) {
       result.reason = 'within_cadence';
     }
     return { ...result, deployedNotional: 0 };

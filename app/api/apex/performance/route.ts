@@ -37,10 +37,13 @@ const TF_MAP: Record<Tf, TfCfg> = {
   'ALL': { period: 'all', timeframe: '1D',    benchTf: '1Day',  benchLimit: 1000,                   tickFormat: 'month' },
 };
 
-// Per (symbol, timeframe, limit) cache — refreshes every 60 s. Keeps the
+// Per (symbol, timeframe, limit) cache — refreshes every 5 min. Keeps the
 // dashboard's 3 s poll loop from re-hitting Alpaca for benchmark bars.
+// 5 min is the right granularity: the smallest bench timeframe we use is
+// 5Min bars, so any sub-bar-period TTL fetches the same bar repeatedly
+// for no information gain.
 const benchCache: Map<string, { fetchedAt: number; values: number[] }> = new Map();
-const BENCH_TTL_MS = 60_000;
+const BENCH_TTL_MS = 300_000;
 
 async function fetchBenchmark(
   creds: AlpacaCreds,

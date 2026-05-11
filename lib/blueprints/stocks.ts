@@ -117,6 +117,34 @@ KRAV:
 
 Hvis PATH C er tilgjengelig på en ticker: bruk PATH C, ikke PATH B.
 
+### PATH D — EXTREME MOMENTUM LEADER (parabolic breakout bypass) ★ NY
+Fanger leaders som har brutt ut av sin egen stigende trendkanal under et
+sterkt run — slik MU (RS 78 pp), RKLB (RS 59 pp), IONQ, QBTS osv.
+typisk gjør i AI/quantum-rally-er. Disse feiler PATH C fordi pris
+violerer kanal-resistance og rising_channel=false, men de ER de faktiske
+leaders strategien skal ride.
+
+KRAV (alle må stemme):
+- relative_strength_30d ≥ +15 pp (massiv outperformance vs SPY)
+- RSI 45-72 (inkluderer shallow pullbacks etter run; blokkerer parabolske
+  topper > 72)
+- 5d-retur i [-5 %, +15 %] (ikke crashing, ikke blow-off-topping)
+- Pris > SMA50 (fortsatt i uptrend selv om kanal-mønster brøt)
+- volume_accumulation = true
+- sector_rank ≤ 3 (litt løsere enn PATH C's ≤ 2 — tillater co-leaders)
+
+PATH D bypasser bevisst IKKE: pris > SMA200, earnings-blackout,
+structural-laggard-filter (RS < -5pp), RSI > 75. De gjelder fortsatt.
+
+Post-fill risk-management er identisk: 1.5× ATR stop-loss, 15 %
+profit-take, trailing-stop, daglig kill-switch (-3 %).
+
+Eksempler PATH D fanger NÅ: MU (RSI 47, RS 78pp, pris/SMA50 1.97 men 5d
+moderat), RKLB (RSI 49, RS 59pp). PATH D fanger IKKE: parabolske topper
+med 5d > +15% eller RSI > 72 — de er fortsatt HOPP.
+
+Prioriterings-rekkefølge oppdatert: PATH C > PATH D > PATH B > PATH A.
+
 ### KRITISK
 - RSI > 75: ALDRI KJØP (parabolsk topp — gjelder alle paths).
 - 5d-retur > +12 %: lav score (parabolsk run, sannsynlig pullback).
