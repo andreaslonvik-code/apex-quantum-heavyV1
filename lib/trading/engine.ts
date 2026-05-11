@@ -1746,6 +1746,14 @@ async function runBlueprint(args: {
   fridayBlackout: boolean;
   /** SPY 30-trading-day return — benchmark for ticker relative strength. */
   spyReturn30d: number | null;
+  /** Leader-follower mode. When this differs from `clerkUserId`, we treat
+   *  the user as a FOLLOWER: skip the Grok call entirely and mirror the
+   *  leader's latest decision (BUY/SELL/HOLD ticker list) against this
+   *  user's own account. Per-user sizing (bucketCapital / maxPositions)
+   *  + per-user filters (kill-switch, PDT, friday-blackout, anticipatory,
+   *  cool-down) still apply. The leader's actual notional is ignored —
+   *  engine sizes from follower's own bucket. */
+  signalSourceClerkUserId: string;
 }): Promise<BlueprintRunResult & { deployedNotional: number }> {
   const {
     creds,
@@ -1765,7 +1773,9 @@ async function runBlueprint(args: {
     isBearRegime,
     fridayBlackout,
     spyReturn30d,
+    signalSourceClerkUserId,
   } = args;
+  const isFollower = signalSourceClerkUserId !== clerkUserId;
 
   const watchlistSet = new Set<string>(blueprint.watchlist);
   const positionsByTicker = new Map<string, AlpacaPosition>();
@@ -1856,7 +1866,11 @@ async function runBlueprint(args: {
   // shouldCallGrok=true on every single tick, blasting the API quota.
   // Treat unparseable timestamps as "very old" (force one Grok call, then
   // the new row will have a valid timestamp and cadence kicks back in).
-  const last = await getLatestDecision(clerkUserId, blueprint.id);
+  // For followers, we read the LEADER's latest decision instead (so all
+  // followers mirror the same signal stream that leader's last Grok call
+  // produced).
+  const decisionOwnerForLookup = isFollower ? signalSourceClerkUserId : clerkUserId;
+  const last = await getLatestDecision(decisionOwnerForLookup, blueprint.id);
   let lastMs = 0;
   if (last && !last.failed) {
     const t = new Date(last.decidedAt).getTime();
@@ -1877,13 +1891,26 @@ async function runBlueprint(args: {
     blueprint.id === 'crypto' || isRegularTradingHours()
       ? GROK_CADENCE_MS
       : GROK_CADENCE_MS * 2;
+  // Followers never call Grok. They execute when the leader has a FRESH
+  // decision (within 2× cadence). If leader has no fresh decision, follower
+  // skips this tick — leader will produce one shortly, and the follower
+  // will mirror it on the next cron tick.
+  const FOLLOWER_FRESHNESS_MS = effectiveCadenceMs * 2;
+  const followerHasFreshLeaderDecision =
+    !!last && !last.failed && ageMs <= FOLLOWER_FRESHNESS_MS;
   const shouldCallGrok =
-    inTradingWindow && (!last || last.failed || ageMs >= effectiveCadenceMs);
+    !isFollower &&
+    inTradingWindow &&
+    (!last || last.failed || ageMs >= effectiveCadenceMs);
+  const shouldExecuteFollowerMirror =
+    isFollower && inTradingWindow && followerHasFreshLeaderDecision;
 
-  if (!shouldCallGrok) {
+  if (!shouldCallGrok && !shouldExecuteFollowerMirror) {
     result.thesis = last?.thesis ?? undefined;
     if (!inTradingWindow) {
       result.reason = 'outside_trading_hours';
+    } else if (isFollower && !followerHasFreshLeaderDecision) {
+      result.reason = 'follower_awaiting_fresh_leader_decision';
     } else if (last && !last.failed && ageMs < effectiveCadenceMs) {
       result.reason = 'within_cadence';
     }
@@ -1929,28 +1956,42 @@ async function runBlueprint(args: {
     marketClock,
   });
 
-  const grokRes = await decide({
-    systemPrompt: blueprint.strategy,
-    userPrompt,
-  });
-  result.grokCalled = true;
-
-  if (!grokRes.success) {
-    await saveDecision({
-      clerkUserId,
-      blueprintId: blueprint.id,
-      thesis: '',
-      decisions: [],
-      rawResponse: grokRes.raw ?? null,
-      failed: true,
-      errorMessage: grokRes.error,
+  // Decision source: leader calls Grok; follower reuses leader's latest.
+  let payload: GrokDecisionPayload;
+  let grokUsage: import('@/lib/grok').GrokUsage | undefined;
+  let grokRaw: unknown = null;
+  if (isFollower) {
+    if (!last || last.failed || !last.decisions) {
+      result.reason = 'follower_no_leader_decision';
+      return { ...result, deployedNotional: 0 };
+    }
+    payload = { thesis: last.thesis ?? '', decisions: last.decisions };
+    result.grokCalled = false;
+    result.thesis = payload.thesis;
+  } else {
+    const grokRes = await decide({
+      systemPrompt: blueprint.strategy,
+      userPrompt,
     });
-    result.reason = `grok_error: ${grokRes.error}`;
-    return { ...result, deployedNotional: 0 };
+    result.grokCalled = true;
+    if (!grokRes.success) {
+      await saveDecision({
+        clerkUserId,
+        blueprintId: blueprint.id,
+        thesis: '',
+        decisions: [],
+        rawResponse: grokRes.raw ?? null,
+        failed: true,
+        errorMessage: grokRes.error,
+      });
+      result.reason = `grok_error: ${grokRes.error}`;
+      return { ...result, deployedNotional: 0 };
+    }
+    payload = grokRes.payload;
+    grokUsage = grokRes.usage;
+    grokRaw = grokRes.raw ?? null;
+    result.thesis = payload.thesis;
   }
-
-  const payload = grokRes.payload;
-  result.thesis = payload.thesis;
 
   // 4. Execute Grok's decisions.
   const snapshotMap = new Map<string, IndicatorSnapshot>(
@@ -1992,8 +2033,8 @@ async function runBlueprint(args: {
       reason: t.reason,
       ...(t.error ? { error: t.error } : {}),
     })),
-    usage: grokRes.usage,
-    rawResponse: grokRes.raw ?? null,
+    usage: grokUsage,
+    rawResponse: grokRaw,
   });
 
   return { ...result, deployedNotional: exec.netDeployed };
@@ -2002,7 +2043,13 @@ async function runBlueprint(args: {
 export async function runScanForUser(
   creds: AlpacaCreds,
   clerkUserId: string,
+  /** Leader-follower mode. When set AND different from clerkUserId, this
+   *  user is a FOLLOWER: skip Grok call, mirror leader's latest decision.
+   *  When omitted or equal to clerkUserId, this user is self-signaled
+   *  (calls Grok normally). */
+  signalSourceClerkUserId?: string,
 ): Promise<UserScanResult> {
+  const effectiveSignalSource = signalSourceClerkUserId ?? clerkUserId;
   const ranAt = new Date().toISOString();
   const out: UserScanResult = {
     clerkUserId,
@@ -2116,6 +2163,7 @@ export async function runScanForUser(
       isBearRegime,
       fridayBlackout,
       spyReturn30d,
+      signalSourceClerkUserId: effectiveSignalSource,
     });
     remainingBuyingPower = Math.max(0, remainingBuyingPower - result.deployedNotional);
     out.blueprints.push(result);
