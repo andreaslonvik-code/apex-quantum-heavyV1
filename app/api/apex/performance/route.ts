@@ -30,12 +30,7 @@ interface TfCfg {
 const TF_MAP: Record<Tf, TfCfg> = {
   '1H':  { period: '1D',  timeframe: '5Min',  benchTf: '5Min',  benchLimit: 13,   sliceLast: 12,   tickFormat: 'time'  },
   '24H': { period: '1D',  timeframe: '5Min',  benchTf: '5Min',  benchLimit: 80,                    tickFormat: 'time'  },
-  // 7D uses 1H bars (not 15Min) because paper Alpaca's portfolio_history at
-  // 15Min granularity can include transient inflated samples during/after
-  // large rebalances — equity briefly counts both spent cash and the new
-  // position's market_value before paper-settle. 1H smooths past that and
-  // matches Alpaca's own dashboard granularity for the same window.
-  '7D':  { period: '1W',  timeframe: '1H',    benchTf: '1Hour', benchLimit: 168,                   tickFormat: 'date'  },
+  '7D':  { period: '1W',  timeframe: '15Min', benchTf: '15Min', benchLimit: 130,                   tickFormat: 'date'  },
   '30D': { period: '1M',  timeframe: '1H',    benchTf: '1Hour', benchLimit: 200,                   tickFormat: 'date'  },
   'MTD': { period: '1M',  timeframe: '1H',    benchTf: '1Hour', benchLimit: 200,  sliceMode: 'MTD', tickFormat: 'date'  },
   'YTD': { period: '1A',  timeframe: '1D',    benchTf: '1Day',  benchLimit: 260,  sliceMode: 'YTD', tickFormat: 'month' },
@@ -240,26 +235,6 @@ export async function GET(req: NextRequest) {
       // a tick, so the user's chart never reaches the headline number without it.
       ts.push(nowSec);
       eq.push(totalValue);
-    }
-
-    // Drop phantom-inflated samples. Paper Alpaca's portfolio_history can
-    // briefly report equity ≈ 2× the real value during large rebalances
-    // (double-counting spent cash + new position's market_value before
-    // settlement). Without this filter, peak/drawdown read garbage and the
-    // chart shows a spike Alpaca's own UI never displays. 2.5× current
-    // totalValue is generous enough to preserve any real intraday swing.
-    if (totalValue > 0 && eq.length > 0) {
-      const cutoff = totalValue * 2.5;
-      for (let i = eq.length - 1; i >= 0; i--) {
-        if (eq[i] > cutoff) {
-          eq.splice(i, 1);
-          ts.splice(i, 1);
-        }
-      }
-      if (eq.length === 0) {
-        ts = [nowSec];
-        eq = [totalValue];
-      }
     }
 
     // Pick a clean baseline for the windowed P&L:

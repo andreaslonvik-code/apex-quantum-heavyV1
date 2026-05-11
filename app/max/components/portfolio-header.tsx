@@ -4,7 +4,12 @@ import { I18N, fmtMoney, moneySuffix, type Lang } from './i18n';
 
 export type Timeframe = '1H' | '24H' | '7D' | '30D' | 'MTD' | 'YTD' | 'ALL';
 
-const TF_KEYS: Timeframe[] = ['1H', '24H', '7D', '30D', 'MTD', 'YTD', 'ALL'];
+// 7D er midlertidig skjult fra UI: paper Alpaca's portfolio_history kan
+// inneholde phantom-inflated equity-samples under store rebalanseringer
+// som ga falsk "topp"-verdi på charten. 7D-typen og API-entry-en beholdes
+// så ingen consumer brekker, men knappen vises ikke før vi har en pålitelig
+// fix.
+const TF_KEYS: Timeframe[] = ['1H', '24H', '30D', 'MTD', 'YTD', 'ALL'];
 
 interface Props {
   lang: Lang;
