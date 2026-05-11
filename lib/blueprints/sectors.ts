@@ -42,6 +42,10 @@ const TICKER_TO_SECTOR: Record<string, Sector> = {
   CRDO: 'tech_ai',  // AI-interconnect SerDes — semis cluster
   COHR: 'tech_ai',  // photonics/lasers for AI infra
   WDC: 'tech_ai',   // storage — moves with semis on AI capex cycles
+  ASML: 'tech_ai',  // EUV-monopol — semi-cap-equip, traded as US ADR on Alpaca
+  SAP: 'tech_ai',   // enterprise AI/cloud — traded as US ADR on Alpaca
+  QBTS: 'tech_ai',  // quantum computing — clusters with AI-compute thesis
+  IONQ: 'tech_ai',  // quantum computing — same cluster as QBTS
 
   // Consumer / staples / retail
   MCD: 'consumer',

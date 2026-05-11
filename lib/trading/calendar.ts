@@ -4,7 +4,7 @@
  *
  * Vercel serverless: each invocation may or may not share module state
  * with the next. The cache helps WITHIN a scan (one fetch covers all
- * 55 tickers' earnings). Across scans, cold starts re-fetch — that's
+ * 59 tickers' earnings). Across scans, cold starts re-fetch — that's
  * acceptable since cron is once/min and bulk earnings = 1 call/scan.
  *
  * News: per-ticker, cached 30 min. With 10-min Grok cadence, we re-fetch
@@ -98,7 +98,7 @@ async function refreshNewsCache(ticker: string): Promise<{
   const cutoff = (now - 24 * 60 * 60 * 1000) / 1000; // sec
   const recent = articles.filter((a) => a.datetime >= cutoff);
   // Sort by recency, take top 5 headlines (truncated to 100 chars each
-  // to keep prompt size manageable across 55 tickers).
+  // to keep prompt size manageable across 59 tickers).
   recent.sort((a, b) => b.datetime - a.datetime);
   const headlines = recent
     .slice(0, 5)
