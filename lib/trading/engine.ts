@@ -455,6 +455,13 @@ interface IndicatorSnapshot {
    *  for sentiment assessment. */
   recent_headlines: string[];
   /**
+   * Distance below the highest close in the last 20 bars, as a positive
+   * percent. e.g. 8.5 means current price is 8.5 % below the recent peak.
+   * 0 means we're AT the high. Captures multi-day pullbacks even when
+   * today's change is small (post-bounce mid-pullback).
+   */
+  pct_below_20bar_high: number | null;
+  /**
    * True when this priority-core ticker is in a healthy pullback inside a
    * structural uptrend — exactly the "buy the dip on a winner" setup the
    * user asked the engine to lean into hard. Conditions (all must hold):
@@ -464,7 +471,13 @@ interface IndicatorSnapshot {
    *   - relative_strength_30d ≥ +5 pp (still a leader, not turning laggard)
    *   - RSI 14 in [25, 65] (not panic, not parabolic)
    *   - change_5d_pct in [-15 %, +25 %] (no falling-knife crashes)
-   *   - dip signal: change_24h_pct ≤ -3 OR change_5d_pct ≤ -5
+   *   - dip signal: change_24h_pct ≤ -2 OR change_5d_pct ≤ -3
+   *                  OR pct_below_20bar_high ≥ 5 ★
+   * The 20-bar-high trigger catches names that pulled back days ago and
+   * are sitting in the discount window even if today's intraday move is
+   * flat or slightly green. Without it, MU at $747 (after $815 peak)
+   * would fail PATH E once intraday stabilizes — exactly the case the
+   * user flagged as "perfect dip we missed".
    * Always false for non-priority-core tickers.
    */
   priority_core_dip_signal: boolean;
@@ -542,6 +555,14 @@ async function buildIndicatorSnapshots(
       const change24hPct = ago1 ? ((p - ago1) / ago1) * 100 : null;
       const change5dPct = ago5 ? ((p - ago5) / ago5) * 100 : null;
 
+      // Pullback from 20-bar high. Catches multi-day dips even when
+      // today's bar is flat/green. Positive value = below peak.
+      const recentBars = bars.slice(-20);
+      let max20 = 0;
+      for (const b of recentBars) if (b.h > max20) max20 = b.h;
+      const pctBelow20BarHigh =
+        max20 > 0 ? ((max20 - p) / max20) * 100 : null;
+
       // PATH E pre-compute: priority-core dip-buy signal. See the field's
       // doc comment on IndicatorSnapshot for the full criteria list.
       const priorityCoreDip =
@@ -552,8 +573,9 @@ async function buildIndicatorSnapshots(
         rsiVal != null && rsiVal >= 25 && rsiVal <= 65 &&
         change5dPct != null && change5dPct >= -15 && change5dPct <= 25 &&
         (
-          (change24hPct != null && change24hPct <= -3) ||
-          (change5dPct != null && change5dPct <= -5)
+          (change24hPct != null && change24hPct <= -2) ||
+          (change5dPct != null && change5dPct <= -3) ||
+          (pctBelow20BarHigh != null && pctBelow20BarHigh >= 5)
         );
 
       snaps.push({
@@ -582,6 +604,9 @@ async function buildIndicatorSnapshots(
         sector_avg_rs_30d: null, // populated in post-processing
         sector_rank: null, // populated in post-processing
         recent_headlines: headlines,
+        pct_below_20bar_high: pctBelow20BarHigh != null
+          ? round(pctBelow20BarHigh, 2)
+          : null,
         priority_core_dip_signal: priorityCoreDip,
       });
     } catch {

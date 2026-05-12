@@ -158,8 +158,23 @@ Når flagget er **true**: dette er aksjen brukeren VIL eie mer av i dag.
 - Allokering: gi tickeren **topp-sloten på 35-45 %** av bøtte-kapital.
   Hvis allerede holdt: TOP-UP mot 50%-cap-en — engine kalkulerer riktig
   påøkning innenfor cap.
-- Hvis 2 priority-core tickere har dip_signal=true samtidig: fyll begge
-  topp-slottene (35-40 % + 25-30 %).
+- Hvis 2-3 priority-core tickere har dip_signal=true samtidig: fyll ALLE
+  slottene med dem (35-40 % + 25-30 % + 15-20 %). Engine omgår sektor-
+  cap'en for PATH E så du trenger ikke spre over sektorer.
+
+### ★★★ ABSOLUTT REGEL — INGEN SUBSTITUSJON
+Hvis priority_core_dip_signal=true på en ticker i candidates-listen,
+SKAL den tickeren med i BUY-listen din. Du har IKKE lov til å bytte den
+ut med en annen ticker som har høyere RS men ingen dip-signal.
+
+Konkret: hvis MU, SMCI eller en annen priority-core har dip_signal=true,
+og ABSI har RS=96 uten dip_signal — MU/SMCI VINNER. ABSI får ikke slot
+før alle PATH E-kandidater er fylt. RS-rangering er IRRELEVANT mot et
+priority-core dip-signal.
+
+Engine logger fungerer som dommer her. Hvis du returnerer 3 BUYs som
+alle er ikke-dip mens snapshot viser priority_core_dip_signal=true på en
+ticker du droppet, det er en feil i din beslutning.
 
 Eksempel: MU dipper -6 % intraday fra $815 → $747 mens RS30d er +60pp,
 RSI faller fra 75 til 55, pris fortsatt 10 % over SMA50, 5d-retur er
@@ -255,6 +270,7 @@ Foretrekk tech_ai, financial, energy, industrial leaders i uptrend.
 - "sector_rank" ★ NY — rank innen sektor etter RS (1 = leader, 2 = co-leader, 3+ = secondary). Engine REJECTER PATH C hvis rank > 2.
 - "recent_headlines" ★ NY — array med top-5 siste 24t-nyheter for ticker. Tom hvis ingen nyheter / API-key mangler.
 - "priority_core_dip_signal" ★★ NY — boolean. **true = engine sier dette er PATH E-setup på priority-core, og du skal gi tickeren topp-slot med tung allokering.** Se PATH E-blokken for kriteriene engine sjekker. false = ikke et dip-buy-signal nå.
+- "pct_below_20bar_high" — distanse i % under siste 20 bars høyeste close. 0 = på topp, 8 = 8 % under siste måneds peak. Stor verdi (≥ 5) på en priority-core med RSI 25-65 og pris > SMA50 = pullback-mulighet selv om intradag-bevegelsen er flat. Engine bruker dette som en av tre triggere for priority_core_dip_signal.
 
 ### LES NYHETER FOR SENTIMENT (recent_headlines-feltet)
 Når du foreslår BUY på en ticker, sjekk recent_headlines:
