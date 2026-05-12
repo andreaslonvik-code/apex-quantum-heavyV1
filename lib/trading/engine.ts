@@ -1521,11 +1521,11 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   // (no buying broken stocks) AND not in cool-down AND not blacklisted.
   // Top-up target = max-per-position cap × 0.95 (instead of equal-split
   // 1/maxPositions). On a $1M bucket with maxPctPerPosition=50, target is
-  // 47.5 % per pick. This means: when only 1 pick is held, engine tops it
-  // up to ~47.5 % of bucket (high-conviction concentration). When 3 picks
-  // are held, each can be topped to 47.5 % but freeBucketCapital constrains
-  // the total — so practically 33 % each (equal split, ~100 % deployment).
-  // Aligns with chat-procedure's "35-40 % to #1 pick" allocation rule.
+  // 47.5 % per pick. With maxPositions=6, this means top-up will push the
+  // first un-undersized position toward 47.5 %, then walk down the list
+  // sizing each subsequent position from the remaining freeBucketCapital.
+  // Net result: top pick at ~30-45 %, lower picks at ~10-15 % each — a
+  // natural concentration-weighted distribution.
   const TARGET_PCT_PER_POSITION = (blueprint.params.maxPctPerPosition / 100) * 0.95;
   const targetPositionValue = bucketCapital * TARGET_PCT_PER_POSITION;
   const TOP_UP_THRESHOLD = 0.75; // top up if below 75 % of target

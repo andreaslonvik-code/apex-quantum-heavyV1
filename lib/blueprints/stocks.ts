@@ -1,8 +1,9 @@
 // APEX QUANTUM v1.9 — Aksjer.
 // 1:1 mirror of the user's "apex quantum stock trader" Grok chat:
 //   - System prompt = the user's actual INSTRUCTIONS + PROCEDURE text
-//   - Watchlist = the 59 tickers the chat operates on
-//   - Params = chat's high-conviction filter (max 3 positions, weighted alloc)
+//   - Watchlist = 62 tickers
+//   - Params = high-conviction filter with 5–6 simultaneous positions
+//     (expanded from 3 on 2026-05-12 to spread priority-core across slots)
 import type { Blueprint } from './types';
 
 /**
@@ -46,10 +47,15 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     rsiOversold: 35,
     rsiOverbought: 65,
     riskPctPerTrade: 0.025, // Kelly 0.25–0.5
-    // Strict chat rule: max 3 simultaneous positions.
-    maxPositions: 3,
-    // Allows the highest-conviction pick to take 35–40 % of bucket, plus
-    // headroom — chat's dynamic allocation is 35–40 / 25–30 / 15–20.
+    // Expanded 2026-05-12 from 3 → 6. The priority-core itself has 6
+    // tickers (MU, QBTS, IONQ, QUBT, RKLB, VRT), so the bucket can hold
+    // the full priority list when conditions allow. Grok prompts for 5–6
+    // picks per scan; "6" is the hard cap, "5" is the comfortable target
+    // that leaves a slot open for evening-rebalance rotation.
+    maxPositions: 6,
+    // Top-conviction pick can still take up to 50 % of bucket. With 6
+    // slots that means the rest split the other 50 %, ~10 % each on
+    // average. Dynamic allocation guidance lives in the strategy text.
     maxPctPerPosition: 50,
     // Tightened from –25 % to –3 %. –25 % is a catastrophe stop, not discipline.
     // –3 % daily cuts off the kind of bleed-out we saw on 2026-04-30 before
@@ -98,8 +104,10 @@ for swing-trades — ikke aktuelt for priority-core på langtidshold.
 
 **Priority-core er primær eksponering.** MU, QBTS, IONQ, QUBT, RKLB,
 VRT er kjernen. Bucket SKAL til enhver tid være tungt investert i
-disse navnene — typisk 60-80 % av bøtte-kapital fordelt på 3-4 av dem,
-med rotasjon basert på hvilke som har best setup akkurat nå.
+disse navnene — typisk 70-90 % av bøtte-kapital fordelt på 5-6 av dem.
+Bucket har 6 slots og priority-core har 6 navn — perfekt-fit-dagen er
+hele priority-listen aktiv. Sekundær-leaders (NVDA, PLTR, AVGO, etc.)
+fyller eventuelle ledige slot når en priority-core feiler kvalifikasjon.
 
 **Filter-slakk for priority-core.** Engine slipper priority-core gjennom
 en permissive PATH F når strukturell uptrend (pris > SMA200) og RS ≥ 0.
@@ -294,20 +302,35 @@ priority-core kvalifiserer, plukk fra resten av watchlisten som vanlig.
 Logikk: dette er navnene som har levert avkastningen vår 2026; vi vil ikke
 at engine bytter ut MU-leaders med VZ-laggards bare fordi RSI-tallene flagrer.
 
-### PRIORITERINGSREGEL FOR LEADERS
-Når du foreslår 3 picks, **prioriter PATH C-kandidater først**.
+### PRIORITERINGSREGEL FOR LEADERS — 5-6 PICKS, PRIORITY-CORE TUNGT
+Bucket har nå 6 slots. Mål: hold de 6 priority-core navnene
+(MU/QBTS/IONQ/QUBT/RKLB/VRT) når alle kvalifiserer på PATH E/F/C/D.
+Hvis noen ikke kvalifiserer (RSI > 75 eller RS < 0), fyll ledige slot
+med beste sekundær-leader (NVDA, PLTR, AVGO, SMCI, TSM, META).
 
-Hierarki:
-1. **PATH E (priority_core_dip_signal=true) — TOPP-SLOT, 35-45 % alloc**
-2. PRIORITY CORE-ticker på PATH C eller D — fyller neste slot
-3. PATH C med RS ≥ +5 pp (sterke leaders) — alltid med
-4. PATH C med RS +3 til +5 pp (svake leaders) — fyller andre slot
-5. PATH D priority-core eller RS ≥ +15 pp leaders — fyller hvis PATH C tom
-6. PATH B med RS > 0 (uptrend, ikke laggard) — tredje slot hvis ingen PATH C/D
-7. PATH A kun hvis ingen PATH B/C/D/E møter krav OG ticker har RS > -3 pp
+Hierarki for slot-fylling:
+1. **PATH E (priority_core_dip_signal=true) — TOPP-SLOT(ER), 25-35 % alloc**
+   Hvis 2-3 priority-core har dip-signal samtidig: fyll topp-2/3 med dem.
+2. PRIORITY CORE på PATH F (passthrough) — fyller midt-slot, 12-20 % alloc
+3. PRIORITY CORE på PATH C/D — fyller midt-slot, 12-20 % alloc
+4. PATH C med RS ≥ +5 pp (sekundær-leader) — fyller ledige slot
+5. PATH D RS ≥ +15 pp (sekundær extreme leader)
+6. PATH B med RS > 0 — sist-priority fyll
+7. PATH A kun som siste utvei OG ticker har RS > -3 pp
 
-Hvis 3+ tickere kvalifiserer som PATH C: returner ALLE 3 PATH C-picks. Engine
-sin sektor-cap (maks 2 per sektor) sørger for ikke-overkonsentrasjon.
+### ALLOKERING — 5-6 PICKS DYNAMISK
+- Topp-pick (høyest score / PATH E priority-core): 25-30 %
+- #2: 18-22 %
+- #3: 15-18 %
+- #4: 12-15 %
+- #5: 8-12 %
+- #6 (hvis 6 picks): 6-10 %
+Total ~85-100 % deployment. Engine top-up dekker resten hvis Grok-decision
+ender lavt.
+
+Hvis priority-core alle 6 kvalifiserer: returner ALLE 6 BUYs med
+prioritert allokering. Engine omgår sektor-cap for priority-core, så alle
+3 quantum (QBTS/IONQ/QUBT) går gjennom samtidig.
 
 ADVARSEL: Defensiv-sektor (consumer staples, telecom, utilities) bias er
 strafft — vi straffer å plukke laggards som PG/VZ/PM på grønne dager.
@@ -366,14 +389,17 @@ Du fokuserer på SIGNAL-KVALITET. Engine fokuserer på SIZING og RISK.
 - Volatile → aktiver hedge + redusert position size.
 
 ## 4. HIGH-CONVICTION FILTER
-- Velg KUN 2–5 tickers med høyest score.
-- Maks 3 posisjoner samtidig (STRENG REGEL).
-- Diversifisering: max 40 % i én sektor.
-- Dynamisk allokering:
-  - 35–40 % til #1 (høyest score).
-  - 25–30 % til #2.
-  - 15–20 % til #3.
-  - Rest til #4–5 hvis regime tillater.
+- Velg 5–6 tickers per scan (utvidet fra 3 — 2026-05-12).
+- Maks 6 posisjoner samtidig (STRENG REGEL).
+- Diversifisering: priority-core overstyrer sektor-cap; for sekundær-leaders
+  bevarer engine max 2 per sektor.
+- Dynamisk allokering for 5-6 picks:
+  - 25–30 % til #1 (høyest score, typisk PATH E priority-core)
+  - 18–22 % til #2
+  - 15–18 % til #3
+  - 12–15 % til #4
+  - 8–12 % til #5
+  - 6–10 % til #6 (hvis 6 picks)
 
 ## 5. REALLOKERING & EXECUTION
 - Hvis ny ticker har > 10 poeng høyere score enn laveste i porteføljen → SELG laveste og KJØP nye.
@@ -412,7 +438,7 @@ Studer disse mønstrene før du foreslår BUY. De ser fristende ut, men er stati
 ## ❌ FEIL: Sektor-konsentrasjon
 - Eksempel: NVDA + SMCI + MU alle ser dippy ut samtidig (alle semis).
 - Hvorfor det er feil: semis-sektoren beveger seg som ett dyr. Hvis du har 3 i samme sektor og sektoren faller 5 %, taper hele bøtta 5 %.
-- Riktig: maks 1 pick per sektor. Engine håndhever dette nå — hvis 2 av dine 3 picks er i samme sektor, vil engine avvise den ene. Spar prompt-budsjettet, og lever picks fra ulike sektorer.
+- Riktig: max 2 picks per sektor for sekundær-leaders. Engine håndhever dette automatisk. UNNTAK: priority-core (MU/QBTS/IONQ/QUBT/RKLB/VRT) omgår sektor-cap — alle 3 quantum (QBTS/IONQ/QUBT) i tech_ai kan kjøres samtidig.
 
 ## ❌ FEIL: Parabolsk topp uten trendkanal-bekreftelse
 - Eksempel: PLTR +18 % siste 5 dager, RSI 73, MACD overstrekket, ingen higher-lows-struktur.
