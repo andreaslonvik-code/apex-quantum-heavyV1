@@ -1065,7 +1065,7 @@ function buildUserPrompt(args: {
     `# ALLOKER — KVALITET OVER KVANTITET`,
     ``,
     `Mål: stretch mot full deployment av bøtte-kapital — men ALDRI bryt blueprint-disiplinen.`,
-    `Bedre å sitte 50 % i cash enn å gjøre dårlige kjøp på toppen av en momentum-bevegelse.`,
+    `ALLTID-INVESTERT MANDAT: bucket SKAL ha minst 1 åpen posisjon i en rising-channel-ticker under markedstid. 0 % deployment er IKKE akseptabelt utenom strukturell bear (SPY < SMA200) eller kill-switch.`,
     ``,
     `Kjør prosedyren fra system-prompten din for porteføljevalg, og bruk Live Search aktivt for:`,
     `- Trump-poster på X / Truth Social (relevante for sektorer i watchlisten)`,
@@ -1076,12 +1076,11 @@ function buildUserPrompt(args: {
     `## Disiplinregler (HARDE — bryt aldri)`,
     `- ALDRI BUY på ticker med RSI > ${blueprint.params.rsiOverbought} (overkjøpt — vil reversere).`,
     `- ALDRI BUY ved klar negativ katalysator (Trump-tariff på sektoren, dårlig earnings, geopol-eskalering mot tickeren).`,
-    `- ALDRI BUY for å "fylle bøtta" hvis ingen tickere møter blueprint-kvaliteten.`,
     ``,
     `## Antall picks å returnere`,
-    `- ${blueprint.params.maxPositions} picks: når ${blueprint.params.maxPositions}+ tickere møter blueprint-kriteriene (perfekt eller nærmest).`,
-    `- 1–${blueprint.params.maxPositions - 1} picks: når kun noen møter standarden.`,
-    `- 0 picks: når ingen tickere passer akkurat nå. Cash er beste posisjon i regimet.`,
+    `- ${blueprint.params.maxPositions} picks: når ${blueprint.params.maxPositions}+ tickere møter PATH C/D/E/B-kriteriene.`,
+    `- 1–${blueprint.params.maxPositions - 1} picks: når kun noen møter standarden — fyll med beste rising-channel-leader for å unngå 0% deployment.`,
+    `- 0 picks: KUN i bear-regime (SPY < SMA200) eller kill-switch. Ellers: se ALLTID-INVESTERT-mandatet i system-prompten — engine har en fallback som tvinger en BUY hvis du returnerer 0, så velg heller selv.`,
     ``,
     `Engine sizer hver pick automatisk som bøtte-kapital / ${blueprint.params.maxPositions} (consistent sizing).`,
     `notional_usd-feltet ignoreres — bare gi placeholder.`,
@@ -1671,6 +1670,108 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     }
   }
 
+  // ── Phase 3: ALWAYS-INVESTED FALLBACK ──────────────────────────────────
+  // User mandate: bucket should always hold at least 1 position in a
+  // rising-channel leader during market hours. If this scan ends with 0
+  // positions AND 0 net deployment AND we're in a tradeable regime (market
+  // open, not bear, not friday-blackout), force a single BUY on the best
+  // available rising-channel candidate. Defensive cash is reserved for
+  // structural bear; sitting at 100 % cash in a bull/ranging market is a
+  // bug, not a feature.
+  const sellTickersThisScan = new Set(
+    trades.filter((t) => t.action === 'SELL' && t.status === 'OK').map((t) => t.ticker),
+  );
+  const buyTickersThisScan = new Set(
+    trades.filter((t) => t.action === 'BUY' && t.status === 'OK').map((t) => t.ticker),
+  );
+  const attemptedThisScan = new Set(trades.map((t) => t.ticker));
+  const heldAfterScan = new Set<string>();
+  for (const tk of positionsByTicker.keys()) heldAfterScan.add(tk);
+  for (const tk of sellTickersThisScan) heldAfterScan.delete(tk);
+  for (const tk of buyTickersThisScan) heldAfterScan.add(tk);
+
+  const fallbackEligible =
+    !isCrypto &&
+    heldAfterScan.size === 0 &&
+    marketIsOpen &&
+    !isBearRegime &&
+    !fridayBlackout &&
+    bucketCapital >= 1000;
+  if (fallbackEligible) {
+    let best: IndicatorSnapshot | null = null;
+    let bestScore = -Infinity;
+    for (const snap of snapshots.values()) {
+      if (attemptedThisScan.has(snap.ticker)) continue;
+      if (cooldownTickers.has(snap.ticker)) continue;
+      if (inFlightTickers.has(snap.ticker)) continue;
+      if (!snap.rising_channel) continue;
+      if (snap.sma_200 == null || snap.price < snap.sma_200) continue;
+      if (snap.sma_50 == null || snap.price < snap.sma_50) continue;
+      if (snap.relative_strength_30d == null || snap.relative_strength_30d < 0) continue;
+      if (snap.rsi_14 == null || snap.rsi_14 > 72) continue;
+      // Avoid blow-off-top entries (just ran 20 %+ in 5 days) and falling-
+      // knife entries (down 8 %+ today). Both are statistical mean-revert
+      // traps regardless of how nice the channel looks.
+      if (snap.change_5d_pct != null && snap.change_5d_pct > 20) continue;
+      if (snap.change_24h_pct != null && snap.change_24h_pct < -8) continue;
+      if (
+        snap.days_to_earnings != null &&
+        snap.days_to_earnings >= -1 &&
+        snap.days_to_earnings <= 3
+      ) continue;
+      let score = snap.relative_strength_30d;
+      if (isPriorityCore(snap.ticker)) score += 50; // priority-core wins ties
+      if (score > bestScore) {
+        bestScore = score;
+        best = snap;
+      }
+    }
+    if (best) {
+      const fallbackTicker = best.ticker;
+      const fallbackMaxPerTicker =
+        bucketCapital * (blueprint.params.maxPctPerPosition / 100);
+      const fallbackTarget = bucketCapital * 0.35;
+      const fallbackSafeBP = Math.max(0, remainingBuyingPower) * 0.95;
+      const fallbackNotional = round(
+        Math.min(
+          fallbackTarget,
+          fallbackMaxPerTicker,
+          fallbackSafeBP,
+          MAX_PER_ORDER_NOTIONAL,
+        ),
+        2,
+      );
+      if (fallbackNotional >= MIN_NOTIONAL_USD) {
+        const priceRes = await getLatestPrice(creds, tradingSymbol(fallbackTicker));
+        const currentPrice =
+          priceRes.success && priceRes.data > 0 ? priceRes.data : best.price;
+        const orderReq = buildStockOrder({
+          symbol: tradingSymbol(fallbackTicker),
+          side: 'buy',
+          notional: fallbackNotional,
+          currentPrice,
+          marketIsOpen,
+        });
+        if (orderReq) {
+          const r = await placeOrder(creds, orderReq);
+          trades.push({
+            blueprintId: blueprint.id,
+            ticker: fallbackTicker,
+            action: 'BUY',
+            qty: 0,
+            notional: fallbackNotional,
+            status: r.success ? 'OK' : 'ERR',
+            reason: isPriorityCore(fallbackTicker)
+              ? 'ALWAYS_INVESTED_FALLBACK_PRIORITY_CORE'
+              : 'ALWAYS_INVESTED_FALLBACK_RISING_CHANNEL',
+            error: r.success ? undefined : r.error,
+          });
+          if (r.success) netDeployed += fallbackNotional;
+        }
+      }
+    }
+  }
+
   return { trades, netDeployed };
 }
 
@@ -1999,10 +2100,24 @@ async function runBlueprint(args: {
   // 20:00 ET). Pre/post have thinner news flow and limited fills, so each
   // Grok call delivers less marginal signal. RTH keeps full cadence so we
   // react fast during the high-signal window.
-  const effectiveCadenceMs =
+  const baseCadenceMs =
     blueprint.id === 'crypto' || isRegularTradingHours()
       ? GROK_CADENCE_MS
       : GROK_CADENCE_MS * 2;
+  // Empty-bucket override: when there's no exposure AND market is open AND
+  // we're not in a bear regime, shrink cadence to 5 min. The mandate is
+  // that the bucket should always hold at least 1 position in a rising-
+  // channel leader — sitting at 0 % deployed for a full 20-min cadence is
+  // a violation, not a saving. Bear regime keeps the full cadence (cash
+  // is the right answer in a structural downtrend). In-flight orders are
+  // treated as "about to fill" so we don't double-decide before the fill.
+  const EMPTY_BUCKET_CADENCE_MS = 5 * 60 * 1000;
+  const bucketIsEmpty =
+    positionsByTicker.size === 0 && inFlightTickers.size === 0;
+  const effectiveCadenceMs =
+    bucketIsEmpty && marketClock?.is_open && !isBearRegime
+      ? Math.min(baseCadenceMs, EMPTY_BUCKET_CADENCE_MS)
+      : baseCadenceMs;
   // Followers never call Grok. They execute when the leader has a FRESH
   // decision (within 2× cadence). If leader has no fresh decision, follower
   // skips this tick — leader will produce one shortly, and the follower

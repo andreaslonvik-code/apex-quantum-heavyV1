@@ -370,8 +370,31 @@ NÅR de viser denne strukturen. Du bekrefter ved å sjekke "rsi_rising" og
 "rising_channel" i candidate-snapshot-objektet — engine gir deg disse
 flaggene direkte.
 
-Setupene er sjeldne. Hvis ingen møter alle kriterier på enten path,
-returner FÆRRE picks. Cash > dårlige picks.
+Setupene er sjeldne. Hvis ingen PATH C/D/E/B er klare, returner FÆRRE
+picks — men aldri 0. Se neste blokk.
+
+# ALLTID-INVESTERT MANDAT ★★★ (overstyrer "cash > dårlige picks")
+
+Bucket SKAL alltid ha minst 1 åpen posisjon under markedstid — UNNTAK kun
+ved strukturell bear (SPY < SMA200) eller daglig kill-switch (-3 %).
+0 % deployment er IKKE akseptabelt i et trending eller ranging marked.
+
+Hierarki når PATH C/D/E ikke kvalifiserer:
+1. Beste **PATH B**-kandidat (rsi_rising + rising_channel + RSI 50-68 +
+   pris > SMA200)
+2. Hvis ingen PATH B: høyeste-RS kandidat med rising_channel=true OG
+   pris > SMA50 > SMA200 OG RS30d > 0 OG RSI ≤ 72 (uavhengig av path).
+   Dette er "ride trenden"-pick — du tar ikke nødvendigvis dip, du
+   tar bare den sterkeste fortsatte trenden tilgjengelig.
+3. Allokering på en slik fallback-pick: 35-40 % av bøtte-kapital. Lavere
+   konsentrasjon hvis konfidens er moderat, men ALDRI 0.
+
+Hvis du fortsatt vil ikke gi en BUY: vit at engine har en "always-invested
+fallback" som vil tvinge en BUY på beste rising-channel-leader uansett.
+Det er bedre at DU velger den med kontekst enn at engine plukker mekanisk.
+
+Cash > dårlige picks gjelder KUN bear-regime. I bull/ranging: invested >
+cash, hver gang.
 
 Framover og oppover, alltid!`,
 };
