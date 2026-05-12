@@ -9,13 +9,17 @@ export const STOCKS_BLUEPRINT: Blueprint = {
   id: 'stocks',
   name: 'Apex Quantum v1.9 — Aksjer',
   watchlist: [
-    'MCD', 'META', 'MRK', 'MS', 'MSFT', 'MU', 'NEE', 'NEM', 'NET', 'NFLX',
+    // PRIORITY CORE — user-curated names (override slot when paths qualify).
+    // See PRIORITY CORE TICKERS section in strategy prompt.
+    'ABSI', 'AVGO', 'IONQ', 'LITE', 'MU', 'SMCI', 'VRT',
+    // Wider universe — eligible when no priority-core qualifies.
+    'MCD', 'META', 'MRK', 'MS', 'MSFT', 'NEE', 'NEM', 'NET', 'NFLX',
     'NKE', 'NOW', 'NVDA', 'OET', 'OKLO', 'ORCL', 'OXY', 'PANW', 'PEP', 'PFE',
-    'PG', 'PLTR', 'PM', 'QCOM', 'RKLB', 'RTX', 'SBUX', 'SCHW', 'SLB', 'SMCI',
-    'SNOW', 'TLN', 'TMO', 'TSLA', 'TSM', 'UBER', 'UNH', 'UNP', 'V', 'VRT',
+    'PG', 'PLTR', 'PM', 'QCOM', 'RKLB', 'RTX', 'SBUX', 'SCHW', 'SLB',
+    'SNOW', 'TLN', 'TMO', 'TSLA', 'TSM', 'UBER', 'UNH', 'UNP', 'V',
     'VRTX', 'VZ', 'WFC', 'WMT', 'XOM', 'AAPL',
-    'ANET', 'CEG', 'BWXT', 'LRCX', 'AMAT', 'KLAC', 'CRDO', 'COHR', 'WDC',
-    'ASML', 'SAP', 'QBTS', 'IONQ',
+    'ANET', 'CEG', 'BWXT', 'LRCX', 'AMAT', 'CRDO', 'COHR', 'WDC',
+    'ASML', 'SAP', 'QBTS',
   ],
   params: {
     rsiOversold: 35,
@@ -62,7 +66,8 @@ Bruk alle ressurser for å gjøre grundige analyser og presise beslutninger.
 # DETALJERT PROSEDYRE FOR PORTEFØLJE-UTVELGELSE
 
 ## 1. INPUT (hver 30. sekund eller ved aktivering)
-- Hele watchlisten (59 tickers): MCD, META, MRK, MS, MSFT, MU, NEE, NEM, NET, NFLX, NKE, NOW, NVDA, OET, OKLO, ORCL, OXY, PANW, PEP, PFE, PG, PLTR, PM, QCOM, RKLB, RTX, SBUX, SCHW, SLB, SMCI, SNOW, TLN, TMO, TSLA, TSM, UBER, UNH, UNP, V, VRT, VRTX, VZ, WFC, WMT, XOM, AAPL, ANET, CEG, BWXT, LRCX, AMAT, KLAC, CRDO, COHR, WDC, ASML, SAP, QBTS, IONQ.
+- Hele watchlisten (61 tickers): ABSI, AVGO, IONQ, LITE, MU, SMCI, VRT, MCD, META, MRK, MS, MSFT, NEE, NEM, NET, NFLX, NKE, NOW, NVDA, OET, OKLO, ORCL, OXY, PANW, PEP, PFE, PG, PLTR, PM, QCOM, RKLB, RTX, SBUX, SCHW, SLB, SNOW, TLN, TMO, TSLA, TSM, UBER, UNH, UNP, V, VRTX, VZ, WFC, WMT, XOM, AAPL, ANET, CEG, BWXT, LRCX, AMAT, CRDO, COHR, WDC, ASML, SAP, QBTS.
+- KLAC er FJERNET fra universet — historisk drag, ikke kandiderbar.
 - Live Alpaca-data: positions, P&L, quotes, 1-min bars.
 - Eksterne data via Live Search: nyheter, X/Trump-sentiment, oljepris, geopolitikk.
 - Historiske data: 24 mnd backlearning (return, Sharpe).
@@ -85,8 +90,9 @@ KRAV:
 - uptrend_1h = true (ELLER null om 1h-data ikke er tilgjengelig)
 
 Engine sin filter har dedikert PATH C-sjekk for disse — pri dem ALLTID høyt.
-Eksempler å se etter: NVDA, PLTR, SMCI, MSFT, META, AAPL, TSM, MU, AVGO når
-de viser RS > +3 pp og RSI 55-72.
+Eksempler å se etter (priority-core uthevet): **AVGO, MU, SMCI, VRT, LITE,
+IONQ, ABSI**, NVDA, PLTR, MSFT, META, AAPL, TSM når de viser RS > +3 pp og
+RSI 55-72.
 
 ### PATH A — DIP-BUY (oversold + reversal) — KUN PÅ KVALITETSAKSJER
 ADVARSEL: Bruk PATH A kun når relative_strength_30d ≥ -3 pp (ikke laggard).
@@ -152,14 +158,34 @@ Prioriterings-rekkefølge oppdatert: PATH C > PATH D > PATH B > PATH A.
 - relative_strength_30d < -5 pp: ALDRI KJØP (strukturell laggard, filter avviser).
 - days_to_earnings ≤ 3: ALDRI KJØP (binær gambling).
 
+### PRIORITY CORE TICKERS ★ (user-curated)
+Brukeren har eksplisitt utpekt 7 navn som strategien skal favorisere når de
+møter en av entry-pathene:
+
+  **ABSI, AVGO, IONQ, LITE, MU, SMCI, VRT**
+
+Disse er det aktive AI/semis/quantum/datacenter-leader-coreet. Når en av dem
+kvalifiserer på PATH C eller PATH D, skal den prioriteres foran andre PATH
+C/D-kandidater med tilsvarende eller lavere RS. Konkret regel ved tied/
+nær-tied scoring (≤ 3 score-poeng spread): priority-core vinner sloten.
+
+Dette OVERSTYRER IKKE harde filter — priority-core må fortsatt passere
+SMA200, earnings-blackout, RSI < 75, structural-laggard-check. Hvis ingen
+priority-core kvalifiserer, plukk fra resten av watchlisten som vanlig.
+
+Logikk: dette er navnene som har levert avkastningen vår 2026; vi vil ikke
+at engine bytter ut MU-leaders med VZ-laggards bare fordi RSI-tallene flagrer.
+
 ### PRIORITERINGSREGEL FOR LEADERS
 Når du foreslår 3 picks, **prioriter PATH C-kandidater først**.
 
 Hierarki:
-1. PATH C med RS ≥ +5 pp (sterke leaders) — alltid med
-2. PATH C med RS +3 til +5 pp (svake leaders) — fyller andre slot
-3. PATH B med RS > 0 (uptrend, ikke laggard) — tredje slot hvis ingen PATH C
-4. PATH A kun hvis ingen PATH B/C møter krav OG ticker har RS > -3 pp
+1. **PRIORITY CORE-ticker (ABSI/AVGO/IONQ/LITE/MU/SMCI/VRT) på PATH C eller D — først inn**
+2. PATH C med RS ≥ +5 pp (sterke leaders) — alltid med
+3. PATH C med RS +3 til +5 pp (svake leaders) — fyller andre slot
+4. PATH D priority-core eller RS ≥ +15 pp leaders — fyller hvis PATH C tom
+5. PATH B med RS > 0 (uptrend, ikke laggard) — tredje slot hvis ingen PATH C/D
+6. PATH A kun hvis ingen PATH B/C/D møter krav OG ticker har RS > -3 pp
 
 Hvis 3+ tickere kvalifiserer som PATH C: returner ALLE 3 PATH C-picks. Engine
 sin sektor-cap (maks 2 per sektor) sørger for ikke-overkonsentrasjon.

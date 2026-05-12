@@ -36,11 +36,12 @@ const TICKER_TO_SECTOR: Record<string, Sector> = {
   MU: 'tech_ai',
   QCOM: 'tech_ai',
   ANET: 'tech_ai',  // AI-networking — moves with NVDA/AVGO cluster
-  LRCX: 'tech_ai',  // semi-cap-equip — same cycle as AMAT/KLAC
+  AVGO: 'tech_ai',  // priority-core — AI ASIC + networking semis
+  LRCX: 'tech_ai',  // semi-cap-equip — same cycle as AMAT
   AMAT: 'tech_ai',
-  KLAC: 'tech_ai',
   CRDO: 'tech_ai',  // AI-interconnect SerDes — semis cluster
   COHR: 'tech_ai',  // photonics/lasers for AI infra
+  LITE: 'tech_ai',  // priority-core — photonics/optics for AI data centers
   WDC: 'tech_ai',   // storage — moves with semis on AI capex cycles
   ASML: 'tech_ai',  // EUV-monopol — semi-cap-equip, traded as US ADR on Alpaca
   SAP: 'tech_ai',   // enterprise AI/cloud — traded as US ADR on Alpaca
@@ -57,6 +58,7 @@ const TICKER_TO_SECTOR: Record<string, Sector> = {
   PM: 'consumer',
 
   // Health / pharma
+  ABSI: 'health', // priority-core — AI-drug-discovery biotech (small-cap)
   MRK: 'health',
   PFE: 'health',
   TMO: 'health',

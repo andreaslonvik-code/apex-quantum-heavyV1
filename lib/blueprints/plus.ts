@@ -93,7 +93,6 @@ export const PLUS_WATCHLIST: readonly PlusTicker[] = [
   { ticker: 'MU', name: 'Micron Technology', region: 'US', theme: 'semiconductors' },
   { ticker: 'LRCX', name: 'Lam Research', region: 'US', theme: 'semiconductors' },
   { ticker: 'AMAT', name: 'Applied Materials', region: 'US', theme: 'semiconductors' },
-  { ticker: 'KLAC', name: 'KLA', region: 'US', theme: 'semiconductors' },
   { ticker: 'CDNS', name: 'Cadence Design Systems', region: 'US', theme: 'semiconductors' },
   { ticker: 'SNPS', name: 'Synopsys', region: 'US', theme: 'semiconductors' },
   { ticker: 'CRDO', name: 'Credo Technology', region: 'US', theme: 'semiconductors' },
