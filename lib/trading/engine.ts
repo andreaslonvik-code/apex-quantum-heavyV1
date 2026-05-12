@@ -1304,12 +1304,21 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   for (const dec of buyDecs) {
     if (fridayBlackout && !isCrypto) continue;
     if (cooldownTickers.has(dec.ticker)) continue;
-    const sec = sectorOf(dec.ticker);
-    if (sec && (preflightSectorCounts.get(sec) ?? 0) >= SECTOR_CAP_PER_SCAN) continue;
     const snap = snapshots.get(dec.ticker);
     if (!snap) continue;
     const sig = isAnticipatorySignal(snap);
     if (!sig.ok) continue;
+    // PATH E (priority-core dip on a user-curated leader) bypasses the
+    // sector cap. The user explicitly wants concentration on these dips
+    // even when other priority-core in the same sector are already
+    // present. maxPositions and per-ticker concentration caps still bind.
+    const sec = sectorOf(dec.ticker);
+    const isPathE = snap.priority_core_dip_signal;
+    if (
+      !isPathE &&
+      sec &&
+      (preflightSectorCounts.get(sec) ?? 0) >= SECTOR_CAP_PER_SCAN
+    ) continue;
     preApproved += 1;
     if (sec) preflightSectorCounts.set(sec, (preflightSectorCounts.get(sec) ?? 0) + 1);
   }
@@ -1513,24 +1522,14 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
       continue;
     }
 
-    // ── Sector concentration cap ─────────────────────────────────────────
-    // Max 1 NEW position per sector per scan. If a sector is already taken
-    // by a kept position OR an earlier BUY in this loop, skip. Prevents the
-    // "3 picks all in semis" scenario where one bad sector day takes the
-    // whole bucket. Unknown-sector tickers don't trigger or take a slot.
-    const sec = sectorOf(ticker);
-    if (sec && (sectorCounts.get(sec) ?? 0) >= SECTOR_CAP_PER_SCAN) {
-      trades.push(
-        skipTrade(blueprint.id, ticker, 'BUY', `sector_full_${sec}`),
-      );
-      continue;
-    }
-
     // ── Anticipatory signal filter ───────────────────────────────────────
     // Hard reject any Grok BUY where the indicator state doesn't match the
     // dip-buy thesis (uptrend + oversold/near-support + bullish confirmation).
     // This is what stops the engine from buying momentum tops just because
     // Grok ranked them by 5-day return.
+    //
+    // Filter is run BEFORE the sector-cap check so we can read
+    // `priority_core_dip_signal` and exempt PATH E from the cap.
     const snap = snapshots.get(ticker);
     if (!snap) {
       trades.push(
@@ -1547,6 +1546,27 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
           'BUY',
           `no_anticipatory: ${signal.reasons.join(',')}`,
         ),
+      );
+      continue;
+    }
+
+    // ── Sector concentration cap ─────────────────────────────────────────
+    // Max 2 positions per sector per scan, applied across kept positions +
+    // BUYs queued in this loop. Prevents "3 picks all in semis" on a bad
+    // sector day. Unknown-sector tickers don't trigger or take a slot.
+    //
+    // PATH E exemption: priority-core dip-buys on user-curated leaders
+    // bypass the cap. Concentration is the explicit point of the priority
+    // core, and `maxPositions` + per-ticker cap still bind.
+    const sec = sectorOf(ticker);
+    const isPathE = snap.priority_core_dip_signal;
+    if (
+      !isPathE &&
+      sec &&
+      (sectorCounts.get(sec) ?? 0) >= SECTOR_CAP_PER_SCAN
+    ) {
+      trades.push(
+        skipTrade(blueprint.id, ticker, 'BUY', `sector_full_${sec}`),
       );
       continue;
     }
