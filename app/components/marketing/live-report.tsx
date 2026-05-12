@@ -83,7 +83,8 @@ export function LiveReport({ lang }: { lang: Lang }) {
           eye: 'LIVE COCKPIT',
           title: 'Se hva agenten gjør, akkurat nå.',
           sub: 'Live data fra brukeren med høyest avkastning — strømmes direkte fra Alpaca-API. Ingen forsinkelse, ingen redigering.',
-          pnlLabel: 'AVKASTNING I DAG',
+          pnlLabel: 'AVKASTNING TOTALT',
+          pnlSuffix: 'ALL TIME',
           sharpeLabel: 'SHARPE',
           actsLabel: 'AGENTHANDLINGER · SISTE 1T',
           decisions: { buy: 'KJØP', sell: 'SELG', scans: 'SKANNINGER', err: 'FEIL' },
@@ -98,7 +99,8 @@ export function LiveReport({ lang }: { lang: Lang }) {
           eye: 'LIVE COCKPIT',
           title: 'See what the agent is doing, right now.',
           sub: 'Live data from the user with the highest return — streamed direct from the Alpaca API. No delay, no editing.',
-          pnlLabel: "TODAY'S P&L",
+          pnlLabel: 'ALL-TIME P&L',
+          pnlSuffix: 'ALL TIME',
           sharpeLabel: 'SHARPE',
           actsLabel: 'AGENT ACTIONS · LAST 1H',
           decisions: { buy: 'BUY', sell: 'SELL', scans: 'SCANS', err: 'ERR' },
@@ -137,7 +139,7 @@ export function LiveReport({ lang }: { lang: Lang }) {
               <div className="cap-sm">{t.pnlLabel}</div>
               <div className={`m-live-pnl ${pnlUp ? 'up' : 'dn'} aq-mono`}>{pnlValue}</div>
               <div className={`m-live-pct ${pnlUp ? 'up' : 'dn'} aq-mono`}>
-                {pnlUp ? '▲' : '▼'} {pnlPct} · 1D
+                {pnlUp ? '▲' : '▼'} {pnlPct} · {t.pnlSuffix}
               </div>
             </div>
             <div className="m-live-stat">

@@ -32,13 +32,13 @@ interface PositionTick {
 interface TopTraderPayload {
   ok: true;
   hasData: boolean;
-  pnlValue: number;        // session P&L in account currency
-  pnlPct: number;          // session % return
+  pnlValue: number;        // all-time P&L in account currency
+  pnlPct: number;          // all-time % return
   currency: string;        // 'USD', 'NOK', etc
   sharpe: number | null;   // 30D rolling annualised, null if thin data
   actions: { buy: number; sell: number; scans: number; errors: number };
   windowMinutes: number;   // window the action counts cover
-  chart: number[];         // equity series for today
+  chart: number[];         // equity series — all-time, daily bars
   positions: PositionTick[];
   asOf: string;
 }
@@ -128,23 +128,26 @@ async function buildPayload(): Promise<TopTraderPayload> {
   const winner = candidates[0];
 
   // Pull the winner's position + order + history details in parallel.
-  const [positionsRes, ordersRes, historyDayRes, historyMonthRes] = await Promise.all([
+  // All-time history drives both the chart and the P&L number.
+  // 30-day history kept separately for the rolling Sharpe figure since
+  // an all-time Sharpe with thin early data is noisy.
+  const [positionsRes, ordersRes, historyAllRes, historyMonthRes] = await Promise.all([
     getPositions(winner.creds),
     getOrders(winner.creds, { status: 'all', limit: 100 }),
-    getPortfolioHistory(winner.creds, { period: '1D', timeframe: '5Min', extended_hours: true }),
+    getPortfolioHistory(winner.creds, { period: 'all', timeframe: '1D' }),
     getPortfolioHistory(winner.creds, { period: '1M', timeframe: '1D' }),
   ]);
 
-  // Session P&L: prefer Alpaca's own day-window so the displayed % matches what
-  // the user sees in the Alpaca dashboard. Falls back to session math if the
-  // day series is missing.
+  // All-time P&L: prefer Alpaca's base_value from the all-time history so
+  // the % return matches what the user sees on their dashboard. Fall back
+  // to equity - startBalance if the series is missing.
   let pnlValue = winner.pnlValue;
   let pnlPct = winner.pnlPct;
-  if (historyDayRes.success) {
-    const eq = historyDayRes.data.equity.filter(
+  if (historyAllRes.success) {
+    const eq = historyAllRes.data.equity.filter(
       (v): v is number => typeof v === 'number' && Number.isFinite(v)
     );
-    const base = historyDayRes.data.base_value;
+    const base = historyAllRes.data.base_value;
     if (eq.length >= 2 && base > 0) {
       const last = eq[eq.length - 1];
       pnlValue = last - base;
@@ -152,7 +155,7 @@ async function buildPayload(): Promise<TopTraderPayload> {
     }
   }
 
-  const chart = downsampleChart(historyDayRes.success ? historyDayRes.data : null);
+  const chart = downsampleChart(historyAllRes.success ? historyAllRes.data : null);
   const sharpe = historyMonthRes.success ? annualisedSharpe(historyMonthRes.data.equity as number[]) : null;
 
   // Activity window: last hour by default (60-second windows are usually 0
