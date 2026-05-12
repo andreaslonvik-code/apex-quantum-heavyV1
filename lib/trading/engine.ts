@@ -18,6 +18,7 @@ import {
 } from '@/lib/alpaca';
 import { BLUEPRINT_LIST, type AssetClass, type Blueprint } from '@/lib/blueprints';
 import { sectorOf } from '@/lib/blueprints/sectors';
+import { isPriorityCore } from '@/lib/blueprints/stocks';
 import { decide, type GrokDecision, type GrokDecisionPayload } from '@/lib/grok';
 import {
   getLatestDecision,
@@ -453,6 +454,20 @@ interface IndicatorSnapshot {
    *  each). Empty if Finnhub key not set or no recent news. Used by Grok
    *  for sentiment assessment. */
   recent_headlines: string[];
+  /**
+   * True when this priority-core ticker is in a healthy pullback inside a
+   * structural uptrend — exactly the "buy the dip on a winner" setup the
+   * user asked the engine to lean into hard. Conditions (all must hold):
+   *   - ticker ∈ PRIORITY_CORE_TICKERS
+   *   - price > SMA200 (structural uptrend intact)
+   *   - price/SMA50 ≥ 0.97 (not below short-term support)
+   *   - relative_strength_30d ≥ +5 pp (still a leader, not turning laggard)
+   *   - RSI 14 in [25, 65] (not panic, not parabolic)
+   *   - change_5d_pct in [-15 %, +25 %] (no falling-knife crashes)
+   *   - dip signal: change_24h_pct ≤ -3 OR change_5d_pct ≤ -5
+   * Always false for non-priority-core tickers.
+   */
+  priority_core_dip_signal: boolean;
 }
 
 async function buildIndicatorSnapshots(
@@ -522,14 +537,33 @@ async function buildIndicatorSnapshots(
       const news24h = await newsCount24h(ticker).catch(() => 0);
       const headlines = await newsHeadlines24h(ticker).catch(() => []);
 
+      const sma50Val = sma(closes, 50);
+      const sma200Val = sma(closes, 200);
+      const change24hPct = ago1 ? ((p - ago1) / ago1) * 100 : null;
+      const change5dPct = ago5 ? ((p - ago5) / ago5) * 100 : null;
+
+      // PATH E pre-compute: priority-core dip-buy signal. See the field's
+      // doc comment on IndicatorSnapshot for the full criteria list.
+      const priorityCoreDip =
+        isPriorityCore(ticker) &&
+        sma200Val != null && p > sma200Val &&
+        sma50Val != null && sma50Val > 0 && p / sma50Val >= 0.97 &&
+        rs30d != null && rs30d >= 5 &&
+        rsiVal != null && rsiVal >= 25 && rsiVal <= 65 &&
+        change5dPct != null && change5dPct >= -15 && change5dPct <= 25 &&
+        (
+          (change24hPct != null && change24hPct <= -3) ||
+          (change5dPct != null && change5dPct <= -5)
+        );
+
       snaps.push({
         ticker,
         price: round(p, 6),
-        change_24h_pct: ago1 ? round(((p - ago1) / ago1) * 100, 2) : null,
-        change_5d_pct: ago5 ? round(((p - ago5) / ago5) * 100, 2) : null,
+        change_24h_pct: change24hPct != null ? round(change24hPct, 2) : null,
+        change_5d_pct: change5dPct != null ? round(change5dPct, 2) : null,
         rsi_14: nullableRound(rsiVal, 1),
-        sma_50: nullableRound(sma(closes, 50), 4),
-        sma_200: nullableRound(sma(closes, 200), 4),
+        sma_50: nullableRound(sma50Val, 4),
+        sma_200: nullableRound(sma200Val, 4),
         macd_hist: nullableRound(macd(closes)?.hist ?? null, 4),
         atr_14: nullableRound(atr(bars, blueprint.params.atrPeriod), 4),
         bullish_divergence: bullishDivergence(closes, rsiVal),
@@ -548,6 +582,7 @@ async function buildIndicatorSnapshots(
         sector_avg_rs_30d: null, // populated in post-processing
         sector_rank: null, // populated in post-processing
         recent_headlines: headlines,
+        priority_core_dip_signal: priorityCoreDip,
       });
     } catch {
       // skip ticker on fetch error
@@ -659,6 +694,33 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
 
   const intradayAligned =
     snap.rsi_14_1h == null || snap.uptrend_1h; // null = pass; available = require uptrend
+
+  // ── PATH E: PRIORITY-CORE DIP-BUY (highest priority) ────────────────
+  // User-curated leaders (ABSI/AVGO/IONQ/LITE/MU/SMCI/VRT) get a dedicated
+  // entry path for healthy pullbacks inside a structural uptrend. Without
+  // this, a -6 % intraday dip on a leader breaks PATH C (rsi_rising=false,
+  // rising_channel=false) and slips through to PATH A which is too weak
+  // a signal to allocate the top slot to. PATH E exists so the engine
+  // doesn't miss the discount window on names we already love.
+  //
+  // Criteria are pre-computed in `buildIndicatorSnapshots` — see the
+  // `priority_core_dip_signal` field doc on IndicatorSnapshot for the
+  // full guard list (price > SMA200, RS ≥ +5 pp, RSI ∈ [25, 65], 5d
+  // change ∈ [-15 %, +25 %], dip detected as either -3 % intraday or
+  // -5 %+ over 5 days).
+  if (snap.priority_core_dip_signal) {
+    reasons.push(
+      'priority_core_dip_pathE',
+      `rs30d_+${snap.relative_strength_30d?.toFixed(1)}pp`,
+      `rsi_${snap.rsi_14?.toFixed(1)}`,
+      `1d_${snap.change_24h_pct?.toFixed(1)}%`,
+      `5d_${snap.change_5d_pct?.toFixed(1)}%`,
+      'structural_uptrend_intact',
+    );
+    if (snap.bullish_divergence) reasons.push('bullish_rsi_divergence');
+    if (snap.volume_accumulation) reasons.push('volume_accumulation');
+    return { ok: true, reasons };
+  }
 
   // ── Path 4: MOMENTUM LEADER (PATH C — for picking winners) ───────────
   // Highest-priority path. Multiple confirmations required:
@@ -948,6 +1010,10 @@ function rankAndTakeTop(
     if (heldTickers.has(s.ticker)) score += 10_000; // always include held
     const sig = isAnticipatorySignal(s);
     if (sig.ok) score += 500;
+    // Priority-core dip is the user's most-wanted signal — boost so it
+    // always lands in Grok's top-12 view even when a dozen other tickers
+    // also pass the filter on a strong day.
+    if (s.priority_core_dip_signal) score += 2_000;
     if (s.relative_strength_30d != null) {
       if (s.relative_strength_30d < -5) score -= 1000;
       else score += s.relative_strength_30d;

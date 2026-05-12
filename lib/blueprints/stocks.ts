@@ -5,6 +5,22 @@
 //   - Params = chat's high-conviction filter (max 3 positions, weighted alloc)
 import type { Blueprint } from './types';
 
+/**
+ * User-curated leaders. PATH E (priority-core dip-buy) in the engine only
+ * fires for tickers in this set, and `rankAndTakeTop` gives them a small
+ * score boost so they always make it into the 12 candidates Grok sees.
+ *
+ * Order = priority intent (most-loved first). Sourced from the user's
+ * actual high-conviction positions; change requires explicit user sign-off.
+ */
+export const PRIORITY_CORE_TICKERS: ReadonlySet<string> = new Set([
+  'ABSI', 'AVGO', 'IONQ', 'LITE', 'MU', 'SMCI', 'VRT',
+]);
+
+export function isPriorityCore(ticker: string): boolean {
+  return PRIORITY_CORE_TICKERS.has(ticker.toUpperCase());
+}
+
 export const STOCKS_BLUEPRINT: Blueprint = {
   id: 'stocks',
   name: 'Apex Quantum v1.9 — Aksjer',
@@ -123,6 +139,38 @@ KRAV:
 
 Hvis PATH C er tilgjengelig på en ticker: bruk PATH C, ikke PATH B.
 
+### PATH E — PRIORITY-CORE DIP-BUY ★★ HØYESTE PRIORITET
+Dette er den DYREESTE signal-typen vi har og skal **alltid** tas hardt.
+Engine flagger "priority_core_dip_signal=true" på candidate-snapshot når en
+av priority-core-tickerne (ABSI/AVGO/IONQ/LITE/MU/SMCI/VRT) er i et sunt
+pullback inne i en bekreftet uptrend:
+- Pris > SMA200 (strukturell uptrend intakt)
+- Pris/SMA50 ≥ 0.97 (ikke brutt kortsiktig støtte)
+- RS30d ≥ +5 pp (fortsatt leader, ikke laggard)
+- RSI 14 i [25, 65] (verken panikk eller parabolsk)
+- 5d-retur i [-15 %, +25 %] (ingen falling-knife-krasj)
+- Dip-trigger: 1d-retur ≤ -3 % ELLER 5d-retur ≤ -5 %
+
+Når flagget er **true**: dette er aksjen brukeren VIL eie mer av i dag.
+- Returner BUY uavhengig av om PATH C/D ville ha rejected den (lavere
+  rsi_rising eller brutt rising_channel er forventet i et dip — vi kjøper
+  RABATTEN, ikke breakout-toppen).
+- Allokering: gi tickeren **topp-sloten på 35-45 %** av bøtte-kapital.
+  Hvis allerede holdt: TOP-UP mot 50%-cap-en — engine kalkulerer riktig
+  påøkning innenfor cap.
+- Hvis 2 priority-core tickere har dip_signal=true samtidig: fyll begge
+  topp-slottene (35-40 % + 25-30 %).
+
+Eksempel: MU dipper -6 % intraday fra $815 → $747 mens RS30d er +60pp,
+RSI faller fra 75 til 55, pris fortsatt 10 % over SMA50, 5d-retur er
+fortsatt +14 %. Engine flagger priority_core_dip_signal=true → BUY MU
+med tung allokering. Dette er nøyaktig handelen brukeren designet
+strategien for.
+
+ADVARSEL: PATH E omgår IKKE earnings-blackout (3 dager før earnings) eller
+SMA200-filteret. Hvis MU dipper på dårlig earnings → pris under SMA200,
+flagget blir false, ingen kjøp. Bra — det er en trend-bryt, ikke et dip.
+
 ### PATH D — EXTREME MOMENTUM LEADER (parabolic breakout bypass) ★ NY
 Fanger leaders som har brutt ut av sin egen stigende trendkanal under et
 sterkt run — slik MU (RS 78 pp), RKLB (RS 59 pp), IONQ, QBTS osv.
@@ -149,7 +197,7 @@ Eksempler PATH D fanger NÅ: MU (RSI 47, RS 78pp, pris/SMA50 1.97 men 5d
 moderat), RKLB (RSI 49, RS 59pp). PATH D fanger IKKE: parabolske topper
 med 5d > +15% eller RSI > 72 — de er fortsatt HOPP.
 
-Prioriterings-rekkefølge oppdatert: PATH C > PATH D > PATH B > PATH A.
+Prioriterings-rekkefølge oppdatert: **PATH E > PATH C > PATH D > PATH B > PATH A**.
 
 ### KRITISK
 - RSI > 75: ALDRI KJØP (parabolsk topp — gjelder alle paths).
@@ -180,12 +228,13 @@ at engine bytter ut MU-leaders med VZ-laggards bare fordi RSI-tallene flagrer.
 Når du foreslår 3 picks, **prioriter PATH C-kandidater først**.
 
 Hierarki:
-1. **PRIORITY CORE-ticker (ABSI/AVGO/IONQ/LITE/MU/SMCI/VRT) på PATH C eller D — først inn**
-2. PATH C med RS ≥ +5 pp (sterke leaders) — alltid med
-3. PATH C med RS +3 til +5 pp (svake leaders) — fyller andre slot
-4. PATH D priority-core eller RS ≥ +15 pp leaders — fyller hvis PATH C tom
-5. PATH B med RS > 0 (uptrend, ikke laggard) — tredje slot hvis ingen PATH C/D
-6. PATH A kun hvis ingen PATH B/C/D møter krav OG ticker har RS > -3 pp
+1. **PATH E (priority_core_dip_signal=true) — TOPP-SLOT, 35-45 % alloc**
+2. PRIORITY CORE-ticker på PATH C eller D — fyller neste slot
+3. PATH C med RS ≥ +5 pp (sterke leaders) — alltid med
+4. PATH C med RS +3 til +5 pp (svake leaders) — fyller andre slot
+5. PATH D priority-core eller RS ≥ +15 pp leaders — fyller hvis PATH C tom
+6. PATH B med RS > 0 (uptrend, ikke laggard) — tredje slot hvis ingen PATH C/D
+7. PATH A kun hvis ingen PATH B/C/D/E møter krav OG ticker har RS > -3 pp
 
 Hvis 3+ tickere kvalifiserer som PATH C: returner ALLE 3 PATH C-picks. Engine
 sin sektor-cap (maks 2 per sektor) sørger for ikke-overkonsentrasjon.
@@ -205,6 +254,7 @@ Foretrekk tech_ai, financial, energy, industrial leaders i uptrend.
 - "sector_avg_rs_30d" ★ NY — gjennomsnitt RS for alle watchlist-tickere i samme sektor. Indikerer SEKTOR-rotasjon. + = sektor er hot, - = sektor er kald.
 - "sector_rank" ★ NY — rank innen sektor etter RS (1 = leader, 2 = co-leader, 3+ = secondary). Engine REJECTER PATH C hvis rank > 2.
 - "recent_headlines" ★ NY — array med top-5 siste 24t-nyheter for ticker. Tom hvis ingen nyheter / API-key mangler.
+- "priority_core_dip_signal" ★★ NY — boolean. **true = engine sier dette er PATH E-setup på priority-core, og du skal gi tickeren topp-slot med tung allokering.** Se PATH E-blokken for kriteriene engine sjekker. false = ikke et dip-buy-signal nå.
 
 ### LES NYHETER FOR SENTIMENT (recent_headlines-feltet)
 Når du foreslår BUY på en ticker, sjekk recent_headlines:
