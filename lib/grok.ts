@@ -61,6 +61,17 @@ interface ChatRequest {
   model?: string;
 }
 
+export interface DecideOptions {
+  /**
+   * Skip the live-search tools array (`web_search` + `x_search`) on this call.
+   * Engine sets this on most ticks: live search is billed per source consumed
+   * and is the dominant cost line. Engine pre-fetches Finnhub headlines and
+   * RS/sector stats into the user prompt, so prompt-only ticks have most of
+   * what the model needs. Re-enable hourly for a "fresh look" call.
+   */
+  disableTools?: boolean;
+}
+
 /**
  * Call Grok with a system + user prompt and parse the JSON response into a
  * decision payload. Returns a discriminated-union result — never throws.
@@ -69,7 +80,10 @@ interface ChatRequest {
  * - Falls back from the configured model to `grok-4` if the primary model is
  *   "Model not found" (Heavy variant flakiness on the API tier).
  */
-export async function decide(req: ChatRequest): Promise<GrokResult> {
+export async function decide(
+  req: ChatRequest,
+  options: DecideOptions = {},
+): Promise<GrokResult> {
   const apiKey = process.env.XAI_API_KEY;
   if (!apiKey) return { success: false, error: 'XAI_API_KEY not set' };
 
@@ -80,18 +94,22 @@ export async function decide(req: ChatRequest): Promise<GrokResult> {
   let lastError: GrokResult | null = null;
 
   for (const model of modelsToTry) {
-    let result = await tryWithRetries(apiKey, model, req);
+    let result = await tryWithRetries(apiKey, model, req, {
+      disableTools: options.disableTools,
+    });
 
-    // If Grok returned an empty-text response, retry once WITHOUT live-search
-    // tools. Symptom: { success: false, error: 'No text content in Responses
-    // API output' }. Most likely cause is that web_search/x_search hung or
-    // returned nothing useful and Grok never produced a final message. Without
-    // tools, the model uses prompt+training only — degraded but functional.
+    // If Grok returned an empty-text response WHILE tools were enabled, retry
+    // once WITHOUT live-search tools. Symptom: { success: false, error: 'No
+    // text content in Responses API output' }. Most likely cause is that
+    // web_search/x_search hung or returned nothing useful and Grok never
+    // produced a final message. Without tools, the model uses prompt+training
+    // only — degraded but functional. If tools were already disabled, the
+    // fallback wouldn't change anything, so skip it.
     const noTextContent =
       !result.success &&
       typeof result.error === 'string' &&
       result.error.includes('No text content');
-    if (noTextContent) {
+    if (noTextContent && !options.disableTools) {
       result = await tryWithRetries(apiKey, model, req, { disableTools: true });
     }
 
@@ -238,13 +256,15 @@ async function callOnce(
   // tools we declared, or hallucinated a thesis from training data only.
   // If usage.num_sources_used is 0 OR missing AND the response has no
   // tool_call items in output, log a warning. Without live search Grok
-  // cannot see today's news / X posts / oil price.
+  // cannot see today's news / X posts / oil price. Suppressed when tools
+  // were intentionally disabled — that's a cost-gated prompt-only tick,
+  // not a hallucination risk we need to flag.
   const rawObj = raw as { output?: Array<{ type?: string }> };
   const hasToolUse = Array.isArray(rawObj?.output)
     ? rawObj.output.some((item) => item?.type === 'tool_call' || item?.type === 'tool_use')
     : false;
   const sourceCount = usage?.num_sources_used ?? 0;
-  if (!hasToolUse && sourceCount === 0) {
+  if (!options.disableTools && !hasToolUse && sourceCount === 0) {
     console.warn(
       `[grok] Live search tools declared but not executed (no tool_call items, num_sources_used=${sourceCount}). Decision is from training data only — may be hallucinated.`,
     );

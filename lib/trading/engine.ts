@@ -236,6 +236,32 @@ function isRegularTradingHours(now = new Date()): boolean {
 }
 
 /**
+ * Hour-bucket string in ET, e.g. "2026-05-12-14". Used to gate live-search
+ * tools to at most one call per clock-hour per user/blueprint: if the last
+ * decision lands in a different bucket than now (or we have no prior call),
+ * the next Grok call runs WITH tools (fresh news/X scan). If the buckets
+ * match, the call is prompt-only — engine has already injected
+ * `recent_headlines` + RS/sector signals into the user prompt, so the model
+ * has the freshness it needs without paying for live search again.
+ *
+ * Net effect at 20-min RTH cadence: tools fire ~1× per hour (first call to
+ * cross the boundary), the other 2 calls run prompt-only. Drops live-search
+ * source spend ~60–70 % with negligible alpha impact on a daily-bar strategy.
+ */
+function etHourBucket(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    hour12: false,
+  }).formatToParts(date);
+  const get = (t: string): string => parts.find((p) => p.type === t)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}-${get('hour')}`;
+}
+
+/**
  * Friday-afternoon BUY blackout. Stop opening NEW positions in the last
  * 90 min before close on Friday — gap risk over the weekend is empirically
  * negative-skewed (weekend-effect literature: French 1980, Bessembinder/Hertzel).
@@ -1969,10 +1995,21 @@ async function runBlueprint(args: {
     result.grokCalled = false;
     result.thesis = payload.thesis;
   } else {
-    const grokRes = await decide({
-      systemPrompt: blueprint.strategy,
-      userPrompt,
-    });
+    // Cost gate: enable live-search tools at most once per ET clock-hour per
+    // user/blueprint. First call after deploy or first call to cross an
+    // hour boundary gets fresh web_search + x_search; same-hour follow-ups
+    // run prompt-only on the engine-injected `recent_headlines` + RS data.
+    // See `etHourBucket` doc for the cost/alpha tradeoff rationale.
+    const nowBucket = etHourBucket(new Date());
+    const lastBucket = lastMs > 0 ? etHourBucket(new Date(lastMs)) : '';
+    const enableTools = !lastBucket || lastBucket !== nowBucket;
+    const grokRes = await decide(
+      {
+        systemPrompt: blueprint.strategy,
+        userPrompt,
+      },
+      { disableTools: !enableTools },
+    );
     result.grokCalled = true;
     if (!grokRes.success) {
       await saveDecision({
