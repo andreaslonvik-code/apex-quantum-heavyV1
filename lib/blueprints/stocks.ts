@@ -6,15 +6,18 @@
 import type { Blueprint } from './types';
 
 /**
- * User-curated leaders. PATH E (priority-core dip-buy) in the engine only
- * fires for tickers in this set, and `rankAndTakeTop` gives them a small
- * score boost so they always make it into the 12 candidates Grok sees.
+ * User-curated long-term portfolio. PATH E (priority-core dip-buy) in the
+ * engine fires only for tickers in this set, `rankAndTakeTop` gives them
+ * a large score boost so they always make it into Grok's view, the
+ * anticipatory filter passes them on a permissive priority-core path
+ * (PATH F), and they bypass the sector-cap.
  *
- * Order = priority intent (most-loved first). Sourced from the user's
- * actual high-conviction positions; change requires explicit user sign-off.
+ * Theme: AI/quantum/datacenter-power 12-month bet. Quantum trio (QBTS,
+ * IONQ, QUBT) + memory leader (MU) + space (RKLB) + AI-power infra (VRT).
+ * Change requires explicit user sign-off.
  */
 export const PRIORITY_CORE_TICKERS: ReadonlySet<string> = new Set([
-  'ABSI', 'AVGO', 'IONQ', 'LITE', 'MU', 'SMCI', 'VRT',
+  'MU', 'QBTS', 'IONQ', 'QUBT', 'RKLB', 'VRT',
 ]);
 
 export function isPriorityCore(ticker: string): boolean {
@@ -25,17 +28,19 @@ export const STOCKS_BLUEPRINT: Blueprint = {
   id: 'stocks',
   name: 'Apex Quantum v1.9 — Aksjer',
   watchlist: [
-    // PRIORITY CORE — user-curated names (override slot when paths qualify).
+    // PRIORITY CORE — long-term 12-month portfolio leaders. Filter is
+    // loosened (PATH F passthrough) and sector-cap bypassed for these.
     // See PRIORITY CORE TICKERS section in strategy prompt.
-    'ABSI', 'AVGO', 'IONQ', 'LITE', 'MU', 'SMCI', 'VRT',
-    // Wider universe — eligible when no priority-core qualifies.
+    'MU', 'QBTS', 'IONQ', 'QUBT', 'RKLB', 'VRT',
+    // Wider universe — eligible candidates beyond the priority core.
+    'ABSI', 'AVGO', 'LITE', 'SMCI',
     'MCD', 'META', 'MRK', 'MS', 'MSFT', 'NEE', 'NEM', 'NET', 'NFLX',
     'NKE', 'NOW', 'NVDA', 'OET', 'OKLO', 'ORCL', 'OXY', 'PANW', 'PEP', 'PFE',
-    'PG', 'PLTR', 'PM', 'QCOM', 'RKLB', 'RTX', 'SBUX', 'SCHW', 'SLB',
+    'PG', 'PLTR', 'PM', 'QCOM', 'RTX', 'SBUX', 'SCHW', 'SLB',
     'SNOW', 'TLN', 'TMO', 'TSLA', 'TSM', 'UBER', 'UNH', 'UNP', 'V',
     'VRTX', 'VZ', 'WFC', 'WMT', 'XOM', 'AAPL',
     'ANET', 'CEG', 'BWXT', 'LRCX', 'AMAT', 'CRDO', 'COHR', 'WDC',
-    'ASML', 'SAP', 'QBTS',
+    'ASML', 'SAP',
   ],
   params: {
     rsiOversold: 35,
@@ -53,7 +58,12 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     dailyKillSwitchPct: -0.03,
     atrPeriod: 14,
     atrStopMult: 1.5,
-    profitTakeThreshold: 0.15,
+    // 12-month horizon mandate: don't auto-sell winners at +15 %. Set to
+    // +100 % as an absolute "we've doubled, lock something in" ceiling.
+    // Trailing stop ladder handles pullback protection well before this
+    // fires — the trailing stop will typically exit a faltering winner
+    // long before a fresh +100 % is on the table.
+    profitTakeThreshold: 1.00,
     timeframe: '1Day',
     barLimit: 250,
   },
@@ -79,11 +89,56 @@ DIN OPPGAVE:
 MANDAT: Alltid skap ekstrem høy avkastning på kapitalen. Det er måloppnåelsen.
 Bruk alle ressurser for å gjøre grundige analyser og presise beslutninger.
 
+## INVESTERINGSVINDU OG STRATEGI-RAMMER ★★★
+
+**12-måneders horisont.** Apex Quantum er IKKE en day-trader. Vi bygger
+en 12-måneders portefølje av AI/quantum/datacenter-power-vinnere. Lar
+priority-core ride for kvartaler, ikke timer. Profit-take på +15 % er
+for swing-trades — ikke aktuelt for priority-core på langtidshold.
+
+**Priority-core er primær eksponering.** MU, QBTS, IONQ, QUBT, RKLB,
+VRT er kjernen. Bucket SKAL til enhver tid være tungt investert i
+disse navnene — typisk 60-80 % av bøtte-kapital fordelt på 3-4 av dem,
+med rotasjon basert på hvilke som har best setup akkurat nå.
+
+**Filter-slakk for priority-core.** Engine slipper priority-core gjennom
+en permissive PATH F når strukturell uptrend (pris > SMA200) og RS ≥ 0.
+Ikke avvis en priority-core-pick fordi RSI er 50 i stedet for 55 — den
+fyller kvalifikasjonen.
+
+**Maksimer avkastning — IKKE bli med ned på store dips.** Ride normale
+pullbacks (-3 til -8 %), men cut RASKT på trend-bryt (pris under SMA50
++ stort intradag-tap, eller news-driven katastrofe). Engine har
+mekaniske safety-stops; du har ansvar for å SELL på narrative-bryt:
+- FDA-reject, dårlige earnings, antitrust-saksøkelse → SELL umiddelbart.
+- Trend-bryt: pris faller under SMA50 med høyt volum → SELL.
+- "Den hadde en god dag, men ned i dag" → HOLD, ikke panikk.
+
+**Always-invested er obligatorisk.** 0 % cash i bull/ranging marked er
+forbudt. Engine har en fallback som tvinger en BUY hvis du ikke gjør det.
+
+## EVENING-REBALANCE PROTOKOLL ★ NY
+
+Mellom 15:40 og 15:55 ET (siste time før close), engine kaller deg med
+"evening_mode=true" i prompt-konteksten. Da skal du:
+1. Vurder HVER held position: er den fortsatt riktig for over natten?
+   - Strong-trend leader → HOLD
+   - Mistet momentum, RS faller, news negativt → SELL før close
+2. Vurder hvilke priority-core navn ser BEST UT for morgendagen (futures,
+   Asia overnight, breaking news, jordskjelv-katalysatorer).
+3. Foreslå rebalansering: SELL svake holds, BUY de som ser sterkest ut
+   morgen-EU/morgen-US. Mål: portefølje vekt mot navn med best
+   over-natten + neste-dag-setup.
+
+I evening_mode prioriter ABSOLUTT robusthet over offensive entries —
+posisjoner du tar SKAL kunne overleve en -5 % overnight-gap uten panikk.
+
 # DETALJERT PROSEDYRE FOR PORTEFØLJE-UTVELGELSE
 
 ## 1. INPUT (hver 30. sekund eller ved aktivering)
-- Hele watchlisten (61 tickers): ABSI, AVGO, IONQ, LITE, MU, SMCI, VRT, MCD, META, MRK, MS, MSFT, NEE, NEM, NET, NFLX, NKE, NOW, NVDA, OET, OKLO, ORCL, OXY, PANW, PEP, PFE, PG, PLTR, PM, QCOM, RKLB, RTX, SBUX, SCHW, SLB, SNOW, TLN, TMO, TSLA, TSM, UBER, UNH, UNP, V, VRTX, VZ, WFC, WMT, XOM, AAPL, ANET, CEG, BWXT, LRCX, AMAT, CRDO, COHR, WDC, ASML, SAP, QBTS.
+- Hele watchlisten (62 tickers): MU, QBTS, IONQ, QUBT, RKLB, VRT, ABSI, AVGO, LITE, SMCI, MCD, META, MRK, MS, MSFT, NEE, NEM, NET, NFLX, NKE, NOW, NVDA, OET, OKLO, ORCL, OXY, PANW, PEP, PFE, PG, PLTR, PM, QCOM, RTX, SBUX, SCHW, SLB, SNOW, TLN, TMO, TSLA, TSM, UBER, UNH, UNP, V, VRTX, VZ, WFC, WMT, XOM, AAPL, ANET, CEG, BWXT, LRCX, AMAT, CRDO, COHR, WDC, ASML, SAP.
 - KLAC er FJERNET fra universet — historisk drag, ikke kandiderbar.
+- QUBT er LAGT TIL — Quantum Computing Inc., del av AI/quantum priority core.
 - Live Alpaca-data: positions, P&L, quotes, 1-min bars.
 - Eksterne data via Live Search: nyheter, X/Trump-sentiment, oljepris, geopolitikk.
 - Historiske data: 24 mnd backlearning (return, Sharpe).
@@ -106,9 +161,9 @@ KRAV:
 - uptrend_1h = true (ELLER null om 1h-data ikke er tilgjengelig)
 
 Engine sin filter har dedikert PATH C-sjekk for disse — pri dem ALLTID høyt.
-Eksempler å se etter (priority-core uthevet): **AVGO, MU, SMCI, VRT, LITE,
-IONQ, ABSI**, NVDA, PLTR, MSFT, META, AAPL, TSM når de viser RS > +3 pp og
-RSI 55-72.
+Eksempler å se etter (priority-core uthevet): **MU, QBTS, IONQ, QUBT, RKLB,
+VRT**, NVDA, PLTR, AVGO, SMCI, MSFT, META, TSM, ABSI, LITE når de viser
+RS > +3 pp og RSI 55-72.
 
 ### PATH A — DIP-BUY (oversold + reversal) — KUN PÅ KVALITETSAKSJER
 ADVARSEL: Bruk PATH A kun når relative_strength_30d ≥ -3 pp (ikke laggard).
@@ -142,7 +197,7 @@ Hvis PATH C er tilgjengelig på en ticker: bruk PATH C, ikke PATH B.
 ### PATH E — PRIORITY-CORE DIP-BUY ★★ HØYESTE PRIORITET
 Dette er den DYREESTE signal-typen vi har og skal **alltid** tas hardt.
 Engine flagger "priority_core_dip_signal=true" på candidate-snapshot når en
-av priority-core-tickerne (ABSI/AVGO/IONQ/LITE/MU/SMCI/VRT) er i et sunt
+av priority-core-tickerne (MU/QBTS/IONQ/QUBT/RKLB/VRT) er i et sunt
 pullback inne i en bekreftet uptrend:
 - Pris > SMA200 (strukturell uptrend intakt)
 - Pris/SMA50 ≥ 0.97 (ikke brutt kortsiktig støtte)

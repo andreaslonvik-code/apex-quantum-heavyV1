@@ -237,6 +237,50 @@ function isRegularTradingHours(now = new Date()): boolean {
 }
 
 /**
+ * True when ET wall-clock is in the evening-rebalance window: 15:40–15:55 ET
+ * on a weekday. This is the last 5-20 minutes before NYSE close (16:00 ET).
+ *
+ * Used to force one Grok call per day in this window with a special
+ * "evening_mode" prompt that asks Grok to rebalance the portfolio toward
+ * names with the best overnight/next-day setup — favouring robustness
+ * (can survive a -5 % overnight gap) over aggressive entries.
+ */
+function isEveningRebalanceWindow(now = new Date()): boolean {
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: false,
+  });
+  const parts = fmt.formatToParts(now);
+  const dow = parts.find((p) => p.type === 'weekday')?.value ?? '';
+  if (dow === 'Sat' || dow === 'Sun') return false;
+  const hour = parseInt(parts.find((p) => p.type === 'hour')?.value ?? '0', 10);
+  const minute = parseInt(parts.find((p) => p.type === 'minute')?.value ?? '0', 10);
+  const h = hour === 24 ? 0 : hour;
+  const minutesIntoDay = h * 60 + minute;
+  // [15:40, 15:55) — 15-min window. Stops at 15:55 to leave 5 min before
+  // close for any resulting orders to fill.
+  return minutesIntoDay >= 15 * 60 + 40 && minutesIntoDay < 15 * 60 + 55;
+}
+
+/**
+ * Date string YYYY-MM-DD in ET. Used to detect "have we already done the
+ * evening-rebalance call for this trading day".
+ */
+function etDateString(date: Date): string {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/New_York',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const get = (t: string): string => parts.find((p) => p.type === t)?.value ?? '';
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+/**
  * Hour-bucket string in ET, e.g. "2026-05-12-14". Used to gate live-search
  * tools to at most one call per clock-hour per user/blueprint: if the last
  * decision lands in a different bucket than now (or we have no prior call),
@@ -721,7 +765,7 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
     snap.rsi_14_1h == null || snap.uptrend_1h; // null = pass; available = require uptrend
 
   // ── PATH E: PRIORITY-CORE DIP-BUY (highest priority) ────────────────
-  // User-curated leaders (ABSI/AVGO/IONQ/LITE/MU/SMCI/VRT) get a dedicated
+  // User-curated leaders (MU/QBTS/IONQ/QUBT/RKLB/VRT) get a dedicated
   // entry path for healthy pullbacks inside a structural uptrend. Without
   // this, a -6 % intraday dip on a leader breaks PATH C (rsi_rising=false,
   // rising_channel=false) and slips through to PATH A which is too weak
@@ -744,6 +788,29 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
     );
     if (snap.bullish_divergence) reasons.push('bullish_rsi_divergence');
     if (snap.volume_accumulation) reasons.push('volume_accumulation');
+    return { ok: true, reasons };
+  }
+
+  // ── PATH F: PRIORITY-CORE PASSTHROUGH (12-month-portfolio leaders) ──
+  // For priority-core that ISN'T in a dip (PATH E didn't fire), still let
+  // them through as long as structural uptrend holds. User has designated
+  // these names as the 12-month portfolio core — the strict PATH A-D gates
+  // exist to discipline random-ticker BUYs, but for the priority list the
+  // conviction work is already done. RSI ≤ 75 (no blow-off-top) and RS30d
+  // ≥ 0 (still outperforming) are the only guards beyond the SMA200 +
+  // earnings-blackout checks already applied above.
+  if (
+    isPriorityCore(snap.ticker) &&
+    snap.relative_strength_30d != null && snap.relative_strength_30d >= 0 &&
+    snap.rsi_14 != null && snap.rsi_14 <= 75
+  ) {
+    reasons.push(
+      'priority_core_passthrough_pathF',
+      `rs30d_${snap.relative_strength_30d.toFixed(1)}pp`,
+      `rsi_${snap.rsi_14.toFixed(1)}`,
+      'structural_uptrend_intact',
+    );
+    if (snap.rising_channel) reasons.push('rising_channel');
     return { ok: true, reasons };
   }
 
@@ -1064,6 +1131,8 @@ function buildUserPrompt(args: {
   account: AccountSnapshot;
   recentOrders: OrderSummary[];
   marketClock: MarketClockSummary | null;
+  /** True when this is the daily 15:40–15:55 ET evening-rebalance call. */
+  eveningMode?: boolean;
 }): string {
   const {
     blueprint,
@@ -1077,6 +1146,7 @@ function buildUserPrompt(args: {
     account,
     recentOrders,
     marketClock,
+    eveningMode = false,
   } = args;
 
   const isBucketEmpty = positions.length === 0 && inFlightTickers.length === 0;
@@ -1089,6 +1159,9 @@ function buildUserPrompt(args: {
   return [
     `# ALLOKER — KVALITET OVER KVANTITET`,
     ``,
+    eveningMode
+      ? `### ★★★ EVENING REBALANCE — ${blueprint.params.maxPositions}-SLOT OVERNIGHT PORTFOLIO\nDette er den daglige 15:40–15:55 ET-rebalansen. Ikke et normalt tick.\nDu velger porteføljen vi går inn i morgendagen MED.\n\nFor hver held position:\n- HOLD: strong-trend leader, robust mot -5 % overnight gap.\n- SELL: mistet momentum / negative news / RS faller.\n\nFyll ledige slot med priority-core (MU/QBTS/IONQ/QUBT/RKLB/VRT) som ser sterkest ut for morgendagen — basert på Asia overnight-futures, breaking news, sektor-rotasjon, og catalysts (earnings, FDA, makro).\n\nIKKE åpne aggressive dip-buys i evening-mode — vi vil ha posisjoner som kan overleve natten, ikke kortsiktig swing-handel før close.`
+      : '',
     `Mål: stretch mot full deployment av bøtte-kapital — men ALDRI bryt blueprint-disiplinen.`,
     `ALLTID-INVESTERT MANDAT: bucket SKAL ha minst 1 åpen posisjon i en rising-channel-ticker under markedstid. 0 % deployment er IKKE akseptabelt utenom strukturell bear (SPY < SMA200) eller kill-switch.`,
     ``,
@@ -1332,14 +1405,14 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     if (!snap) continue;
     const sig = isAnticipatorySignal(snap);
     if (!sig.ok) continue;
-    // PATH E (priority-core dip on a user-curated leader) bypasses the
-    // sector cap. The user explicitly wants concentration on these dips
-    // even when other priority-core in the same sector are already
-    // present. maxPositions and per-ticker concentration caps still bind.
+    // Priority-core leaders bypass the sector cap entirely (user's 12-
+    // month portfolio is meant to concentrate in AI/quantum core, not
+    // diversify away from it). maxPositions and per-ticker concentration
+    // caps still bind.
     const sec = sectorOf(dec.ticker);
-    const isPathE = snap.priority_core_dip_signal;
+    const corePass = isPriorityCore(dec.ticker);
     if (
-      !isPathE &&
+      !corePass &&
       sec &&
       (preflightSectorCounts.get(sec) ?? 0) >= SECTOR_CAP_PER_SCAN
     ) continue;
@@ -1579,13 +1652,13 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     // BUYs queued in this loop. Prevents "3 picks all in semis" on a bad
     // sector day. Unknown-sector tickers don't trigger or take a slot.
     //
-    // PATH E exemption: priority-core dip-buys on user-curated leaders
-    // bypass the cap. Concentration is the explicit point of the priority
-    // core, and `maxPositions` + per-ticker cap still bind.
+    // Priority-core exemption: user-curated 12-month portfolio leaders
+    // bypass the cap. Concentration in AI/quantum core is the explicit
+    // point of priority-core. maxPositions + per-ticker cap still bind.
     const sec = sectorOf(ticker);
-    const isPathE = snap.priority_core_dip_signal;
+    const corePass = isPriorityCore(ticker);
     if (
-      !isPathE &&
+      !corePass &&
       sec &&
       (sectorCounts.get(sec) ?? 0) >= SECTOR_CAP_PER_SCAN
     ) {
@@ -1825,18 +1898,27 @@ function skipTrade(
  * Peak-pnl input should be (highest_high_since_entry − entry) / entry.
  *
  *   peak  5–10 %  → floor at entry × 1.02 (protect break-even + small profit)
- *   peak 10–15 %  → floor at entry × 1.05
- *   peak 15–20 %  → floor at entry × 1.08
- *   peak ≥ 20 %   → floor at entry × 1.12
+ *   peak 10–20 %  → floor at entry × 1.05
+ *   peak 20–35 %  → floor at entry × 1.12
+ *   peak 35–60 %  → floor at entry × 1.20
+ *   peak 60–100 % → floor at entry × 1.40
+ *   peak ≥ 100 %  → floor at entry × 1.70 (give back ~30 % of peak doubling)
+ *
+ * Extended ladder for the 12-month horizon mandate: previous ceiling of
+ * +12 % floor was too tight for priority-core that runs +60–100 %+ during
+ * an AI rally. New ladder lets winners ride longer while still cutting
+ * the position before it bleeds out a major part of unrealised gains.
  *
  * Returns null when peak gain < 5 % (no ratchet yet — ATR-stop still protects).
  */
 function trailingStopFloor(entry: number, peakPnlPct: number): number | null {
   if (peakPnlPct < 0.05) return null;
   if (peakPnlPct < 0.10) return entry * 1.02;
-  if (peakPnlPct < 0.15) return entry * 1.05;
-  if (peakPnlPct < 0.20) return entry * 1.08;
-  return entry * 1.12;
+  if (peakPnlPct < 0.20) return entry * 1.05;
+  if (peakPnlPct < 0.35) return entry * 1.12;
+  if (peakPnlPct < 0.60) return entry * 1.20;
+  if (peakPnlPct < 1.00) return entry * 1.40;
+  return entry * 1.70;
 }
 
 /**
@@ -1900,8 +1982,27 @@ async function mechanicalSafetyPass(args: {
       const peakPnlPct = (peakPrice - entry) / entry;
       const trailFloor = trailingStopFloor(entry, peakPnlPct);
 
+      // Intraday "fast deterioration" detection. Cuts the position when a
+      // big intraday drop coincides with a break of short-term trend —
+      // catches earnings-disaster gaps, regulatory shocks, FDA rejects,
+      // etc. before they bleed further. Doesn't fire on normal -6 %
+      // pullback within uptrend (those should be HELD or even bought via
+      // PATH E). Conditions:
+      //   - intraday change ≤ -7 %
+      //   - price has crossed below SMA50 (short-term trend broken)
+      //   - position is currently underwater OR peak gain < +20 %
+      //     (don't dump winners that gave back; trailing stop handles those)
+      const prevClose = bars[bars.length - 1]?.c ?? entry;
+      const intradayPct = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0;
+      const belowSma50 = sma50 != null && sma50 > 0 && price < sma50;
+      const isFastDeterioration =
+        intradayPct <= -7 &&
+        belowSma50 &&
+        (pnlPct < 0 || peakPnlPct < 0.20);
+
       let reason: string | null = null;
       if (price <= stopPrice) reason = 'MECHANICAL_ATR_STOP';
+      else if (isFastDeterioration) reason = 'MECHANICAL_FAST_DETERIORATION';
       else if (pnlPct >= blueprint.params.profitTakeThreshold) reason = 'MECHANICAL_PROFIT_TAKE';
       else if (trailFloor != null && price < trailFloor) reason = 'MECHANICAL_TRAILING_STOP';
 
@@ -2143,6 +2244,19 @@ async function runBlueprint(args: {
     bucketIsEmpty && marketClock?.is_open && !isBearRegime
       ? Math.min(baseCadenceMs, EMPTY_BUCKET_CADENCE_MS)
       : baseCadenceMs;
+  // Evening-rebalance override: force one Grok call in the 15:40–15:55 ET
+  // window per trading day. Last-hour rebalance toward names with the
+  // best overnight/next-day setup. We detect "already done today" by
+  // checking if the last decision was in today's evening window — if so,
+  // honour normal cadence (don't keep calling every minute in the window).
+  const nowEt = new Date();
+  const isEvening = isEveningRebalanceWindow(nowEt);
+  const lastWasEveningToday =
+    last != null && !last.failed
+      ? isEveningRebalanceWindow(new Date(last.decidedAt)) &&
+        etDateString(new Date(last.decidedAt)) === etDateString(nowEt)
+      : false;
+  const forceEveningCall = isEvening && !lastWasEveningToday;
   // Followers never call Grok. They execute when the leader has a FRESH
   // decision (within 2× cadence). If leader has no fresh decision, follower
   // skips this tick — leader will produce one shortly, and the follower
@@ -2153,7 +2267,7 @@ async function runBlueprint(args: {
   const shouldCallGrok =
     !isFollower &&
     inTradingWindow &&
-    (!last || last.failed || ageMs >= effectiveCadenceMs);
+    (forceEveningCall || !last || last.failed || ageMs >= effectiveCadenceMs);
   const shouldExecuteFollowerMirror =
     isFollower && inTradingWindow && followerHasFreshLeaderDecision;
 
@@ -2206,6 +2320,7 @@ async function runBlueprint(args: {
     account,
     recentOrders,
     marketClock,
+    eveningMode: isEvening,
   });
 
   // Decision source: leader calls Grok; follower reuses leader's latest.
