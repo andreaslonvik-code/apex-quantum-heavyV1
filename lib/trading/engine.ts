@@ -814,6 +814,40 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
     return { ok: true, reasons };
   }
 
+  // ── PATH G: GROK-TRUST PERMISSIVE PASSTHROUGH (priority-core) ────────
+  // User mandate (2026-05-14): priority-core picks should rarely be
+  // skipped — let Grok have more authority over these 12-month-portfolio
+  // names. PATH E demands a perfect dip; PATH F demands RS ≥ 0 and
+  // RSI ≤ 75; both reject otherwise-fine priority-core setups (e.g.
+  // shallow laggards, RSI 76-79 in healthy uptrends).
+  //
+  // PATH G defers to Grok with only hard-safety guards remaining:
+  //   - Structural uptrend (price > SMA200) — already enforced above.
+  //   - No earnings blackout — already enforced above.
+  //   - RSI < 80 — block blow-off-top extremes only.
+  //   - 5d > -10 % — block obvious decay/crash patterns.
+  //
+  // This replaces the `structural_laggard` (RS < -5) and `no_dip_no_trend`
+  // rejections for priority-core. Non-priority-core tickers still hit the
+  // strict gates below; they don't get this trust.
+  if (
+    isPriorityCore(snap.ticker) &&
+    (snap.rsi_14 == null || snap.rsi_14 < 80) &&
+    (snap.change_5d_pct == null || snap.change_5d_pct > -10)
+  ) {
+    reasons.push(
+      'priority_core_grok_trust_pathG',
+      `rsi_${snap.rsi_14?.toFixed(1) ?? '?'}`,
+      `5d_${snap.change_5d_pct?.toFixed(1) ?? '?'}%`,
+    );
+    if (snap.relative_strength_30d != null) {
+      reasons.push(`rs30d_${snap.relative_strength_30d.toFixed(1)}pp`);
+    }
+    if (snap.rising_channel) reasons.push('rising_channel');
+    if (snap.volume_accumulation) reasons.push('volume_accumulation');
+    return { ok: true, reasons };
+  }
+
   // ── Path 4: MOMENTUM LEADER (PATH C — for picking winners) ───────────
   // Highest-priority path. Multiple confirmations required:
   //   - relative_strength_30d ≥ +3 pp (outperforming SPY structurally)
@@ -1416,6 +1450,16 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
       sec &&
       (preflightSectorCounts.get(sec) ?? 0) >= SECTOR_CAP_PER_SCAN
     ) continue;
+    // Per-ticker concentration cap: a held position already at the cap
+    // will be rejected by the main loop with `concentration_cap_reached`.
+    // Skipping it here too keeps `preApproved` aligned with reality, so
+    // perPickNotional sizes the deployment correctly and we don't leave
+    // free capital sitting in cash because the divisor was inflated.
+    const existing = positionsByTicker.get(dec.ticker);
+    const existingValue = existing ? parseFloat(existing.market_value) || 0 : 0;
+    if (Math.max(0, maxNotionalPerTicker - existingValue) < MIN_NOTIONAL_USD) {
+      continue;
+    }
     preApproved += 1;
     if (sec) preflightSectorCounts.set(sec, (preflightSectorCounts.get(sec) ?? 0) + 1);
   }

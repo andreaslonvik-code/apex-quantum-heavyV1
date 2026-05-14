@@ -8,6 +8,20 @@ export const MAX_ALLOWLIST_EMAILS: readonly string[] = [
 ];
 
 /**
+ * Singleton leader email. The cron tick resolves this to a clerkUserId via
+ * Clerk, and that user's Grok decisions are mirrored to every other connected
+ * user this tick (see `app/api/cron/tick/route.ts`). Pinning the leader by
+ * email instead of by env var means the wiring can't silently break when an
+ * env var goes missing on a redeploy.
+ *
+ * Operational requirement: this user must keep their Alpaca account connected
+ * (live or paper — either works). If they disconnect, the cron logs
+ * `leaderConnected: false` and the system falls back to per-user signaling
+ * (each connected user calls Grok independently — costlier but functional).
+ */
+export const LEADER_EMAIL = 'andreas.lonvik@gmail.com';
+
+/**
  * Allowed Stripe subscription statuses that grant Plus access. `trialing`
  * is included so promo periods work; `past_due` is excluded so failed
  * payments revoke access until resolved.
