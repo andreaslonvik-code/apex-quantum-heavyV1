@@ -4,7 +4,6 @@ import { useState } from 'react';
 import { MHeader } from './components/marketing/header';
 import { Hero } from './components/marketing/hero';
 import { ProductCards } from './components/marketing/product-cards';
-import { Stats } from './components/marketing/stats';
 import { Features } from './components/marketing/features';
 import { LiveReport } from './components/marketing/live-report';
 import { CTA } from './components/marketing/cta';
@@ -21,7 +20,6 @@ export function LandingClient({ initialLang }: { initialLang: Lang }) {
       <main className="relative" style={{ zIndex: 2 }}>
         <Hero lang={lang} />
         <ProductCards lang={lang} />
-        <Stats lang={lang} />
         <Features lang={lang} />
         <LiveReport lang={lang} />
         <CTA lang={lang} />

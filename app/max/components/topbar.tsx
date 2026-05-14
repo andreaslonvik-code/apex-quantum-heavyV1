@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { SignOutButton, UserButton } from '@clerk/nextjs';
 import { I18N, fmtMoney, moneySuffix, type Lang } from './i18n';
 
@@ -68,6 +69,13 @@ export function Topbar({ lang, setLang, mode, balance, currency, accountId, botR
           <button className={lang === 'no' ? 'is-on' : ''} onClick={() => setLang('no')}>NO</button>
           <button className={lang === 'en' ? 'is-on' : ''} onClick={() => setLang('en')}>EN</button>
         </div>
+        <Link
+          href="/"
+          className="btn-ghost-sm"
+          title={lang === 'no' ? 'Tilbake til forsiden' : 'Back to homepage'}
+        >
+          {lang === 'no' ? 'Forside' : 'Homepage'}
+        </Link>
         <button className="btn-ghost-sm" onClick={onDisconnect} title={lang === 'no' ? 'Koble Alpaca-kontoen fra' : 'Disconnect Alpaca account'}>
           {t.disconnect}
         </button>
