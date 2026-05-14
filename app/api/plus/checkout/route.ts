@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
       client_reference_id: userId,
       metadata: { clerkUserId: userId },
       subscription_data: { metadata: { clerkUserId: userId } },
-      success_url: `${origin}/dashboard?checkout=success`,
+      success_url: `${origin}/dashboard?checkout=success&session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/dashboard?checkout=canceled`,
       allow_promotion_codes: true,
       automatic_tax: { enabled: true },
