@@ -69,6 +69,10 @@ const COPY = {
 
 interface Props {
   lang: Lang;
+  /** Server-resolved admin flag. Hides the "Kjør nå" button for non-admin
+   *  customers so they can't burn Grok credits with repeated clicks.
+   *  The server route enforces the same gate — this is UX, not security. */
+  isAdmin?: boolean;
 }
 
 function fmtAge(ts: string, lang: Lang): string {
@@ -81,7 +85,7 @@ function fmtAge(ts: string, lang: Lang): string {
   return `${h} ${t.hAgo}`;
 }
 
-export function GrokThesisCard({ lang }: Props) {
+export function GrokThesisCard({ lang, isAdmin = false }: Props) {
   const t = COPY[lang];
   const [latest, setLatest] = useState<Partial<Record<AssetClass, GrokRow>>>({});
   const [loaded, setLoaded] = useState(false);
@@ -195,15 +199,17 @@ export function GrokThesisCard({ lang }: Props) {
           <div className="cap">{t.title}</div>
           <div className="panel-sub">{t.sub}</div>
         </div>
-        <button
-          type="button"
-          onClick={onRunNow}
-          disabled={running}
-          className="btn-primary-v8"
-          style={{ opacity: running ? 0.5 : 1, fontSize: 12, padding: '6px 12px' }}
-        >
-          {running ? t.running : t.runNow}
-        </button>
+        {isAdmin && (
+          <button
+            type="button"
+            onClick={onRunNow}
+            disabled={running}
+            className="btn-primary-v8"
+            style={{ opacity: running ? 0.5 : 1, fontSize: 12, padding: '6px 12px' }}
+          >
+            {running ? t.running : t.runNow}
+          </button>
+        )}
       </div>
 
       {!loaded ? null : !hasAny ? (

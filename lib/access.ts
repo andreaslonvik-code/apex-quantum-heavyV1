@@ -22,6 +22,29 @@ export const MAX_ALLOWLIST_EMAILS: readonly string[] = [
 export const LEADER_EMAIL = 'andreas.lonvik@gmail.com';
 
 /**
+ * Admin emails — accounts that can fire manual operations that spend Grok
+ * credits (e.g. the "Kjør nå" Grok-thesis button on /max). Deliberately
+ * narrower than MAX_ALLOWLIST_EMAILS: regular Max-beta users see the trade
+ * results but cannot trigger ad-hoc Grok ticks, which would otherwise blow
+ * through credits in seconds if a curious customer keeps clicking.
+ */
+export const ADMIN_EMAILS: readonly string[] = [
+  'post@apex-quantum.com',
+  'andreas.lonvik@gmail.com',
+  'p.lonvik@gmail.com',
+];
+
+export async function isAdmin(): Promise<boolean> {
+  const user = await currentUser();
+  if (!user) return false;
+  const allow = new Set(ADMIN_EMAILS.map((e) => e.toLowerCase()));
+  for (const e of user.emailAddresses) {
+    if (allow.has(e.emailAddress.toLowerCase())) return true;
+  }
+  return false;
+}
+
+/**
  * Allowed Stripe subscription statuses that grant Plus access. `trialing`
  * is included so promo periods work; `past_due` is excluded so failed
  * payments revoke access until resolved.

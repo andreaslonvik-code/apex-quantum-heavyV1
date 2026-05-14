@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { generateDailySignals } from '@/lib/grok-plus';
+import { mirrorMaxDecisionsToPlus } from '@/lib/plus-mirror';
+import { resolveLeaderClerkId } from '@/lib/leader';
 import { startScan, finishScanSuccess, finishScanFailed } from '@/lib/plus-db';
 import { fetchQuotes } from '@/lib/yahoo-finance';
 
@@ -7,9 +8,13 @@ export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
 
 /**
- * Daily Plus signal scan. Triggered by Vercel cron at 06:00 UTC.
- * Calls Grok with the Plus blueprint, validates the JSON payload,
- * and persists scan + signals to Supabase.
+ * Plus signal mirror cron. Reads the leader's latest Max trading decision
+ * (stocks blueprint) and reshapes it into Plus signal cards.
+ *
+ * Previously this called Grok directly with live web/X-search (≈$200/mnd).
+ * Now it just transforms the leader's existing decision — zero Grok spend,
+ * and Plus subscribers see the exact same calls that drive Max trading.
+ * See `lib/plus-mirror.ts` for the mapping and trade-offs.
  */
 export async function GET(req: NextRequest) {
   const expected = process.env.CRON_SECRET;
@@ -24,7 +29,20 @@ export async function GET(req: NextRequest) {
   let scanId: string | null = null;
   try {
     scanId = await startScan();
-    const result = await generateDailySignals();
+
+    const leaderId = await resolveLeaderClerkId();
+    if (!leaderId) {
+      // Couldn't resolve the leader at all (Clerk down, env unset, no cache).
+      // Fail the scan rather than write empty signals; cron will retry next
+      // hour and Plus dashboard keeps showing the last successful scan.
+      await finishScanFailed(scanId, 'leader_unresolved', Date.now() - startedAt);
+      return NextResponse.json(
+        { ok: false, scanId, error: 'leader_unresolved' },
+        { status: 503 },
+      );
+    }
+
+    const result = await mirrorMaxDecisionsToPlus(leaderId);
     if (!result.ok) {
       await finishScanFailed(scanId, result.error || 'unknown', Date.now() - startedAt);
       return NextResponse.json(
@@ -33,17 +51,19 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // Capture price-at-signal so the dashboard can show change-since-signal
-    // and the track-record can compute hit-rate. Failures here are non-fatal:
-    // we still ship the signals, just without enriched prices.
+    // Price-at-signal lets the dashboard render change-since-signal and the
+    // track-record compute hit-rate. Failures are non-fatal — ship signals
+    // without enriched prices rather than blocking the scan.
     const signals = result.signals || [];
     const tickers = Array.from(new Set(signals.map((s) => s.ticker)));
-    const quotes = await fetchQuotes(tickers);
-    for (const s of signals) {
-      const q = quotes[s.ticker.toUpperCase()];
-      if (q) {
-        s.price_at_signal = q.price;
-        s.price_currency = q.currency;
+    if (tickers.length > 0) {
+      const quotes = await fetchQuotes(tickers);
+      for (const s of signals) {
+        const q = quotes[s.ticker.toUpperCase()];
+        if (q) {
+          s.price_at_signal = q.price;
+          s.price_currency = q.currency;
+        }
       }
     }
 
@@ -60,7 +80,9 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       scanId,
-      signalCount: result.signals?.length ?? 0,
+      leaderId,
+      signalCount: signals.length,
+      mirrorMode: true,
       durationMs: Date.now() - startedAt,
     });
   } catch (e) {

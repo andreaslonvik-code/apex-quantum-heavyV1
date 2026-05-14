@@ -82,7 +82,7 @@ interface AlpacaPositionPayload {
   pnlPercent: number;
 }
 
-export default function MaxClient() {
+export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const router = useRouter();
   const [lang, setLang] = useState<Lang>('no');
   const [tf, setTf] = useState<Timeframe>('24H');
@@ -507,7 +507,7 @@ export default function MaxClient() {
             largestTicker={largest?.ticker ?? null}
             largestPct={largest?.pct ?? 0}
           />
-          <GrokThesisCard lang={lang} />
+          <GrokThesisCard lang={lang} isAdmin={isAdmin} />
           {failedOrder && (
             <FailedOrderAlert
               lang={lang}

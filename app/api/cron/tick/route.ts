@@ -1,37 +1,10 @@
 import { NextResponse, type NextRequest } from 'next/server';
-import { clerkClient } from '@clerk/nextjs/server';
 import { getAllConnectedUsers } from '@/lib/user-alpaca';
 import { runScanForUser } from '@/lib/trading/engine';
-import { LEADER_EMAIL } from '@/lib/access';
+import { resolveLeaderClerkId } from '@/lib/leader';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
-
-// Cache the leader's clerkUserId per warm instance. Clerk lookups are fast,
-// but the cron runs every minute and the email-to-id mapping never changes
-// for a given account. 10-minute TTL means a freshly redeployed instance
-// learns the mapping once and reuses it across ~10 ticks.
-const LEADER_CACHE_TTL_MS = 10 * 60 * 1000;
-let leaderCache: { id: string | null; expiresAt: number } | null = null;
-
-async function resolveLeaderClerkId(): Promise<string | null> {
-  // Env override stays supported for tests and emergency repointing.
-  const envOverride = process.env.LEADER_CLERK_USER_ID;
-  if (envOverride) return envOverride;
-
-  if (leaderCache && leaderCache.expiresAt > Date.now()) {
-    return leaderCache.id;
-  }
-  try {
-    const client = await clerkClient();
-    const list = await client.users.getUserList({ emailAddress: [LEADER_EMAIL] });
-    const id = list.data[0]?.id ?? null;
-    leaderCache = { id, expiresAt: Date.now() + LEADER_CACHE_TTL_MS };
-    return id;
-  } catch {
-    return leaderCache?.id ?? null;
-  }
-}
 
 /**
  * Vercel cron entrypoint. Runs every minute, fanning out a scan-and-trade
