@@ -45,6 +45,20 @@ import {
   newsHeadlines24h,
   prefetchNews,
 } from './calendar';
+import {
+  computeMirrorPlan,
+  type LeaderSnapshot,
+  type MirrorOrder,
+} from './portfolio-mirror';
+
+// Portfolio Mirror Mode — followers rebalance toward leader's per-ticker %
+// composition instead of mirroring the decision stream. Default ON; set
+// PORTFOLIO_MIRROR_MODE=off in env to fall back to decision-stream mirror
+// for emergency rollback without a redeploy.
+const MIRROR_MODE_ENABLED = process.env.PORTFOLIO_MIRROR_MODE !== 'off';
+/** Minimum gap between mirror executions per (user, blueprint). Prevents
+ *  micro-trades from intra-minute price drift firing every cron tick. */
+const MIRROR_CADENCE_MS = 10 * 60 * 1000;
 
 /**
  * Apex Quantum trading engine — Grok-driven.
@@ -1917,6 +1931,226 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   return { trades, netDeployed };
 }
 
+interface ExecuteMirrorArgs {
+  creds: AlpacaCreds;
+  clerkUserId: string;
+  blueprint: Blueprint;
+  leaderSnapshot: LeaderSnapshot;
+  totalEquity: number;
+  allocationPct: number;
+  positionsByTicker: Map<string, AlpacaPosition>;
+  inFlightTickers: Set<string>;
+  remainingBuyingPower: number;
+  cooldownTickers: Set<string>;
+  fridayBlackout: boolean;
+  isBearRegime: boolean;
+  marketIsOpen: boolean;
+}
+
+interface ExecuteMirrorResult {
+  trades: TradeResult[];
+  netDeployed: number;
+  reason?: string;
+}
+
+/**
+ * Portfolio-mirror executor for followers. Computes delta orders from the
+ * leader's portfolio composition and dispatches them as Alpaca trades.
+ * Replaces the decision-stream executor when Portfolio Mirror Mode is on.
+ *
+ * Cadence-gated by the follower's own last decision row — won't fire more
+ * often than MIRROR_CADENCE_MS per (user, blueprint). Saves a synthetic
+ * decision row after every run so the gate works on the next tick.
+ */
+async function executeMirrorPlan(args: ExecuteMirrorArgs): Promise<ExecuteMirrorResult> {
+  const {
+    creds,
+    clerkUserId,
+    blueprint,
+    leaderSnapshot,
+    totalEquity,
+    allocationPct,
+    positionsByTicker,
+    inFlightTickers,
+    remainingBuyingPower,
+    cooldownTickers,
+    fridayBlackout,
+    isBearRegime,
+    marketIsOpen,
+  } = args;
+
+  // Cadence gate per (follower, blueprint). Without it, the cron's
+  // 1-minute tick would re-fire mirror every minute and intra-minute
+  // price drift would create order churn on already-converged positions.
+  const myLast = await getLatestDecision(clerkUserId, blueprint.id);
+  const myAgeMs =
+    myLast && !myLast.failed ? Date.now() - new Date(myLast.decidedAt).getTime() : Infinity;
+  if (Number.isFinite(myAgeMs) && myAgeMs < MIRROR_CADENCE_MS) {
+    return { trades: [], netDeployed: 0, reason: 'mirror_within_cadence' };
+  }
+
+  const plan: MirrorOrder[] = computeMirrorPlan({
+    leaderSnapshot,
+    blueprint,
+    followerEquity: totalEquity,
+    followerAllocationPct: allocationPct,
+    followerPositions: positionsByTicker,
+    followerInFlight: inFlightTickers,
+    followerBuyingPower: remainingBuyingPower,
+    cooldownTickers,
+    fridayBlackout,
+    isBearRegime,
+  });
+
+  const trades: TradeResult[] = [];
+  let netDeployed = 0;
+  const isCrypto = blueprint.id === 'crypto';
+
+  if (plan.length === 0) {
+    // No delta this tick. Still save a synthetic decision so the cadence
+    // gate resets — otherwise a converged portfolio would re-evaluate every
+    // single tick (which is what computeMirrorPlan is supposed to prevent).
+    await saveDecision({
+      clerkUserId,
+      blueprintId: blueprint.id,
+      thesis: '[portfolio-mirror] no rebalance needed',
+      decisions: [],
+      rawResponse: null,
+      failed: false,
+    });
+    return { trades, netDeployed: 0, reason: 'mirror_no_delta' };
+  }
+
+  const sells = plan.filter((o) => o.action === 'SELL');
+  const buys = plan.filter((o) => o.action === 'BUY');
+
+  // ── Phase 1: SELLs in parallel ──────────────────────────────────────
+  const sellResults = await Promise.all(
+    sells.map(async (o): Promise<TradeResult> => {
+      const held = positionsByTicker.get(o.ticker);
+      if (!held) return skipTrade(blueprint.id, o.ticker, 'SELL', 'no_position');
+      // Defense-in-depth: never extend a short. The 2026-04-30 incident's
+      // bug class was sending SELLs on already-short positions; engine
+      // should refuse the order at the source.
+      if (held.side !== 'long') return skipTrade(blueprint.id, o.ticker, 'SELL', 'not_long');
+      const qty = o.qty ?? parseFloat(held.qty) ?? 0;
+      if (qty <= 0) return skipTrade(blueprint.id, o.ticker, 'SELL', 'zero_qty');
+      const currentPrice = parseFloat(held.current_price) || 0;
+      let orderReq: import('@/lib/alpaca').AlpacaOrderRequest | null;
+      if (isCrypto) {
+        orderReq = {
+          symbol: tradingSymbol(o.ticker),
+          qty,
+          side: 'sell',
+          type: 'market',
+          time_in_force: 'gtc',
+          position_intent: 'sell_to_close',
+        };
+      } else {
+        orderReq = buildStockOrder({
+          symbol: tradingSymbol(o.ticker),
+          side: 'sell',
+          qty,
+          currentPrice,
+          marketIsOpen,
+        });
+      }
+      if (!orderReq) return skipTrade(blueprint.id, o.ticker, 'SELL', 'no_price_for_extended_hours');
+      const r = await placeOrder(creds, orderReq);
+      const notional = qty * currentPrice;
+      return {
+        blueprintId: blueprint.id,
+        ticker: o.ticker,
+        action: 'SELL',
+        qty,
+        notional,
+        status: r.success ? 'OK' : 'ERR',
+        reason: o.reason,
+        error: r.success ? undefined : r.error,
+      };
+    }),
+  );
+  trades.push(...sellResults);
+  for (const t of sellResults) {
+    if (t.status === 'OK' && t.action === 'SELL') {
+      positionsByTicker.delete(t.ticker);
+      netDeployed -= t.notional;
+    }
+  }
+
+  // ── Phase 2: BUYs sequentially (preserve buying-power accounting) ───
+  for (const o of buys) {
+    const notional = o.notional ?? 0;
+    if (notional < 1) {
+      trades.push(skipTrade(blueprint.id, o.ticker, 'BUY', 'mirror_below_min'));
+      continue;
+    }
+    let orderReq: import('@/lib/alpaca').AlpacaOrderRequest | null;
+    if (isCrypto) {
+      orderReq = {
+        symbol: tradingSymbol(o.ticker),
+        notional,
+        side: 'buy',
+        type: 'market',
+        time_in_force: 'gtc',
+        position_intent: 'buy_to_open',
+      };
+    } else {
+      const priceRes = await getLatestPrice(creds, tradingSymbol(o.ticker));
+      const currentPrice = priceRes.success && priceRes.data > 0 ? priceRes.data : 0;
+      orderReq = buildStockOrder({
+        symbol: tradingSymbol(o.ticker),
+        side: 'buy',
+        notional,
+        currentPrice,
+        marketIsOpen,
+      });
+    }
+    if (!orderReq) {
+      trades.push(skipTrade(blueprint.id, o.ticker, 'BUY', 'no_price_for_extended_hours'));
+      continue;
+    }
+    const r = await placeOrder(creds, orderReq);
+    trades.push({
+      blueprintId: blueprint.id,
+      ticker: o.ticker,
+      action: 'BUY',
+      qty: 0,
+      notional,
+      status: r.success ? 'OK' : 'ERR',
+      reason: o.reason,
+      error: r.success ? undefined : r.error,
+    });
+    if (r.success) netDeployed += notional;
+  }
+
+  // Persist this tick's mirror action — drives the next tick's cadence gate
+  // and gives the UI's "decided X min ago" timestamp something to show.
+  await saveDecision({
+    clerkUserId,
+    blueprintId: blueprint.id,
+    thesis: `[portfolio-mirror ← ${leaderSnapshot.clerkUserId.slice(0, 12)}…]`,
+    decisions: plan.map((o) => ({
+      ticker: o.ticker,
+      action: o.action,
+      reason: o.reason,
+    })),
+    tradeOutcomes: trades.map((t) => ({
+      ticker: t.ticker,
+      action: t.action,
+      status: t.status,
+      notional: t.notional,
+      qty: t.qty,
+      reason: t.reason,
+      ...(t.error ? { error: t.error } : {}),
+    })),
+    rawResponse: null,
+    failed: false,
+  });
+
+  return { trades, netDeployed };
+}
+
 function skipTrade(
   blueprintId: AssetClass,
   ticker: string,
@@ -2130,13 +2364,16 @@ async function runBlueprint(args: {
   /** SPY 30-trading-day return — benchmark for ticker relative strength. */
   spyReturn30d: number | null;
   /** Leader-follower mode. When this differs from `clerkUserId`, we treat
-   *  the user as a FOLLOWER: skip the Grok call entirely and mirror the
-   *  leader's latest decision (BUY/SELL/HOLD ticker list) against this
-   *  user's own account. Per-user sizing (bucketCapital / maxPositions)
-   *  + per-user filters (kill-switch, PDT, friday-blackout, anticipatory,
-   *  cool-down) still apply. The leader's actual notional is ignored —
-   *  engine sizes from follower's own bucket. */
+   *  the user as a FOLLOWER: skip the Grok call entirely. With Portfolio
+   *  Mirror Mode (default), follower rebalances to match leader's per-ticker
+   *  % composition. With mirror disabled, falls back to decision-stream
+   *  mirror (BUY/SELL/HOLD ticker list against own account).
+   *  Per-user safety filters (kill-switch, friday-blackout, cool-down) still
+   *  apply in both modes. */
   signalSourceClerkUserId: string;
+  /** Leader's Alpaca state, fetched once per cron tick. Required for
+   *  Portfolio Mirror Mode; ignored otherwise. */
+  leaderSnapshot?: LeaderSnapshot;
 }): Promise<BlueprintRunResult & { deployedNotional: number }> {
   const {
     creds,
@@ -2157,6 +2394,7 @@ async function runBlueprint(args: {
     fridayBlackout,
     spyReturn30d,
     signalSourceClerkUserId,
+    leaderSnapshot,
   } = args;
   const isFollower = signalSourceClerkUserId !== clerkUserId;
 
@@ -2241,6 +2479,40 @@ async function runBlueprint(args: {
     if (t.action === 'SELL' && t.status === 'OK') {
       positionsByTicker.delete(t.ticker);
     }
+  }
+
+  // 1b. Portfolio Mirror Mode — followers rebalance their portfolio %s to
+  // match the leader's per-ticker composition. Replaces the decision-stream
+  // mirror for followers when MIRROR_MODE_ENABLED and a fresh leader snapshot
+  // is available. Leader path falls through to Grok logic below.
+  if (isFollower && MIRROR_MODE_ENABLED && leaderSnapshot) {
+    const cooldownTickersForMirror = await getRecentStopOutTickers(clerkUserId, blueprint.id, 5);
+    const mirrorRes = await executeMirrorPlan({
+      creds,
+      clerkUserId,
+      blueprint,
+      leaderSnapshot,
+      totalEquity,
+      allocationPct,
+      positionsByTicker,
+      inFlightTickers,
+      remainingBuyingPower,
+      cooldownTickers: cooldownTickersForMirror,
+      fridayBlackout,
+      isBearRegime,
+      marketIsOpen: marketClock?.is_open ?? false,
+    });
+    if (mirrorRes.reason) {
+      result.reason = mirrorRes.reason;
+    }
+    result.trades.push(...mirrorRes.trades);
+    result.grokCalled = false;
+    result.thesis = `[portfolio-mirror ← ${signalSourceClerkUserId.slice(0, 12)}…]`;
+    result.positionsHeld =
+      positionsByTicker.size + mirrorRes.trades.filter(
+        (t) => t.action === 'BUY' && t.status === 'OK',
+      ).length;
+    return { ...result, deployedNotional: mirrorRes.netDeployed };
   }
 
   // 2. Decide whether to call Grok this tick. Defensive parse of decidedAt:
@@ -2470,6 +2742,10 @@ export async function runScanForUser(
    *  When omitted or equal to clerkUserId, this user is self-signaled
    *  (calls Grok normally). */
   signalSourceClerkUserId?: string,
+  /** Pre-fetched leader Alpaca state. Required for Portfolio Mirror Mode
+   *  on followers. Caller (cron/tick) fetches once per cron tick after
+   *  leader's own scan completes, then passes to every follower. */
+  leaderSnapshot?: LeaderSnapshot,
 ): Promise<UserScanResult> {
   const effectiveSignalSource = signalSourceClerkUserId ?? clerkUserId;
   const ranAt = new Date().toISOString();
@@ -2586,6 +2862,7 @@ export async function runScanForUser(
       fridayBlackout,
       spyReturn30d,
       signalSourceClerkUserId: effectiveSignalSource,
+      leaderSnapshot,
     });
     remainingBuyingPower = Math.max(0, remainingBuyingPower - result.deployedNotional);
     out.blueprints.push(result);

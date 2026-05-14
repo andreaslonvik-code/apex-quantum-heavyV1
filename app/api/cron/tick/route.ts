@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import { getAllConnectedUsers } from '@/lib/user-alpaca';
 import { runScanForUser } from '@/lib/trading/engine';
+import { fetchLeaderSnapshot } from '@/lib/trading/portfolio-mirror';
 import { resolveLeaderClerkId } from '@/lib/leader';
 
 export const dynamic = 'force-dynamic';
@@ -23,12 +24,17 @@ export const maxDuration = 300;
  * connected user). With N=10 connected users, this is ~90% reduction in
  * Grok/Live-Search spend.
  *
- * Per-follower sizing/safety preserved: engine sizes BUYs from each
- * follower's own bucketCapital, and per-follower filters (kill-switch,
- * PDT, friday-blackout, anticipatory, cool-down) still apply.
+ * Portfolio Mirror Mode (default ON): followers rebalance toward the
+ * leader's per-ticker % composition rather than mirroring the decision
+ * stream. We fetch leader's Alpaca state once per tick (after leader's
+ * own scan completes) and pass it to every follower. Disable with
+ * PORTFOLIO_MIRROR_MODE=off env var.
  *
- * If LEADER_CLERK_USER_ID is unset or the leader isn't connected, every
- * user falls back to self-signaling (original behaviour).
+ * Per-follower safety preserved: kill-switch, friday-blackout, cool-down
+ * still apply. Bear regime halves BUY notionals.
+ *
+ * If the leader isn't connected, every user falls back to self-signaling
+ * (original behaviour).
  *
  * Execution order is leader-first (awaited) so followers always see a
  * fresh leader decision when they run.
@@ -47,24 +53,41 @@ export async function GET(req: NextRequest) {
   const leader = leaderId ? users.find((u) => u.clerkUserId === leaderId) ?? null : null;
   const followers = leader ? users.filter((u) => u.clerkUserId !== leader.clerkUserId) : [];
 
-  const runOne = (u: (typeof users)[number], signalSource?: string) =>
+  const runOne = (
+    u: (typeof users)[number],
+    signalSource?: string,
+    leaderSnapshot?: Awaited<ReturnType<typeof fetchLeaderSnapshot>>,
+  ) =>
     runScanForUser(
       { apiKey: u.apiKey, apiSecret: u.apiSecret, env: u.environment },
       u.clerkUserId,
       signalSource,
+      leaderSnapshot ?? undefined,
     );
 
   let leaderResult: PromiseSettledResult<Awaited<ReturnType<typeof runScanForUser>>> | null = null;
   if (leader) {
-    // Leader runs FIRST (awaited) so followers see a fresh decision.
+    // Leader runs FIRST (awaited) so its trades from this tick are reflected
+    // in the snapshot we fetch afterward for followers.
     leaderResult = await Promise.allSettled([runOne(leader)]).then((r) => r[0]);
   }
 
-  // Followers run in parallel, mirroring leader's signal stream. If no
-  // leader is configured/connected, every user runs as a self-signaler.
+  // After leader runs, capture portfolio state for Portfolio Mirror Mode.
+  // Single fetch shared by every follower — saves N round-trips to Alpaca.
+  // Null result (e.g. leader's Alpaca call failed) → followers fall back to
+  // decision-stream mirror automatically inside runBlueprint.
+  const leaderSnapshot = leader
+    ? await fetchLeaderSnapshot(
+        { apiKey: leader.apiKey, apiSecret: leader.apiSecret, env: leader.environment },
+        leader.clerkUserId,
+      )
+    : null;
+
+  // Followers run in parallel. If no leader is configured/connected, every
+  // user runs as a self-signaler (no snapshot needed).
   const followerOrFallbackList = leader ? followers : users;
   const followerResults = await Promise.allSettled(
-    followerOrFallbackList.map((u) => runOne(u, leader?.clerkUserId)),
+    followerOrFallbackList.map((u) => runOne(u, leader?.clerkUserId, leaderSnapshot ?? undefined)),
   );
 
   const allResults: Array<{ clerkUserId: string; role: 'leader' | 'follower' | 'self' } & (
@@ -95,8 +118,13 @@ export async function GET(req: NextRequest) {
     ranAt: new Date().toISOString(),
     userCount: users.length,
     signalMode: leader ? 'leader-follower' : 'self-signaled',
+    mirrorMode:
+      leader && leaderSnapshot && process.env.PORTFOLIO_MIRROR_MODE !== 'off'
+        ? 'portfolio'
+        : 'decision-stream',
     leaderConfigured: !!leaderId,
     leaderConnected: !!leader,
+    leaderSnapshotReady: !!leaderSnapshot,
     results: allResults,
   });
 }
