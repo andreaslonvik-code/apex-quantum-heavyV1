@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { PLUS_FOR_SALE, PLUS_DEV_LABELS } from '@/lib/product-status';
 import type { Lang } from './types';
 
 const COPY = {
@@ -107,16 +108,17 @@ export function ProductCards({ lang }: { lang: Lang }) {
           }}
         >
           <ProductCard
-            available
-            tag={t.plus.tag}
+            available={PLUS_FOR_SALE}
+            tag={PLUS_FOR_SALE ? t.plus.tag : PLUS_DEV_LABELS[lang].tag}
             name={t.plus.name}
             tagline={t.plus.tagline}
             price={t.plus.price}
             cycle={t.plus.cycle}
             desc={t.plus.desc}
             bullets={[...t.plus.bullets]}
-            primaryCta={t.plus.cta}
+            primaryCta={PLUS_FOR_SALE ? t.plus.cta : PLUS_DEV_LABELS[lang].cta}
             primaryHref="/sign-up"
+            primaryDisabled={!PLUS_FOR_SALE}
             secondaryCta={t.plus.cta2}
             secondaryHref="/plus"
           />
@@ -151,6 +153,7 @@ interface ProductCardProps {
   bullets: string[];
   primaryCta: string;
   primaryHref: string;
+  primaryDisabled?: boolean;
   secondaryCta: string;
   secondaryHref: string;
 }
@@ -166,6 +169,7 @@ function ProductCard({
   bullets,
   primaryCta,
   primaryHref,
+  primaryDisabled,
   secondaryCta,
   secondaryHref,
 }: ProductCardProps) {
@@ -249,7 +253,16 @@ function ProductCard({
         ))}
       </ul>
       <div style={{ display: 'flex', gap: 10, marginTop: 28, flexWrap: 'wrap' }}>
-        {primaryHref.startsWith('mailto:') ? (
+        {primaryDisabled ? (
+          <button
+            type="button"
+            className="btn-ghost-v8 btn-sm"
+            disabled
+            style={{ opacity: 0.55, cursor: 'not-allowed' }}
+          >
+            {primaryCta}
+          </button>
+        ) : primaryHref.startsWith('mailto:') ? (
           <a href={primaryHref} className={available ? 'btn-primary-v8 btn-sm' : 'btn-ghost-v8 btn-sm'}>
             {primaryCta}
           </a>

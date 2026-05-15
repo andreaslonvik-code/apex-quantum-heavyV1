@@ -197,6 +197,28 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
     return { ticker: top.ticker, pct };
   }, [positions, totalForExposure]);
 
+  // Recent successful engine orders, indexed by ticker (both crypto forms).
+  // 15 min window ≈ scan cadence + fill latency. This is the only honest
+  // "signal" the dashboard has — it reflects what the engine actually did,
+  // never a P&L guess. ERR/PENDING orders don't count.
+  const recentActionByTicker = useMemo(() => {
+    const RECENT_WINDOW_MS = 15 * 60 * 1000;
+    const cutoff = Date.now() - RECENT_WINDOW_MS;
+    const map = new Map<string, 'BUY' | 'SELL'>();
+    for (const o of orders) {
+      if (o.status !== 'OK') continue;
+      const t = Date.parse(o.submittedAt);
+      if (!Number.isFinite(t) || t < cutoff) continue;
+      const norm = o.ticker;
+      if (!map.has(norm)) map.set(norm, o.action);
+      if (!norm.includes('/') && /^[A-Z]+USD$/.test(norm) && norm.length >= 6) {
+        const slashed = `${norm.slice(0, -3)}/USD`;
+        if (!map.has(slashed)) map.set(slashed, o.action);
+      }
+    }
+    return map;
+  }, [orders]);
+
   const watchlistRowsByBlueprint = useMemo(() => {
     // Alpaca crypto positions come back without slash ("BTCUSD"); blueprints
     // store the data-API form ("BTC/USD"). Index held positions by both forms
@@ -209,37 +231,18 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
       }
     }
 
-    // Recent successful orders override the P&L heuristic — 15 min window
-    // matches the typical scan cadence + fill latency. ERR/PENDING don't count.
-    const RECENT_WINDOW_MS = 15 * 60 * 1000;
-    const cutoff = Date.now() - RECENT_WINDOW_MS;
-    const recentByTicker = new Map<string, 'BUY' | 'SELL'>();
-    for (const o of orders) {
-      if (o.status !== 'OK') continue;
-      const t = Date.parse(o.submittedAt);
-      if (!Number.isFinite(t) || t < cutoff) continue;
-      const norm = o.ticker;
-      if (!recentByTicker.has(norm)) recentByTicker.set(norm, o.action);
-      if (!norm.includes('/') && /^[A-Z]+USD$/.test(norm) && norm.length >= 6) {
-        const slashed = `${norm.slice(0, -3)}/USD`;
-        if (!recentByTicker.has(slashed)) recentByTicker.set(slashed, o.action);
-      }
-    }
-
-    const SELL_LOSS_PCT = -1.8;
-    const SELL_PROFIT_PCT = 15;
-
     const buildRows = (blueprintId: AssetClass): WatchlistRow[] => {
       const bp = BLUEPRINTS[blueprintId];
       return bp.watchlist.map((ticker) => {
         const name = bp.tickerNames?.[ticker] ?? ticker;
         const held = heldByTicker.get(ticker);
-        const recent = recentByTicker.get(ticker);
+        const recent = recentActionByTicker.get(ticker);
         if (held) {
-          let sig: Signal;
-          if (recent) sig = recent;
-          else if (held.pnlPercent <= SELL_LOSS_PCT || held.pnlPercent >= SELL_PROFIT_PCT) sig = 'SELL';
-          else sig = 'HOLD';
+          // Held position: show the engine's last real action within the
+          // recent window, else HOLD. The dashboard never invents a SELL
+          // from P&L — the engine's ATR/trailing stops decide exits, and
+          // those aren't visible client-side, so a guess would mislead.
+          const sig: Signal = recent ?? 'HOLD';
           return { ticker, name, qty: held.antall, avg: held.avgPrice, mark: held.currentPrice, signal: sig };
         }
         if (recent === 'BUY') {
@@ -257,7 +260,7 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
       crypto: buildRows('crypto'),
       commodities: buildRows('commodities'),
     };
-  }, [positions, orders]);
+  }, [positions, recentActionByTicker]);
 
   /**
    * Unified "Mine posisjoner" — every held position across all three
@@ -274,9 +277,6 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
       }
     }
 
-    const SELL_LOSS_PCT = -1.8;
-    const SELL_PROFIT_PCT = 15;
-
     const rows: Array<WatchlistRow & { _mv: number }> = [];
     for (const p of positions) {
       if (!Number.isFinite(p.antall) || p.antall <= 0) continue;
@@ -290,9 +290,10 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
         displayTicker = `${displayTicker.slice(0, -3)}/USD`;
       }
       const name = tickerToName.get(displayTicker) ?? p.symbol;
-      let sig: Signal;
-      if (p.pnlPercent <= SELL_LOSS_PCT || p.pnlPercent >= SELL_PROFIT_PCT) sig = 'SELL';
-      else sig = 'HOLD';
+      // Signal = the engine's last real action on this ticker, else HOLD —
+      // see recentActionByTicker. No P&L-derived SELL: the dashboard must
+      // not claim a sell the engine has not made.
+      const sig: Signal = recentActionByTicker.get(displayTicker) ?? 'HOLD';
 
       rows.push({
         ticker: displayTicker,
@@ -306,7 +307,7 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
     }
     rows.sort((a, b) => b._mv - a._mv);
     return rows.map(({ _mv: _mv, ...row }) => row);
-  }, [positions]);
+  }, [positions, recentActionByTicker]);
 
   const equityPoints = useMemo(() => {
     if (!performance?.chartData?.length) return undefined;

@@ -4,6 +4,7 @@ import { Fragment, useState } from 'react';
 import Link from 'next/link';
 import { SignOutButton, useUser } from '@clerk/nextjs';
 import { PageShell } from '@/app/components/marketing/page-shell';
+import { PLUS_FOR_SALE, PLUS_DEV_LABELS } from '@/lib/product-status';
 import type { Lang } from '@/app/components/marketing/types';
 
 const COPY: Record<
@@ -12,6 +13,9 @@ const COPY: Record<
     eye: string;
     title: string;
     sub: string;
+    eyeSoon: string;
+    titleSoon: string;
+    subSoon: string;
     bullets: readonly string[];
     foot: readonly string[];
     signedInAs: string;
@@ -26,6 +30,9 @@ const COPY: Record<
     eye: 'BETA — VENTELISTE',
     title: 'Du er på listen.',
     sub: 'Apex Quantum + er i lukket beta mens vi finjusterer signal-pipelinen. Du kan starte abonnement nå og få full tilgang så snart beta åpnes for ditt nivå — eller vente til vi åpner bredt.',
+    eyeSoon: 'UNDER UTVIKLING',
+    titleSoon: 'Snart tilgjengelig.',
+    subSoon: 'Apex Quantum + er under utvikling. Nye abonnement er midlertidig stengt mens vi fullfører den juridiske lisensieringen. Eksisterende abonnenter beholder full tilgang — vi sier fra her så snart vi åpner igjen.',
     bullets: [
       'Daglige AI-signaler med begrunnelse',
       'Ukentlige markedsrapporter',
@@ -44,6 +51,9 @@ const COPY: Record<
     eye: 'BETA — WAITLIST',
     title: 'You are on the list.',
     sub: 'Apex Quantum + is in closed beta while we tune the signal pipeline. You can start a subscription now and get full access the moment beta opens for your tier — or wait until we open widely.',
+    eyeSoon: 'IN DEVELOPMENT',
+    titleSoon: 'Coming soon.',
+    subSoon: 'Apex Quantum + is in development. New subscriptions are temporarily closed while we complete regulatory licensing. Existing subscribers keep full access — we will post here the moment we reopen.',
     bullets: [
       'Daily AI signals with reasoning',
       'Weekly market reports',
@@ -119,7 +129,7 @@ function Inner({ lang }: { lang: Lang }) {
       <div style={{ maxWidth: 720, margin: '0 auto', textAlign: 'center' }}>
         <div className="m-eyebrow">
           <span className="m-badge-dot" />
-          {t.eye}
+          {PLUS_FOR_SALE ? t.eye : t.eyeSoon}
         </div>
         <h1
           style={{
@@ -130,7 +140,7 @@ function Inner({ lang }: { lang: Lang }) {
             lineHeight: 1.05,
           }}
         >
-          {t.title}
+          {PLUS_FOR_SALE ? t.title : t.titleSoon}
         </h1>
         <p
           style={{
@@ -140,7 +150,7 @@ function Inner({ lang }: { lang: Lang }) {
             lineHeight: 1.6,
           }}
         >
-          {t.sub}
+          {PLUS_FOR_SALE ? t.sub : t.subSoon}
         </p>
 
         <ul
@@ -163,57 +173,72 @@ function Inner({ lang }: { lang: Lang }) {
         </ul>
 
         <div style={{ marginTop: 40, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-          <button
-            type="button"
-            className="btn-primary-v8 btn-lg"
-            onClick={handleStart}
-            disabled={starting}
-          >
-            {starting ? t.starting : `${t.startCta} — ${t.price}`}
-            {!starting && (
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2">
-                <path d="M5 12h14M12 5l7 7-7 7" />
-              </svg>
-            )}
-          </button>
-          <div className="m-foot-strip" style={{ justifyContent: 'center' }}>
-            {t.foot.map((s, i) => (
-              <Fragment key={i}>
-                <span>{s}</span>
-                {i < t.foot.length - 1 && <span className="m-foot-sep">•</span>}
-              </Fragment>
-            ))}
-          </div>
-          {error && (
-            <div
-              style={{
-                marginTop: 8,
-                padding: '8px 14px',
-                background: 'rgba(239,68,68,0.08)',
-                border: '1px solid rgba(239,68,68,0.30)',
-                borderRadius: 8,
-                fontSize: 13,
-                color: '#F87171',
-              }}
+          {PLUS_FOR_SALE ? (
+            <>
+              <button
+                type="button"
+                className="btn-primary-v8 btn-lg"
+                onClick={handleStart}
+                disabled={starting}
+              >
+                {starting ? t.starting : `${t.startCta} — ${t.price}`}
+                {!starting && (
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2">
+                    <path d="M5 12h14M12 5l7 7-7 7" />
+                  </svg>
+                )}
+              </button>
+              <div className="m-foot-strip" style={{ justifyContent: 'center' }}>
+                {t.foot.map((s, i) => (
+                  <Fragment key={i}>
+                    <span>{s}</span>
+                    {i < t.foot.length - 1 && <span className="m-foot-sep">•</span>}
+                  </Fragment>
+                ))}
+              </div>
+              {error && (
+                <div
+                  style={{
+                    marginTop: 8,
+                    padding: '8px 14px',
+                    background: 'rgba(239,68,68,0.08)',
+                    border: '1px solid rgba(239,68,68,0.30)',
+                    borderRadius: 8,
+                    fontSize: 13,
+                    color: '#F87171',
+                  }}
+                >
+                  {error}
+                </div>
+              )}
+            </>
+          ) : (
+            <button
+              type="button"
+              className="btn-ghost-v8 btn-lg"
+              disabled
+              style={{ opacity: 0.55, cursor: 'not-allowed' }}
             >
-              {error}
-            </div>
+              {PLUS_DEV_LABELS[lang].cta}
+            </button>
           )}
         </div>
 
-        <p
-          style={{
-            marginTop: 24,
-            maxWidth: 520,
-            marginLeft: 'auto',
-            marginRight: 'auto',
-            fontSize: 12,
-            color: 'rgba(255,255,255,0.45)',
-            lineHeight: 1.55,
-          }}
-        >
-          <LegalNote lang={lang} />
-        </p>
+        {PLUS_FOR_SALE && (
+          <p
+            style={{
+              marginTop: 24,
+              maxWidth: 520,
+              marginLeft: 'auto',
+              marginRight: 'auto',
+              fontSize: 12,
+              color: 'rgba(255,255,255,0.45)',
+              lineHeight: 1.55,
+            }}
+          >
+            <LegalNote lang={lang} />
+          </p>
+        )}
 
         <div
           style={{

@@ -2420,8 +2420,6 @@ async function runBlueprint(args: {
     reason: killSwitchOn ? 'daily_kill_switch' : undefined,
   };
 
-  if (killSwitchOn) return { ...result, deployedNotional: 0 };
-
   // If user has zero allocation to this bucket but positions still exist
   // (e.g. they reallocated 100 % to stocks after holding commodities),
   // liquidate all in-bucket holdings so capital flows to other buckets.
@@ -2465,7 +2463,11 @@ async function runBlueprint(args: {
     return { ...result, deployedNotional: 0 };
   }
 
-  // 1. Mechanical safety always runs first.
+  // 1. Mechanical safety always runs first — and crucially BEFORE the daily
+  //    kill-switch gate below. ATR-stop, trailing-stop, profit-take and
+  //    fast-deterioration must keep protecting open positions even on a
+  //    kill-switch day: the kill-switch freezes *new* risk, it must never
+  //    freeze the stop-losses guarding existing positions.
   const safetyTrades = await mechanicalSafetyPass({
     creds,
     blueprint,
@@ -2480,6 +2482,12 @@ async function runBlueprint(args: {
       positionsByTicker.delete(t.ticker);
     }
   }
+
+  // Daily kill-switch: account is down ≥ dailyKillSwitchPct on the day. The
+  // mechanical safety pass above has already run, so existing positions keep
+  // their stop-losses; from here we only stop opening NEW risk — no Grok
+  // call, no BUYs, no rebalancing — until the daily P&L resets.
+  if (killSwitchOn) return { ...result, deployedNotional: 0 };
 
   // 1b. Portfolio Mirror Mode — followers rebalance their portfolio %s to
   // match the leader's per-ticker composition. Replaces the decision-stream

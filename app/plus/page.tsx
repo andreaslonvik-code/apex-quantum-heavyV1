@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { Fragment, type ReactNode } from 'react';
 import { PageShell } from '@/app/components/marketing/page-shell';
+import { PLUS_FOR_SALE, PLUS_DEV_LABELS } from '@/lib/product-status';
 import type { Lang } from '@/app/components/marketing/types';
 
 type IconKey = 'signal' | 'report' | 'lesson' | 'glossary' | 'paper' | 'journal';
@@ -263,12 +264,23 @@ export default function PlusPage() {
                   ))}
                 </div>
                 <div className="m-cta-row">
-                  <Link href="/sign-up" className="btn-primary-v8 btn-lg">
-                    {t.cta}
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2">
-                      <path d="M5 12h14M12 5l7 7-7 7" />
-                    </svg>
-                  </Link>
+                  {PLUS_FOR_SALE ? (
+                    <Link href="/sign-up" className="btn-primary-v8 btn-lg">
+                      {t.cta}
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                      </svg>
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn-ghost-v8 btn-lg"
+                      disabled
+                      style={{ opacity: 0.55, cursor: 'not-allowed' }}
+                    >
+                      {PLUS_DEV_LABELS[lang].cta}
+                    </button>
+                  )}
                   <a href="#innhold" className="btn-ghost-v8 btn-lg">{t.cta2}</a>
                 </div>
                 <div className="m-foot-strip">
@@ -407,12 +419,23 @@ export default function PlusPage() {
                       </li>
                     ))}
                   </ul>
-                  <Link href="/sign-up" className="btn-primary-v8 btn-lg" style={{ marginTop: 32 }}>
-                    {t.primaryCta}
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2">
-                      <path d="M5 12h14M12 5l7 7-7 7" />
-                    </svg>
-                  </Link>
+                  {PLUS_FOR_SALE ? (
+                    <Link href="/sign-up" className="btn-primary-v8 btn-lg" style={{ marginTop: 32 }}>
+                      {t.primaryCta}
+                      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2">
+                        <path d="M5 12h14M12 5l7 7-7 7" />
+                      </svg>
+                    </Link>
+                  ) : (
+                    <button
+                      type="button"
+                      className="btn-ghost-v8 btn-lg"
+                      disabled
+                      style={{ marginTop: 32, opacity: 0.55, cursor: 'not-allowed' }}
+                    >
+                      {PLUS_DEV_LABELS[lang].cta}
+                    </button>
+                  )}
                 </div>
 
                 <p

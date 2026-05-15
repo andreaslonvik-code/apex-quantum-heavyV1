@@ -1,10 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { stripe, PLUS_PRICE_ID } from '@/lib/stripe';
+import { PLUS_FOR_SALE } from '@/lib/product-status';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  // New Plus sales are paused until the regulatory licence is in place
+  // (see lib/product-status.ts / LEGAL_REVIEW.md). This is the hard gate:
+  // it blocks checkout even if a marketing CTA is reached directly. Existing
+  // subscribers are unaffected — their access is gated by hasPlusAccess().
+  if (!PLUS_FOR_SALE) {
+    return NextResponse.json({ error: 'plus_not_for_sale' }, { status: 403 });
+  }
+
   if (!stripe) {
     return NextResponse.json({ error: 'stripe_not_configured' }, { status: 500 });
   }

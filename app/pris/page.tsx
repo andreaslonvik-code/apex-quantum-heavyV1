@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { PageShell } from '@/app/components/marketing/page-shell';
+import { PLUS_FOR_SALE, PLUS_DEV_LABELS } from '@/lib/product-status';
 import type { Lang } from '@/app/components/marketing/types';
 
 const COPY = {
@@ -106,6 +107,16 @@ export default function PrisPage() {
     <PageShell>
       {(lang: Lang) => {
         const t = COPY[lang];
+        // Plus sales are paused (see lib/product-status.ts) — show the
+        // in-development badge and a disabled CTA, mirroring the Max plan.
+        const plusPlan = {
+          ...t.plus,
+          tag: PLUS_FOR_SALE ? t.plus.tag : PLUS_DEV_LABELS[lang].tag,
+          cta: PLUS_FOR_SALE ? t.plus.cta : PLUS_DEV_LABELS[lang].cta,
+          ctaPrimary: PLUS_FOR_SALE,
+          ctaDisabled: !PLUS_FOR_SALE,
+        };
+        const plans = [plusPlan, { ...t.max, ctaDisabled: false }];
         return (
           <section style={{ padding: '140px 24px 96px' }}>
             <div style={{ maxWidth: 720, margin: '0 auto', textAlign: 'center' }}>
@@ -146,7 +157,7 @@ export default function PrisPage() {
                 alignItems: 'stretch',
               }}
             >
-              {[t.plus, t.max].map((plan) => (
+              {plans.map((plan) => (
                 <div
                   key={plan.name}
                   className="m-live-card"
@@ -238,7 +249,16 @@ export default function PrisPage() {
                       </li>
                     ))}
                   </ul>
-                  {plan.ctaHref.startsWith('mailto:') ? (
+                  {plan.ctaDisabled ? (
+                    <button
+                      type="button"
+                      className="btn-ghost-v8 btn-lg"
+                      disabled
+                      style={{ marginTop: 32, opacity: 0.55, cursor: 'not-allowed' }}
+                    >
+                      {plan.cta}
+                    </button>
+                  ) : plan.ctaHref.startsWith('mailto:') ? (
                     <a
                       href={plan.ctaHref}
                       className={plan.ctaPrimary ? 'btn-primary-v8 btn-lg' : 'btn-ghost-v8 btn-lg'}
