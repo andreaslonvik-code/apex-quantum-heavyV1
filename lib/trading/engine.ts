@@ -2175,28 +2175,30 @@ function skipTrade(
  *
  * Peak-pnl input should be (highest_high_since_entry − entry) / entry.
  *
- *   peak  5–10 %  → floor at entry × 1.02 (protect break-even + small profit)
- *   peak 10–20 %  → floor at entry × 1.05
- *   peak 20–35 %  → floor at entry × 1.12
- *   peak 35–60 %  → floor at entry × 1.20
- *   peak 60–100 % → floor at entry × 1.40
- *   peak ≥ 100 %  → floor at entry × 1.70 (give back ~30 % of peak doubling)
+ * The floor locks in a fixed fraction (TRAIL_KEEP) of the peak gain and
+ * sells once the position gives back the rest. At TRAIL_KEEP = 0.70 the
+ * engine keeps 70 % of the run-up and tolerates a 30 % giveback before
+ * cutting — e.g. a +80 % winner is sold if it falls back to +56 %, a
+ * +200 % winner if it falls back to +140 %.
  *
- * Extended ladder for the 12-month horizon mandate: previous ceiling of
- * +12 % floor was too tight for priority-core that runs +60–100 %+ during
- * an AI rally. New ladder lets winners ride longer while still cutting
- * the position before it bleeds out a major part of unrealised gains.
+ * The previous tiered ladder allowed a 50–80 % giveback (a +80 % winner
+ * could bleed all the way back to +40 % before triggering) — far too loose.
+ * This is much tighter, so the engine captures more of a top, at the cost
+ * of being shaken out of positions that merely wobble before continuing.
+ * That trade-off is deliberate. It does NOT trim healthy winners — a
+ * position that keeps rising is never sold — so it stays compatible with
+ * the concentration / let-winners-run mandate. Raise TRAIL_KEEP to capture
+ * even more of tops (more whipsaw); lower it to ride longer.
+ *
+ * Floor is monotonically increasing in peak gain (no ratchet reversal) and
+ * always locks a profit — below-entry protection is the ATR stop's job.
  *
  * Returns null when peak gain < 5 % (no ratchet yet — ATR-stop still protects).
  */
+const TRAIL_KEEP = 0.7;
 function trailingStopFloor(entry: number, peakPnlPct: number): number | null {
   if (peakPnlPct < 0.05) return null;
-  if (peakPnlPct < 0.10) return entry * 1.02;
-  if (peakPnlPct < 0.20) return entry * 1.05;
-  if (peakPnlPct < 0.35) return entry * 1.12;
-  if (peakPnlPct < 0.60) return entry * 1.20;
-  if (peakPnlPct < 1.00) return entry * 1.40;
-  return entry * 1.70;
+  return entry * (1 + TRAIL_KEEP * peakPnlPct);
 }
 
 /**
