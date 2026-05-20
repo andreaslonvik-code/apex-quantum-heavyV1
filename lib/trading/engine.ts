@@ -981,6 +981,51 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
     };
   }
 
+  // ── PATH H: RUNNING BREAKOUT (sustained-uptrend extension entry) ─────
+  // Catches names that are past PATH C/D's "RSI ≤ 72" cap but still in
+  // legitimate uptrends — and crucially, names trading well above SMA50
+  // (price/SMA50 > 1.1) that the dip-buy filter ("no_dip_no_trend") would
+  // otherwise reject. This is the TSM/PANW/ABSI scenario from the
+  // 2026-05-20 dashboard: Grok proposed BUY, engine rejected as "no dip
+  // and no rising_channel pattern at low RSI" even though the chart was
+  // a clean rising channel ~50–80 % over SMA50.
+  //
+  // Guards picked to allow extension entries without buying tops:
+  //   - RS30d ≥ +5 pp (real leader, not a one-day pop)
+  //   - rising_channel = true (structural HH/HL still intact)
+  //   - volume_accumulation = true (smart-money confirming the run)
+  //   - sector_rank ≤ 3 (top-3 in sector — co-leaders OK, secondaries not)
+  //   - price/SMA50 in [1.05, 2.00]  (extended but not parabolic)
+  //   - RSI ≤ 78 (block blow-off tops; PATH D maxes at 72, here we relax
+  //     because the channel + accumulation gates compensate)
+  //   - 5d in [-5 %, +20 %] (not crashing, not just gapped up violently)
+  //
+  // Mechanical stops + trailing stop still bind post-fill, so an entry
+  // that immediately reverses is contained the same as any other path.
+  const priceOverSma50 =
+    snap.sma_50 != null && snap.sma_50 > 0 ? snap.price / snap.sma_50 : null;
+  const isRunningBreakout =
+    snap.relative_strength_30d != null && snap.relative_strength_30d >= 5 &&
+    snap.rising_channel &&
+    snap.volume_accumulation &&
+    (snap.sector_rank == null || snap.sector_rank <= 3) &&
+    priceOverSma50 != null && priceOverSma50 >= 1.05 && priceOverSma50 <= 2.0 &&
+    snap.rsi_14 != null && snap.rsi_14 <= 78 &&
+    snap.change_5d_pct != null && snap.change_5d_pct >= -5 && snap.change_5d_pct <= 20;
+  if (isRunningBreakout) {
+    reasons.push(
+      'running_breakout_pathH',
+      `rs30d_+${snap.relative_strength_30d?.toFixed(1)}pp`,
+      `rsi_${snap.rsi_14?.toFixed(1)}`,
+      `price/sma50_${priceOverSma50?.toFixed(2)}`,
+      'rising_channel',
+      'volume_accumulation',
+      `sector_rank_${snap.sector_rank ?? '?'}`,
+    );
+    if (snap.uptrend_1h) reasons.push('uptrend_1h_aligned');
+    return { ok: true, reasons };
+  }
+
   if (!isModerateOversold && !nearSupport) {
     return {
       ok: false,
@@ -1349,6 +1394,10 @@ interface ExecuteArgs {
   cooldownTickers: Set<string>;
   /** Friday after 14:30 ET — block new equity BUYs to avoid weekend gap risk. */
   fridayBlackout: boolean;
+  /** Open-order records (mutable). After a SELL succeeds we cancel any
+   *  matching server-side stop and remove it from this list so subsequent
+   *  in-scan logic sees current state. */
+  openOrdersData: AlpacaOrder[];
 }
 
 interface ExecuteResult {
@@ -1371,6 +1420,7 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     isBearRegime,
     cooldownTickers,
     fridayBlackout,
+    openOrdersData,
   } = args;
   const isCrypto = blueprint.id === 'crypto';
   const watchlistSet = new Set<string>(blueprint.watchlist);
@@ -1382,11 +1432,20 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   const maxNotionalPerTicker =
     bucketCapital * (blueprint.params.maxPctPerPosition / 100) * bearMultiplier;
 
-  // Sector concentration: max 2 positions per sector (was 1). Loosened so
-  // engine can concentrate in leading sectors (e.g. tech_ai when it's the
-  // dominant trend) instead of forcing diversification away from leaders.
-  // Tracks counts (not just presence) so leaders + dip in same sector OK.
-  const SECTOR_CAP_PER_SCAN = 2;
+  // Sector concentration: per-sector cap. tech_ai gets 4 slots because user
+  // mandate is explicit AI/semis bias (priority-core leans tech/quantum) —
+  // capping at 2 forces the engine to reject thesis-recommended tech leaders
+  // even when the strategy text wants concentration there. Other sectors
+  // stay at 2 (default).
+  //
+  // Earlier values: 1 → 2 → 2/4 (split, 2026-05-21).
+  // Priority-core tickers (MU/QBTS/IONQ/QUBT/RKLB/VRT) bypass the cap entirely
+  // (see corePass below), so this cap binds only on non-priority-core picks
+  // — typically secondary tech names like TSM/PANW/AVGO.
+  const SECTOR_CAP_DEFAULT = 2;
+  const SECTOR_CAP_OVERRIDES: Record<string, number> = { tech_ai: 4 };
+  const sectorCapFor = (sec: string | null): number =>
+    sec ? SECTOR_CAP_OVERRIDES[sec] ?? SECTOR_CAP_DEFAULT : SECTOR_CAP_DEFAULT;
   const sectorCounts = new Map<string, number>();
   const sellTickerEarly = new Set(
     payload.decisions.filter((d) => d.action === 'SELL').map((d) => d.ticker),
@@ -1416,6 +1475,69 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     if (dec.action === 'SELL') sellDecs.push(dec);
     else if (dec.action === 'BUY') buyDecs.push(dec);
   }
+
+  // ── Grok-SELL sanity check ────────────────────────────────────────────
+  // Grok's SELL recommendations previously bypassed the engine entirely
+  // (only BUYs went through the anticipatory filter). That's correct when
+  // Grok has real information the engine can't see — news, sentiment —
+  // but creates one-shot exposure to LLM hallucination ("RKLB momentum
+  // failing" when it's actually +13 % on the day).
+  //
+  // Veto rule: require at least ONE piece of mechanical evidence that the
+  // position is deteriorating before executing Grok's SELL. Evidence is
+  // any of:
+  //   - relative_strength_30d < 0 (underperforming benchmark)
+  //   - price < SMA50 (short-term trend broken)
+  //   - intraday change_24h_pct ≤ -3 % (loss building today)
+  //   - position pnl ≤ -5 % (already underwater)
+  //   - RSI > 80 (blow-off top — exit before reversal is sensible)
+  // Missing snapshot → bypass veto (fail-open: we'd rather honor Grok's
+  // call when we lack data than freeze the position).
+  //
+  // Mechanical safety still runs every minute regardless of this veto, so
+  // the ATR-stop / trailing-stop / fast-deterioration paths catch genuine
+  // breakdowns that Grok also flagged. Vetoed SELL ⇒ position held until
+  // next Grok tick or mechanical trigger.
+  const sellEvidenceMissing: typeof payload.decisions = [];
+  const sellDecsAfterVeto: typeof payload.decisions = [];
+  for (const dec of sellDecs) {
+    const snap = snapshots.get(dec.ticker);
+    if (!snap) {
+      sellDecsAfterVeto.push(dec); // no data → defer to Grok
+      continue;
+    }
+    const held = positionsByTicker.get(dec.ticker);
+    const entry = held ? parseFloat(held.avg_entry_price) || 0 : 0;
+    const pnlPct = entry > 0 ? (snap.price - entry) / entry : 0;
+    const rsFalling =
+      snap.relative_strength_30d != null && snap.relative_strength_30d < 0;
+    const belowSma50 =
+      snap.sma_50 != null && snap.sma_50 > 0 && snap.price < snap.sma_50;
+    const intradayLoss =
+      snap.change_24h_pct != null && snap.change_24h_pct <= -3;
+    const underwater = pnlPct <= -0.05;
+    const blowoffTop = snap.rsi_14 != null && snap.rsi_14 > 80;
+    const hasEvidence =
+      rsFalling || belowSma50 || intradayLoss || underwater || blowoffTop;
+    if (hasEvidence) {
+      sellDecsAfterVeto.push(dec);
+    } else {
+      sellEvidenceMissing.push(dec);
+    }
+  }
+  for (const dec of sellEvidenceMissing) {
+    trades.push(
+      skipTrade(
+        blueprint.id,
+        dec.ticker,
+        'SELL',
+        'GROK_SELL_VETOED (no_deterioration_evidence)',
+      ),
+    );
+  }
+  // Replace sellDecs with the post-veto list for the rest of the function.
+  sellDecs.length = 0;
+  sellDecs.push(...sellDecsAfterVeto);
 
   // ── FULL-DEPLOYMENT OVERRIDE ─────────────────────────────────────────
   // Ignore the per-pick notional Grok suggested. Engine sizes every BUY
@@ -1462,7 +1584,7 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     if (
       !corePass &&
       sec &&
-      (preflightSectorCounts.get(sec) ?? 0) >= SECTOR_CAP_PER_SCAN
+      (preflightSectorCounts.get(sec) ?? 0) >= sectorCapFor(sec)
     ) continue;
     // Per-ticker concentration cap: a held position already at the cap
     // will be rejected by the main loop with `concentration_cap_reached`.
@@ -1542,6 +1664,13 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
         return skipTrade(blueprint.id, ticker, 'SELL', 'no_price_for_extended_hours');
       }
       const r = await placeOrder(creds, orderReq);
+      // Cancel any server-side stop order tied to this ticker. Without
+      // this, after the SELL fills the orphan stop would either fail
+      // (no position to close) or — worse, in a partial-fill scenario —
+      // sell shares we still want to hold.
+      if (r.success) {
+        await cancelOpenStopsForTicker(creds, ticker, openOrdersData);
+      }
       return {
         blueprintId: blueprint.id,
         ticker,
@@ -1718,7 +1847,7 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     if (
       !corePass &&
       sec &&
-      (sectorCounts.get(sec) ?? 0) >= SECTOR_CAP_PER_SCAN
+      (sectorCounts.get(sec) ?? 0) >= sectorCapFor(sec)
     ) {
       trades.push(
         skipTrade(blueprint.id, ticker, 'BUY', `sector_full_${sec}`),
@@ -1945,6 +2074,8 @@ interface ExecuteMirrorArgs {
   fridayBlackout: boolean;
   isBearRegime: boolean;
   marketIsOpen: boolean;
+  /** Mutable open-order list — see ExecuteArgs for rationale. */
+  openOrdersData: AlpacaOrder[];
 }
 
 interface ExecuteMirrorResult {
@@ -1977,6 +2108,7 @@ async function executeMirrorPlan(args: ExecuteMirrorArgs): Promise<ExecuteMirror
     fridayBlackout,
     isBearRegime,
     marketIsOpen,
+    openOrdersData,
   } = args;
 
   // Cadence gate per (follower, blueprint). Without it, the cron's
@@ -2057,6 +2189,9 @@ async function executeMirrorPlan(args: ExecuteMirrorArgs): Promise<ExecuteMirror
       }
       if (!orderReq) return skipTrade(blueprint.id, o.ticker, 'SELL', 'no_price_for_extended_hours');
       const r = await placeOrder(creds, orderReq);
+      if (r.success) {
+        await cancelOpenStopsForTicker(creds, o.ticker, openOrdersData);
+      }
       const notional = qty * currentPrice;
       return {
         blueprintId: blueprint.id,
@@ -2176,26 +2311,24 @@ function skipTrade(
  * Peak-pnl input should be (highest_high_since_entry − entry) / entry.
  *
  * The floor locks in a fixed fraction (TRAIL_KEEP) of the peak gain and
- * sells once the position gives back the rest. At TRAIL_KEEP = 0.70 the
- * engine keeps 70 % of the run-up and tolerates a 30 % giveback before
- * cutting — e.g. a +80 % winner is sold if it falls back to +56 %, a
- * +200 % winner if it falls back to +140 %.
+ * sells once the position gives back the rest. At TRAIL_KEEP = 0.85 the
+ * engine keeps 85 % of the run-up and tolerates a 15 % giveback before
+ * cutting — e.g. a +20 % winner is sold if it falls back to +17 %, a
+ * +80 % winner if it falls back to +68 %.
  *
- * The previous tiered ladder allowed a 50–80 % giveback (a +80 % winner
- * could bleed all the way back to +40 % before triggering) — far too loose.
- * This is much tighter, so the engine captures more of a top, at the cost
- * of being shaken out of positions that merely wobble before continuing.
- * That trade-off is deliberate. It does NOT trim healthy winners — a
- * position that keeps rising is never sold — so it stays compatible with
- * the concentration / let-winners-run mandate. Raise TRAIL_KEEP to capture
- * even more of tops (more whipsaw); lower it to ride longer.
+ * Earlier values: 0.5 → 0.7 → 0.85. Raised to 0.85 (2026-05-21) after
+ * the RKLB-from-peak discussion: user wants tighter give-back tolerance,
+ * matching the "concentration > diversification, capture more of the top"
+ * mandate. The trade-off is more whipsaw on positions that merely wobble
+ * before continuing higher. Acceptable per user preference. Lower if back-
+ * tests show too many premature exits on healthy consolidations.
  *
  * Floor is monotonically increasing in peak gain (no ratchet reversal) and
  * always locks a profit — below-entry protection is the ATR stop's job.
  *
  * Returns null when peak gain < 5 % (no ratchet yet — ATR-stop still protects).
  */
-const TRAIL_KEEP = 0.7;
+const TRAIL_KEEP = 0.85;
 function trailingStopFloor(entry: number, peakPnlPct: number): number | null {
   if (peakPnlPct < 0.05) return null;
   return entry * (1 + TRAIL_KEEP * peakPnlPct);
@@ -2341,6 +2474,156 @@ async function mechanicalSafetyPass(args: {
   return trades;
 }
 
+/**
+ * Server-side stop-loss management.
+ *
+ * Until now, all stop logic ran in-memory inside `mechanicalSafetyPass`,
+ * triggered by the per-minute cron. That meant:
+ *   - Overnight gap-downs were not caught until the next morning's cron
+ *     after market open.
+ *   - A Vercel cron outage or Alpaca API hiccup removed all protection.
+ *   - Flash-crashes within a single minute could fill the in-memory
+ *     market sell well below the intended stop level.
+ *
+ * This function places a GTC stop order at Alpaca for every held equity
+ * position that doesn't already have one. The stop level mirrors the
+ * `mechanicalSafetyPass` ATR-stop (1.5× ATR, or 1.2× for leader setups),
+ * so the in-memory pass and the server-side stop trigger at the same
+ * price band. The minute-cron path remains as defense-in-depth — if for
+ * any reason the server-side stop doesn't trigger (extended-hours gap,
+ * partial fill weirdness, Alpaca-side cancellation) the cron still
+ * catches the position on its next pass.
+ *
+ * Constraints / known limits:
+ *   - Alpaca stop orders for equities are whole-share only, so a
+ *     fractional position (e.g. 1395.89 shares) has the fractional
+ *     remainder unprotected by the server-side stop. Mechanical pass
+ *     still covers the remainder.
+ *   - Stop orders for equities trigger only during regular trading hours
+ *     on most venues. Overnight gap-downs that don't recover into RTH
+ *     remain exposed; this is an unavoidable equity-market property.
+ *   - Crypto is skipped — bucket is disabled anyway, and Alpaca's
+ *     crypto-stop semantics differ enough that we shouldn't pretend
+ *     parity here without explicit testing.
+ *   - The ATR/SMA/RSI inputs come from a fresh `fetchBars` call. As ATR
+ *     drifts day-to-day the existing stop will be slightly stale; that's
+ *     fine — the in-memory pass uses live ATR each tick and would close
+ *     a position before a stale server-side stop misfires by more than
+ *     a few percent.
+ */
+async function ensureServerSideStops(args: {
+  creds: AlpacaCreds;
+  blueprint: Blueprint;
+  positionsByTicker: Map<string, AlpacaPosition>;
+  inFlightTickers: Set<string>;
+  openOrdersData: AlpacaOrder[];
+}): Promise<void> {
+  const { creds, blueprint, positionsByTicker, inFlightTickers, openOrdersData } = args;
+  if (blueprint.id === 'crypto') return; // skipped per docstring
+  if (blueprint.id === 'commodities') return; // disabled bucket, defensive
+
+  // Build a set of (symbol) that already has an open SELL stop order so
+  // we don't double-place. We deliberately accept type 'stop' OR
+  // 'stop_limit' so a hand-placed stop_limit by ops also counts.
+  const protectedSymbols = new Set<string>();
+  for (const o of openOrdersData) {
+    if (o.side !== 'sell') continue;
+    if (o.type !== 'stop' && o.type !== 'stop_limit') continue;
+    protectedSymbols.add(o.symbol);
+  }
+
+  for (const [ticker, held] of positionsByTicker) {
+    const sym = tradingSymbol(ticker);
+    if (protectedSymbols.has(sym)) continue;
+    if (inFlightTickers.has(ticker)) continue;
+    const qty = parseFloat(held.qty) || 0;
+    const entry = parseFloat(held.avg_entry_price) || 0;
+    if (qty <= 0 || entry <= 0) continue;
+    const wholeQty = Math.floor(qty);
+    if (wholeQty <= 0) continue; // pure-fractional position; mechanical pass handles
+
+    try {
+      const barsRes = await fetchBars(creds, blueprint, ticker);
+      if (!barsRes.success || barsRes.data.length < blueprint.params.atrPeriod + 5) continue;
+      const bars = barsRes.data;
+      const atrVal = atr(bars, blueprint.params.atrPeriod);
+      if (atrVal == null || atrVal <= 0) continue;
+      const closes = bars.map((b) => b.c);
+      const sma50 = sma(closes, 50);
+      const rsiNow = rsi(closes, 14);
+      const price = parseFloat(held.current_price) || entry;
+      const isLeaderSetup =
+        rsiNow != null && rsiNow >= 55 && sma50 != null && price > sma50;
+      const stopMult = isLeaderSetup
+        ? blueprint.params.atrStopMult * 0.8
+        : blueprint.params.atrStopMult;
+      // Round DOWN to 2 dp so the stop sits inside Alpaca's tick grid and
+      // doesn't get rejected for sub-penny pricing on small-cap names.
+      const rawStop = entry - stopMult * atrVal;
+      const stopPrice = Math.floor(rawStop * 100) / 100;
+      if (stopPrice <= 0) continue;
+      // If the stop is already above the current price the mechanical pass
+      // will trigger this tick — don't place a redundant server-side order
+      // that would immediately fire.
+      if (price <= stopPrice) continue;
+
+      await placeOrder(creds, {
+        symbol: sym,
+        qty: wholeQty,
+        side: 'sell',
+        type: 'stop',
+        stop_price: stopPrice,
+        time_in_force: 'gtc',
+        position_intent: 'sell_to_close',
+      });
+      // Failure here is non-fatal: mechanical-pass coverage remains, and
+      // the next tick will retry. placeOrder() already logs the error.
+    } catch {
+      // Transient errors — leave position to mechanical-pass coverage.
+    }
+  }
+}
+
+/**
+ * Cancel any open SELL stop orders for `ticker`. Call this after a SELL
+ * succeeds (mechanical, Grok, or bucket-dealloc) so an orphan stop doesn't
+ * sit at Alpaca trying to sell shares we no longer hold. Mutates the
+ * provided `openOrdersData` array in place so subsequent in-scan logic
+ * sees the canceled order removed.
+ */
+async function cancelOpenStopsForTicker(
+  creds: AlpacaCreds,
+  ticker: string,
+  openOrdersData: AlpacaOrder[],
+): Promise<void> {
+  const sym = tradingSymbol(ticker);
+  const toCancel: AlpacaOrder[] = [];
+  for (const o of openOrdersData) {
+    if (o.symbol !== sym) continue;
+    if (o.side !== 'sell') continue;
+    if (o.type !== 'stop' && o.type !== 'stop_limit') continue;
+    toCancel.push(o);
+  }
+  if (toCancel.length === 0) return;
+  await Promise.all(
+    toCancel.map(async (o) => {
+      try {
+        await alpacaCancelOrder(creds, o.id);
+      } catch {
+        // Best-effort cancel — if Alpaca rejects, the stop will eventually
+        // fail to fill (no position) and self-clear.
+      }
+    }),
+  );
+  // Remove canceled orders from the local list so subsequent in-scan
+  // checks (e.g. ensureServerSideStops on the next blueprint iteration)
+  // don't see them as still-active.
+  for (const o of toCancel) {
+    const idx = openOrdersData.indexOf(o);
+    if (idx >= 0) openOrdersData.splice(idx, 1);
+  }
+}
+
 async function runBlueprint(args: {
   creds: AlpacaCreds;
   clerkUserId: string;
@@ -2355,6 +2638,11 @@ async function runBlueprint(args: {
   allocationPct: number;
   allPositions: AlpacaPosition[];
   openOrderSymbols: Set<string>;
+  /** Full open-order records for the account. Needed for the server-side
+   *  stop-loss management (`ensureServerSideStops`) and the
+   *  cancel-stop-on-SELL helper — both inspect order type and stop_price,
+   *  which the symbol-only set above doesn't carry. */
+  openOrdersData: AlpacaOrder[];
   killSwitchOn: boolean;
   account: AccountSnapshot;
   recentOrders: OrderSummary[];
@@ -2388,6 +2676,7 @@ async function runBlueprint(args: {
     allocationPct,
     allPositions,
     openOrderSymbols,
+    openOrdersData,
     killSwitchOn,
     account,
     recentOrders,
@@ -2450,6 +2739,9 @@ async function runBlueprint(args: {
           });
       if (!orderReq) continue;
       const r = await placeOrder(creds, orderReq);
+      if (r.success) {
+        await cancelOpenStopsForTicker(creds, ticker, openOrdersData);
+      }
       result.trades.push({
         blueprintId: blueprint.id,
         ticker,
@@ -2479,11 +2771,25 @@ async function runBlueprint(args: {
   });
   result.trades.push(...safetyTrades);
   // Drop closed positions from local cache so subsequent Grok decisions see fresh state.
+  // Also cancel any server-side stop orders left behind for the closed ticker.
   for (const t of safetyTrades) {
     if (t.action === 'SELL' && t.status === 'OK') {
       positionsByTicker.delete(t.ticker);
+      await cancelOpenStopsForTicker(creds, t.ticker, openOrdersData);
     }
   }
+
+  // 1a. Ensure each remaining held position has a server-side stop order at
+  //     Alpaca. See `ensureServerSideStops` docstring for the rationale —
+  //     this is the protection layer that survives Vercel cron outages and
+  //     overnight gaps better than the in-memory pass alone.
+  await ensureServerSideStops({
+    creds,
+    blueprint,
+    positionsByTicker,
+    inFlightTickers,
+    openOrdersData,
+  });
 
   // Daily kill-switch: account is down ≥ dailyKillSwitchPct on the day. The
   // mechanical safety pass above has already run, so existing positions keep
@@ -2511,6 +2817,7 @@ async function runBlueprint(args: {
       fridayBlackout,
       isBearRegime,
       marketIsOpen: marketClock?.is_open ?? false,
+      openOrdersData,
     });
     if (mirrorRes.reason) {
       result.reason = mirrorRes.reason;
@@ -2717,6 +3024,7 @@ async function runBlueprint(args: {
     isBearRegime,
     cooldownTickers,
     fridayBlackout,
+    openOrdersData,
   });
   result.trades.push(...exec.trades);
   result.positionsHeld = positionsByTicker.size + exec.trades.filter(
@@ -2845,12 +3153,41 @@ export async function runScanForUser(
   const cash = parseFloat(acctRes.data.cash) || 0;
   let remainingBuyingPower = cash;
 
+  // ── Disabled-bucket allocation redistribution ─────────────────────────
+  // Default user allocation is 33 / 33 / 34 across stocks / crypto / commodities.
+  // With crypto + commodities currently in DISABLED_BLUEPRINTS, the previous
+  // code forced their allocPct to 0 WITHOUT redistributing — so the user
+  // ended up with ~33 % stocks deployed and ~67 % idle cash regardless of
+  // saved allocation. That dead-cash made strong days like the +9.4 % above
+  // capture far less than the strategy intended.
+  //
+  // New behaviour: sum the disabled buckets' pct and redistribute proportionally
+  // across active buckets (weights = each active bucket's pct / sum of active
+  // pcts). All-disabled (degenerate) keeps everything at 0 % which is correct
+  // — there's nowhere to put the capital.
+  const activeSum = BLUEPRINT_LIST.reduce(
+    (s, bp) => s + (DISABLED_BLUEPRINTS.has(bp.id) ? 0 : allocation[bp.id] ?? 0),
+    0,
+  );
+  const totalSavedPct = BLUEPRINT_LIST.reduce(
+    (s, bp) => s + (allocation[bp.id] ?? 0),
+    0,
+  );
+  const disabledSum = Math.max(0, totalSavedPct - activeSum);
+  const redistribute = activeSum > 0 && disabledSum > 0;
+
   for (const blueprint of BLUEPRINT_LIST) {
     // Hard-disabled blueprints get 0 % bucket capital regardless of the
     // user's saved allocation. The deallocation logic in runBlueprint then
     // liquidates any positions in this bucket and skips Grok entirely.
     const isDisabled = DISABLED_BLUEPRINTS.has(blueprint.id);
-    const allocPct = isDisabled ? 0 : allocation[blueprint.id] ?? 0;
+    const savedPct = allocation[blueprint.id] ?? 0;
+    const effectivePct = isDisabled
+      ? 0
+      : redistribute
+        ? savedPct + (savedPct / activeSum) * disabledSum
+        : savedPct;
+    const allocPct = effectivePct;
     const bucketCapital = (equity * allocPct) / 100;
     const killSwitchOn = dailyPnlPct <= blueprint.params.dailyKillSwitchPct;
     const result = await runBlueprint({
@@ -2864,6 +3201,7 @@ export async function runScanForUser(
       allocationPct: allocPct,
       allPositions: positions,
       openOrderSymbols,
+      openOrdersData: openOrdersRes.success ? openOrdersRes.data : [],
       killSwitchOn,
       account,
       recentOrders,

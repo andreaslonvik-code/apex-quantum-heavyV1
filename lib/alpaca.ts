@@ -135,7 +135,11 @@ export interface AlpacaOrder {
   side: string;
   status: string;
   type: string;
+  /** Time-in-force ('day' | 'gtc' | 'ioc' | 'fok' | 'opg' | 'cls'). */
+  time_in_force?: string;
   limit_price?: string;
+  /** Stop trigger price for type === 'stop' or 'stop_limit'. */
+  stop_price?: string;
   filled_avg_price?: string;
   filled_qty?: string;
   submitted_at: string;
