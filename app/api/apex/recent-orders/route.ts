@@ -17,7 +17,13 @@ const FILLED_OK_STATUSES = new Set([
   'replaced',
   'done_for_day',
 ]);
-const FAILED_STATUSES = new Set(['rejected', 'canceled', 'expired', 'suspended']);
+// A broker rejection — Alpaca actively refused the order. This is the only
+// bucket that should raise the red "Ordre feilet" banner.
+const FAILED_STATUSES = new Set(['rejected', 'suspended']);
+// Terminal-but-not-a-failure: the engine routinely cancels its own GTC
+// stop-loss orders as housekeeping (after a SELL fills, or when re-sizing a
+// position). Surfacing those as "failed" is a false alarm.
+const CANCELED_STATUSES = new Set(['canceled', 'expired']);
 
 export async function GET() {
   const userCreds = await getRequestCreds();
@@ -43,11 +49,21 @@ export async function GET() {
     const limitPrice = Number(o.limit_price ?? '0') || 0;
     const price = filledPrice > 0 ? filledPrice : limitPrice;
 
-    let status: 'OK' | 'PENDING' | 'ERR';
+    let status: 'OK' | 'PENDING' | 'ERR' | 'CANCELED';
     if (o.status === 'filled') status = 'OK';
     else if (FAILED_STATUSES.has(o.status)) status = 'ERR';
+    else if (CANCELED_STATUSES.has(o.status)) status = 'CANCELED';
     else if (FILLED_OK_STATUSES.has(o.status)) status = 'PENDING';
     else status = 'PENDING';
+
+    // For a genuine rejection, surface Alpaca's actual explanation
+    // (reject_reason / failure_reason) instead of the order TYPE. The old
+    // `reason: o.type` showed "stop"/"market" — the order type, never the
+    // cause — so the dashboard could not say WHY an order was refused.
+    const reason =
+      status === 'ERR'
+        ? o.reject_reason || o.failure_reason || `Avvist av Alpaca (${o.status})`
+        : o.type;
 
     return {
       // Raw ISO timestamps — client formats in browser locale.
@@ -58,7 +74,7 @@ export async function GET() {
       qty,
       price,
       status,
-      reason: o.type,
+      reason,
       orderStatus: o.status,
     };
   });

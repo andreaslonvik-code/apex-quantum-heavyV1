@@ -302,6 +302,9 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
         avg: p.avgPrice,
         mark: p.currentPrice,
         signal: sig,
+        // Share of total account capital — engine already computes this
+        // as marketValue / equity in the /positions route.
+        weightPct: p.vekt,
         _mv: p.marketValue,
       });
     }
@@ -478,6 +481,7 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
             <Watchlist
               lang={lang}
               rows={myHoldingsRows}
+              showWeight
               title={lang === 'no' ? 'Mine posisjoner' : 'My positions'}
               subtitle={
                 lang === 'no'
@@ -516,8 +520,8 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
               side={failedOrder.action}
               message={
                 lang === 'no'
-                  ? `${failedOrder.reason || 'Ordre ble avvist'}. Kan skyldes at markedet var stengt eller utilstrekkelig kjøpekraft.`
-                  : `${failedOrder.reason || 'Order rejected'}. Possibly the market was closed or buying power was insufficient.`
+                  ? `Alpaca avviste ordren: ${failedOrder.reason || 'ukjent årsak'}`
+                  : `Alpaca rejected the order: ${failedOrder.reason || 'unknown reason'}`
               }
               onDismiss={() => handleDismissOrder(failedOrder.ticker, failedOrder.submittedAt)}
             />

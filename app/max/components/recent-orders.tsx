@@ -11,7 +11,7 @@ export interface RecentOrder {
   action: 'BUY' | 'SELL';
   qty: number;
   price: number;
-  status: 'OK' | 'PENDING' | 'ERR';
+  status: 'OK' | 'PENDING' | 'ERR' | 'CANCELED';
   reason: string;
   /** Raw Alpaca status (e.g. 'new', 'partially_filled', 'rejected') for tooltip / debug. */
   orderStatus?: string;
@@ -66,6 +66,8 @@ export function RecentOrders({ lang, orders, onSeeAll }: Props) {
                 ? 'pill pill-ok'
                 : tr.status === 'PENDING'
                 ? 'pill pill-pending'
+                : tr.status === 'CANCELED'
+                ? 'pill pill-canceled'
                 : 'pill pill-err';
             const pillLabel =
               tr.status === 'OK'
@@ -74,6 +76,10 @@ export function RecentOrders({ lang, orders, onSeeAll }: Props) {
                 ? lang === 'no'
                   ? 'AVVENT'
                   : 'PENDING'
+                : tr.status === 'CANCELED'
+                ? lang === 'no'
+                  ? 'KANSELLERT'
+                  : 'CANCELED'
                 : t.errPill;
             return (
               <div key={i} className={`order order-${tr.status.toLowerCase()}`}>

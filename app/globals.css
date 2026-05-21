@@ -848,6 +848,7 @@ body {
 .order { display: flex; gap: 12px; padding: 12px; border-radius: 10px; background: rgba(255,255,255,.02); border: 1px solid rgba(255,255,255,.04); }
 .order-ok { border-color: rgba(16,185,129,.18); }
 .order-err { border-color: rgba(239,68,68,.20); background: rgba(239,68,68,.04); }
+.order-canceled { border-color: rgba(255,255,255,.08); }
 .order-tick { width: 28px; height: 28px; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
 .order-tick.up { background: rgba(16,185,129,.15); color: #10b981; }
 .order-tick.dn { background: rgba(239,68,68,.15); color: #ef4444; }
@@ -859,6 +860,7 @@ body {
 .pill-ok { background: rgba(16,185,129,.18); color: #10b981; }
 .pill-err { background: rgba(239,68,68,.18); color: #ef4444; }
 .pill-pending { background: rgba(250,204,21,.15); color: #facc15; }
+.pill-canceled { background: rgba(255,255,255,.08); color: var(--aq-muted); }
 
 /* Benchmark bar — APEX vs SPY vs QQQ ranked at top of dashboard */
 .bench-bar { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 0 24px; margin: 18px 0 4px; }

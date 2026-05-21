@@ -11,6 +11,9 @@ export interface WatchlistRow {
   avg: number;
   mark: number;
   signal: Signal;
+  /** Position market value as a % of total account capital. Only set for
+   *  held positions in the "Mine posisjoner" panel. */
+  weightPct?: number;
 }
 
 interface Props {
@@ -20,9 +23,12 @@ interface Props {
   title?: string;
   /** Optional override of the panel subtitle. */
   subtitle?: string;
+  /** When true, render a "VEKT" column showing each position's share of
+   *  total capital. Used by the "Mine posisjoner" panel. */
+  showWeight?: boolean;
 }
 
-export function Watchlist({ lang, rows, title, subtitle }: Props) {
+export function Watchlist({ lang, rows, title, subtitle, showWeight = false }: Props) {
   const t = I18N[lang];
   const sigLabel: Record<Signal, string> = {
     BUY: t.sigBuy,
@@ -65,6 +71,7 @@ export function Watchlist({ lang, rows, title, subtitle }: Props) {
             <th className="r">{t.mark}</th>
             <th className="r">{t.pnl}</th>
             <th className="r">{t.pct}</th>
+            {showWeight && <th className="r">{t.weight}</th>}
             <th className="r">{t.signal}</th>
           </tr>
         </thead>
@@ -98,6 +105,11 @@ export function Watchlist({ lang, rows, title, subtitle }: Props) {
                 <td className={`r aq-mono ${held ? (up ? 'up' : 'dn') : 'mute'}`}>
                   {held ? `${up ? '+' : ''}${pct.toFixed(2)}%` : '—'}
                 </td>
+                {showWeight && (
+                  <td className={`r aq-mono ${held && p.weightPct != null ? '' : 'mute'}`}>
+                    {held && p.weightPct != null ? `${p.weightPct.toFixed(1)} %` : '—'}
+                  </td>
+                )}
                 <td className="r">
                   <span className={sigClass}>
                     {arrow}
