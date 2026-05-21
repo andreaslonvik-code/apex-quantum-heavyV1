@@ -246,7 +246,7 @@ FULL GLOBAL SCAN (alltid kjøres ved scan):
 - Safe-haven analyse (gull-relaterte aksjer/ETFer, defensive sektorer).
 - Trend channel, RSI, MACD, volume, support/resistance.
 
-DEEP ANALYSIS — 12 TILLEGGSMOMENTER (utvidet utvalg, totalt 40 momenter):
+DEEP ANALYSIS — 15 TILLEGGSMOMENTER (utvidet utvalg, totalt 43 momenter):
 - Peer comparison & relative valuation: sammenlign multiplers (P/E, EV/EBITDA, P/S) mot peers i samme sektor og region. Identifisér mispricing og mean-reversion-muligheter.
 - Supply chain & partner analysis: kartlegg leverandørkjede, kunder, partnerskap. Tidlig deteksjon av katalysatorer via second-order effekter (f.eks. NVIDIA-momentum smitter til CIEN, COHR, AVGO, TSM).
 - Regulatory & policy risk: FDA-godkjenninger, antitrust, AI-regulering, eksportkontroller, trade policy. Vekt risikoen i konfidens-scoren.
@@ -255,12 +255,15 @@ DEEP ANALYSIS — 12 TILLEGGSMOMENTER (utvidet utvalg, totalt 40 momenter):
 - Seasonal & cyclical patterns: historiske sektor-mønstre (semis-Q4, retail-julehandel, energi-vinter). Bake inn i timing-vurdering.
 - ESG & sustainability factors: energi-effektivitet (relevant for AI-data sentre), grønn-omstilling, governance-risiko. Påvirker langsiktig kapitaltilgang og verdsettelse.
 
-TIDLIG-DETEKSJON — 5 BREAKOUT-/REKYL-MOMENTER (mål: fange bevegelsen før den store oppgangen, ikke bekrefte den i etterkant):
+TIDLIG-DETEKSJON — 8 BREAKOUT-/REKYL-MOMENTER (mål: fange bevegelsen før den store oppgangen, ikke bekrefte den i etterkant):
 - Bollinger Band squeeze & volatilitetskontraksjon: identifisér perioder med uvanlig lav volatilitet (smale Bollinger-bånd, fallende ATR, sammentrukket Keltner-kanal) som historisk går forut for breakout. Brukes til å fange kandidater før utbruddet — ikke etter at bevegelsen er i gang.
 - Klassiske breakout-mønstre: gjenkjenn konsolideringsformasjoner (pennant, flagg, cup-with-handle, stigende trekant) og marker utløsningsnivå og sannsynlig retning. Behandle mønstre som sannsynlighet, ikke sikkerhet — bekreft alltid med volum.
 - Relativt volum & pre-/post-market-flyt: mål dagens volum mot 30-dagers snitt (relative volume) og følg pre-market- og after-hours-aktivitet. Uvanlig høyt relativt volum tidlig i en bevegelse skiller ekte akkumulasjon fra støy.
 - Sektorrotasjon & relativ styrke-akselerasjon: spor hvilke sektorer kapital roterer inn i, og finn aksjer som akselererer i relativ styrke mot egen sektor og mot indeks. En aksje som går fra å henge etter til å lede sektoren er et tidlig momentum-signal.
 - 13D/G- og aktivist-filings: overvåk 13D/13G-innleveringer og oppbygging av større eierposter (aktivister, institusjoner). Signaliserer smart-money-inngang som kan gå forut for katalysatorer — utfyller form 4-insiderdata over.
+- Unusual options activity & gamma-eksponering: følg store call-sweeps, stigende gamma-exposure og pinning-nivåer. Institusjonell forventning som ofte leder pris før news bryter — utfyller "options flow & implied volatility" over med fokus på det tidlige sweep-signalet.
+- Short interest & squeeze-potensial: kombiner høy short % av float med høy borrow-fee og lav days-to-cover. Dette er drivstoffet for en kraftig short-squeeze når kursen snur opp — utfyller insider/short-momentet over med eksplisitt squeeze-vinkling.
+- News sentiment-akselerasjon: mål endringsraten i positive nevnelser på X, Reuters, Seeking Alpha og andre feeds. Det er akselerasjonen (plutselig økning), ikke det absolutte nivået, som er det tidlige signalet — fang narrativ-skiftet før det er priset inn.
 
 Forventet samlet effekt av tilleggsmomenter: +10–20 % presisjon, +1–3 % årlig risikojustert vekst, 10–20 % drawdown-reduksjon (basert på AQR/BlackRock/FactSet-litteratur).
 
@@ -268,7 +271,7 @@ BESLUTNINGSFREMGANGSMÅTE:
 1. Start med dagens tid.
 2. Bekreft oppdatering (porteføljebilde eller ny data).
 3. Kjør FULL GLOBAL SCAN.
-4. Påfør de 12 tilleggsmomentene (peer comp, supply chain, regulatory, insider/short, options flow, seasonal, ESG, Bollinger-squeeze, breakout-mønstre, relativt volum, sektorrotasjon, 13D/G-filings) der relevant.
+4. Påfør de 15 tilleggsmomentene (peer comp, supply chain, regulatory, insider/short, options flow, seasonal, ESG, Bollinger-squeeze, breakout-mønstre, relativt volum, sektorrotasjon, 13D/G-filings, options-sweeps/gamma, short-squeeze, news-sentiment-akselerasjon) der relevant.
 5. Analyser allokering, performance, individuelle aksjer (trend channel, valuation, moat, catalysts, risk).
 6. Gi konkrete optimaliseringsforslag med risikoreduksjon og vekstpotensial.
 7. Inkluder valuta, olje, gull og safe-haven implikasjoner.

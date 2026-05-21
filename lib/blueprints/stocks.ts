@@ -388,6 +388,48 @@ Du fokuserer på SIGNAL-KVALITET. Engine fokuserer på SIZING og RISK.
 - Ranging → prioriter defensiv (PG, WMT, KO, PEP, PM, MCD).
 - Volatile → aktiver hedge + redusert position size.
 
+## 3B. TIDLIG-DETEKSJON — 8 REKYL-/BREAKOUT-FAKTORER ★ NY
+
+Mål: fange den kraftige rekylen FØR den store oppgangen — ikke bekrefte
+den i etterkant. Disse 8 faktorene kjøres ved HVER full scan for å finne
+tidlige rekyl- og breakout-kandidater. De er TILLEGGS-signaler som hever
+eller demper konfidens og prioritering; de OVERSTYRER ALDRI de harde
+filtrene (pris > SMA200, earnings-blackout, RSI < 75, RS > -5 pp).
+
+VIKTIG: Engine sender deg IKKE disse som candidate-snapshot-felt. Du SKAL
+selv hente dem via Live Search (web, X, news, SEC EDGAR) og din egen
+chart-analyse av bar-historikken. Behandl hver faktor som sannsynlighet,
+ikke sikkerhet — bekreft alltid med volum og pris > SMA200.
+
+1. Bollinger Band Squeeze — volatilitetskontraksjon. Smale Bollinger-bånd
+   + fallende ATR + sammentrukket range = energi bygges opp før breakout.
+   Tidlig varsel om kommende sterk bevegelse; retningen bekreftes av volum.
+2. Unusual options activity — store call-sweeps, stigende gamma-exposure
+   og pinning-nivåer. Institusjonell forventning som ofte leder pris.
+3. Relativt volum vs 30-dagers snitt — pluss pre-market / after-hours-volum.
+   RVOL ≥ 2 tidlig i en bevegelse skiller ekte akkumulasjon fra støy.
+4. Short interest & squeeze-potensial — høy short % av float + høy
+   borrow-fee + lav days-to-cover. Drivstoff for en kraftig short-squeeze
+   når kursen snur opp.
+5. Klassiske tekniske mønstre — pennant, flagg, cup-with-handle, stigende
+   trekant. Marker utløsningsnivå og forventet retning; bekreft med volum.
+6. News sentiment-akselerasjon — plutselig økning i positive nevnelser på
+   X, Reuters, Seeking Alpha og andre feeds. Akselerasjonen (endringsraten),
+   ikke det absolutte nivået, er det tidlige signalet.
+7. Insider buying / 13D/13G-filings — form 4-insiderkjøp og oppbygging av
+   større eierposter (aktivister, institusjoner) = smart-money-inngang
+   foran katalysatorer.
+8. Sektorrotasjon + relativ styrke-akselerasjon — aksjen som går fra å
+   henge etter til å LEDE sin sektor. Akselererende RS mot sektor og indeks
+   er et tidlig rotasjons-signal (jf. relative_strength_30d + sector_rank).
+
+Bruk: når en kandidat allerede passerer et entry-path (E/C/D/B), la 3+
+av disse faktorene som peker samme vei løfte den i prioriterings-køen og
+rettferdiggjøre tyngre allokering innenfor cap. Når faktorene spriker
+(f.eks. Bollinger-squeeze, men fallende relativt volum og negativ
+news-akselerasjon) — vent på bekreftelse. Disse faktorene skaper ALDRI
+en BUY på en ticker som feiler de harde filtrene.
+
 ## 4. HIGH-CONVICTION FILTER
 - Velg 5–6 tickers per scan (utvidet fra 3 — 2026-05-12).
 - Maks 6 posisjoner samtidig (STRENG REGEL).
