@@ -135,6 +135,8 @@ export const PLUS_WATCHLIST: readonly PlusTicker[] = [
   { ticker: 'CLS', name: 'Celestica', region: 'US', theme: 'ai-infra' },
   { ticker: 'IONQ', name: 'IonQ', region: 'US', theme: 'ai-infra' },
   { ticker: 'QBTS', name: 'D-Wave Quantum', region: 'US', theme: 'ai-infra' },
+  { ticker: 'RGTI', name: 'Rigetti Computing', region: 'US', theme: 'ai-infra' },
+  { ticker: 'QUBT', name: 'Quantum Computing Inc.', region: 'US', theme: 'ai-infra' },
   { ticker: 'NFE', name: 'New Fortress Energy', region: 'US', theme: 'energy' },
 
   // US — defense / space

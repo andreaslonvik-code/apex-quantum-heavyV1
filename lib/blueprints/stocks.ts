@@ -1,7 +1,7 @@
 // APEX QUANTUM v1.9 — Aksjer.
 // 1:1 mirror of the user's "apex quantum stock trader" Grok chat:
 //   - System prompt = the user's actual INSTRUCTIONS + PROCEDURE text
-//   - Watchlist = 62 tickers
+//   - Watchlist = 63 tickers
 //   - Params = high-conviction filter with 5–6 simultaneous positions
 //     (expanded from 3 on 2026-05-12 to spread priority-core across slots)
 import type { Blueprint } from './types';
@@ -42,6 +42,8 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     'VRTX', 'VZ', 'WFC', 'WMT', 'XOM', 'AAPL',
     'ANET', 'CEG', 'BWXT', 'LRCX', 'AMAT', 'CRDO', 'COHR', 'WDC',
     'ASML', 'SAP',
+    // Quantum — added 2026-05-21. Wider-watchlist candidate (not priority-core).
+    'RGTI',
   ],
   // Human-readable company names — rendered as the sub-line under each
   // ticker in the dashboard tables. Without this the UI fell back to
@@ -109,6 +111,7 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     WDC: 'Western Digital',
     ASML: 'ASML Holding',
     SAP: 'SAP SE',
+    RGTI: 'Rigetti Computing',
   },
   params: {
     rsiOversold: 35,
@@ -211,9 +214,10 @@ posisjoner du tar SKAL kunne overleve en -5 % overnight-gap uten panikk.
 # DETALJERT PROSEDYRE FOR PORTEFØLJE-UTVELGELSE
 
 ## 1. INPUT (hver 30. sekund eller ved aktivering)
-- Hele watchlisten (62 tickers): MU, QBTS, IONQ, QUBT, RKLB, VRT, ABSI, AVGO, LITE, SMCI, MCD, META, MRK, MS, MSFT, NEE, NEM, NET, NFLX, NKE, NOW, NVDA, OET, OKLO, ORCL, OXY, PANW, PEP, PFE, PG, PLTR, PM, QCOM, RTX, SBUX, SCHW, SLB, SNOW, TLN, TMO, TSLA, TSM, UBER, UNH, UNP, V, VRTX, VZ, WFC, WMT, XOM, AAPL, ANET, CEG, BWXT, LRCX, AMAT, CRDO, COHR, WDC, ASML, SAP.
+- Hele watchlisten (63 tickers): MU, QBTS, IONQ, QUBT, RKLB, VRT, ABSI, AVGO, LITE, SMCI, MCD, META, MRK, MS, MSFT, NEE, NEM, NET, NFLX, NKE, NOW, NVDA, OET, OKLO, ORCL, OXY, PANW, PEP, PFE, PG, PLTR, PM, QCOM, RTX, SBUX, SCHW, SLB, SNOW, TLN, TMO, TSLA, TSM, UBER, UNH, UNP, V, VRTX, VZ, WFC, WMT, XOM, AAPL, ANET, CEG, BWXT, LRCX, AMAT, CRDO, COHR, WDC, ASML, SAP, RGTI.
 - KLAC er FJERNET fra universet — historisk drag, ikke kandiderbar.
 - QUBT er LAGT TIL — Quantum Computing Inc., del av AI/quantum priority core.
+- RGTI er LAGT TIL — Rigetti Computing, ren quantum-aksje. Wider-watchlist-kandidat (kjøpbar via PATH C/D ved kvalifiserende momentum), ikke priority-core.
 - Live Alpaca-data: positions, P&L, quotes, 1-min bars.
 - Eksterne data via Live Search: nyheter, X/Trump-sentiment, oljepris, geopolitikk.
 - Historiske data: 24 mnd backlearning (return, Sharpe).
