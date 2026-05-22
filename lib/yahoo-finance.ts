@@ -88,16 +88,21 @@ export interface YahooChartPoint {
 }
 
 /**
- * Daily OHLC for the last `range` days. Used for sparklines.
- * `range` accepts Yahoo strings: '1mo', '3mo', '6mo', '1y'.
+ * Time series of closes for `ticker` over `range` at `interval` granularity.
+ * `range`    — Yahoo strings: '1d', '5d', '1mo', '3mo', '6mo', '1y', '2y', 'ytd', 'max'.
+ * `interval` — Yahoo strings: '5m', '15m', '30m', '1h', '1d', '1wk'.
+ * Intraday intervals (5m/15m/…) are only available for recent ranges.
+ * Used for sparklines and for the real index series (^GSPC, ^IXIC) on the
+ * dashboard's index-comparison chart.
  */
 export async function fetchChart(
   ticker: string,
-  range: '1mo' | '3mo' | '6mo' | '1y' = '1mo',
+  range: string = '1mo',
+  interval: string = '1d',
 ): Promise<YahooChartPoint[]> {
   const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(
     ticker,
-  )}?range=${range}&interval=1d`;
+  )}?range=${encodeURIComponent(range)}&interval=${encodeURIComponent(interval)}`;
   try {
     const raw = (await yahooFetch(url)) as {
       chart?: {

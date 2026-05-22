@@ -66,6 +66,18 @@ interface PerformancePayload {
     values: number[];
     pct: number | null;
   };
+  /** Real S&P 500 index level (^GSPC), aligned to equity timestamps. */
+  indexSp500?: {
+    symbol: string;
+    valuesAligned?: number[];
+    pct: number | null;
+  };
+  /** Real NASDAQ Composite index level (^IXIC), aligned to equity timestamps. */
+  indexNasdaq?: {
+    symbol: string;
+    valuesAligned?: number[];
+    pct: number | null;
+  };
   benchmarkBar?: BenchmarkBarPayload;
 }
 
@@ -320,13 +332,10 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
     return performance.chartData.map((d) => d.value);
   }, [performance]);
 
-  // Prefer equity-timestamp-aligned series so the chart plots SPY/QQQ at the
-  // same time-points as the user's equity, instead of stretching a 6.5 h
-  // bench window across a 16 h equity window.
-  const spyPoints =
-    performance?.benchmark?.valuesAligned ?? performance?.benchmark?.values ?? undefined;
-  const qqqPoints =
-    performance?.benchmarkNasdaq?.valuesAligned ?? performance?.benchmarkNasdaq?.values ?? undefined;
+  // Real index levels (^GSPC / ^IXIC), aligned to equity timestamps — drive
+  // the "Indeks" chart mode. The "Avkastning" mode shows the portfolio alone.
+  const sp500Points = performance?.indexSp500?.valuesAligned ?? undefined;
+  const nasdaqPoints = performance?.indexNasdaq?.valuesAligned ?? undefined;
   const chartTicks = performance?.xTicks && performance.xTicks.length > 0 ? performance.xTicks : undefined;
 
   // First failed order, deduplicated by orderId/time. User can dismiss it.
@@ -469,8 +478,8 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
             </div>
             <ReturnsChart
               points={equityPoints}
-              spyPoints={spyPoints}
-              qqqPoints={qqqPoints}
+              sp500Points={sp500Points}
+              nasdaqPoints={nasdaqPoints}
               xTicks={chartTicks}
               mode={chartMode}
             />

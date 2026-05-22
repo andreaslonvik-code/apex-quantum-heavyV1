@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestCreds } from '@/lib/get-request-creds';
+import { fetchChart } from '@/lib/yahoo-finance';
 import {
   getAccount,
   getPositions,
@@ -86,6 +87,40 @@ async function fetchBenchmarkSeries(
     fetchedAt: Date.now(),
     values: data.values,
   });
+  return data;
+}
+
+// Real index series for the "Indeks" chart mode. SPY/QQQ above are tradable
+// ETF proxies; ^GSPC (S&P 500) and ^IXIC (NASDAQ Composite) are the actual
+// index levels — what an investor expects to see. Fetched from Yahoo at a
+// granularity matching each UI timeframe (intraday for short windows).
+const YAHOO_TF: Record<Tf, { range: string; interval: string }> = {
+  '1H':  { range: '1d',  interval: '5m'  },
+  '24H': { range: '1d',  interval: '5m'  },
+  '7D':  { range: '5d',  interval: '15m' },
+  '30D': { range: '1mo', interval: '1d'  },
+  'MTD': { range: '1mo', interval: '1d'  },
+  'YTD': { range: 'ytd', interval: '1d'  },
+  'ALL': { range: '2y',  interval: '1wk' },
+};
+const yahooIndexCache: Map<string, { fetchedAt: number; data: BenchSeries }> = new Map();
+
+async function fetchIndexSeries(symbol: string, tf: Tf): Promise<BenchSeries> {
+  const { range, interval } = YAHOO_TF[tf];
+  const key = `${symbol}:${range}:${interval}`;
+  const cached = yahooIndexCache.get(key);
+  if (cached && Date.now() - cached.fetchedAt < BENCH_TTL_MS) return cached.data;
+  const points = await fetchChart(symbol, range, interval);
+  if (points.length === 0) {
+    // Yahoo hiccup — serve stale cache if we have it, else empty (chart
+    // simply omits the line rather than showing wrong data).
+    return cached?.data ?? { timestamps: [], values: [] };
+  }
+  const data: BenchSeries = {
+    timestamps: points.map((p) => p.t),
+    values: points.map((p) => p.c),
+  };
+  yahooIndexCache.set(key, { fetchedAt: Date.now(), data });
   return data;
 }
 
@@ -188,7 +223,7 @@ export async function GET(req: NextRequest) {
     const reuseHistoryForDayBar = isIntradayTf && cfg.timeframe === '5Min';
     const reuseSpyChartForDayBar = isIntradayTf && cfg.benchTf === '5Min' && cfg.benchLimit >= 78;
 
-    const [accountRes, positionsRes, historyRes, dayHistoryFetched, spyChartSeries, qqqChartSeries, spyDayFetched, qqqDaySeries] = await Promise.all([
+    const [accountRes, positionsRes, historyRes, dayHistoryFetched, spyChartSeries, qqqChartSeries, spyDayFetched, qqqDaySeries, sp500Series, nasdaqSeries] = await Promise.all([
       getAccount(creds),
       getPositions(creds),
       getPortfolioHistory(creds, { period: cfg.period, timeframe: cfg.timeframe, extended_hours: useExtendedHours }),
@@ -201,6 +236,8 @@ export async function GET(req: NextRequest) {
         ? Promise.resolve<BenchSeries | null>(null)
         : fetchBenchmarkSeries(creds, 'SPY', '5Min', 80),
       fetchBenchmarkSeries(creds, 'QQQ', '5Min', 80),
+      fetchIndexSeries('^GSPC', tf),
+      fetchIndexSeries('^IXIC', tf),
     ]);
 
     if (!accountRes.success) {
@@ -281,6 +318,9 @@ export async function GET(req: NextRequest) {
     //    bug where 6.5 h SPY bars were spread across 16 h equity series). ──
     const spyAligned = alignBenchToEquity(spyChartSeries, ts);
     const qqqAligned = alignBenchToEquity(qqqChartSeries, ts);
+    // Real index levels (^GSPC, ^IXIC) for the index-comparison chart mode.
+    const sp500Aligned = alignBenchToEquity(sp500Series, ts);
+    const nasdaqAligned = alignBenchToEquity(nasdaqSeries, ts);
     const benchPctWindow = pctChange(spyChartSeries.values);
     const qqqPctWindow = pctChange(qqqChartSeries.values);
     const vsBenchPct = benchPctWindow === null ? null : windowPnlPct - benchPctWindow;
@@ -337,6 +377,18 @@ export async function GET(req: NextRequest) {
         valuesAligned: qqqAligned,
         values: qqqChartSeries.values,
         pct: qqqPctWindow,
+      },
+      // Real index levels — drives the "Indeks" chart mode. Actual S&P 500
+      // and NASDAQ Composite values, not ETF proxies.
+      indexSp500: {
+        symbol: '^GSPC',
+        valuesAligned: sp500Aligned,
+        pct: pctChange(sp500Series.values),
+      },
+      indexNasdaq: {
+        symbol: '^IXIC',
+        valuesAligned: nasdaqAligned,
+        pct: pctChange(nasdaqSeries.values),
       },
       benchmarkBar: {
         apexPct: apexDayPct,
