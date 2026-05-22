@@ -48,6 +48,7 @@ const TICKER_TO_SECTOR: Record<string, Sector> = {
   QBTS: 'tech_ai',  // quantum computing — clusters with AI-compute thesis
   IONQ: 'tech_ai',  // quantum computing — same cluster as QBTS
   QUBT: 'tech_ai',  // priority-core — Quantum Computing Inc., same cluster
+  RGTI: 'tech_ai',  // quantum computing — clusters with QBTS/IONQ/QUBT
 
   // Consumer / staples / retail
   MCD: 'consumer',
@@ -65,6 +66,7 @@ const TICKER_TO_SECTOR: Record<string, Sector> = {
   TMO: 'health',
   UNH: 'health',
   VRTX: 'health',
+  HELP: 'health',  // Cybin — biotech, phase-3 catalyst
 
   // Energy / utilities (oil + nuclear + grid)
   OET: 'energy',
