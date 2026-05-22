@@ -12,6 +12,7 @@ import {
   getLatestCryptoPrice,
   getLatestPrice,
   getOrders,
+  getPortfolioHistory,
   getPositions,
   getStockBars,
   placeOrder,
@@ -137,6 +138,15 @@ const MIN_NOTIONAL_USD = 1.0;
  * here once we've validated each blueprint with backtests.
  */
 const DISABLED_BLUEPRINTS: ReadonlySet<AssetClass> = new Set(['crypto', 'commodities']);
+
+// Crash circuit breaker: when account equity is down this fraction or more
+// from its trailing ~1-month peak, the engine halts ALL new BUYs and the
+// always-invested mandate (same gate as the daily kill-switch) until equity
+// recovers. The daily -3 % kill-switch resets every morning and so misses a
+// sustained multi-day bleed — an AI-bubble-burst type decline. Set above
+// normal strategy volatility (the book routinely sees -10 to -20 % drawdowns)
+// so it fires on a real crash, not an ordinary dip. Tunable.
+const CIRCUIT_BREAKER_DRAWDOWN = 0.2;
 // Sanity cap on a single order's notional, regardless of bucket size.
 // Originally $25 k from when the account was ~$100 k — way too restrictive
 // at $1 M+ where the chat-mirror procedure wants 35–40 % of bucket = $350–
@@ -190,6 +200,41 @@ async function detectBearRegime(creds: AlpacaCreds): Promise<{
     return { isBear: spot < sma200, spotPrice: spot, sma200, return30d };
   } catch {
     return null;
+  }
+}
+
+/**
+ * Crash circuit breaker. The daily kill-switch (-3 %) handles a single bad
+ * day but resets every morning, so a sustained multi-day bleed — an AI-
+ * bubble-burst type decline — slips through it. This trips when account
+ * equity is down >= CIRCUIT_BREAKER_DRAWDOWN from its peak over the trailing
+ * ~1 month. While tripped, runBlueprint halts all new BUYs and the always-
+ * invested mandate (same gate as the kill-switch) so the engine stops
+ * catching the falling knife. Mechanical stops keep protecting positions.
+ *
+ * Fail-open: a portfolio-history fetch error returns false — a transient
+ * Alpaca hiccup must not freeze the whole engine. The daily kill-switch and
+ * mechanical stops still protect in that case.
+ */
+async function detectCrashCircuitBreaker(
+  creds: AlpacaCreds,
+  currentEquity: number,
+): Promise<boolean> {
+  if (!(currentEquity > 0)) return false;
+  try {
+    const r = await getPortfolioHistory(creds, { period: '1M', timeframe: '1D' });
+    if (!r.success) return false;
+    const equityPoints = r.data.equity.filter(
+      (e): e is number => typeof e === 'number' && e > 0,
+    );
+    // Too little history to judge a peak — don't trip (e.g. new accounts).
+    if (equityPoints.length < 5) return false;
+    const peak = Math.max(...equityPoints, currentEquity);
+    if (!(peak > 0)) return false;
+    const drawdownFromPeak = (peak - currentEquity) / peak;
+    return drawdownFromPeak >= CIRCUIT_BREAKER_DRAWDOWN;
+  } catch {
+    return false;
   }
 }
 
@@ -1476,6 +1521,38 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     else if (dec.action === 'BUY') buyDecs.push(dec);
   }
 
+  // ── Upgrade-rotation detection (feeds the SELL-veto exception below) ───
+  // Highest relative-strength among NEW (not-yet-held) BUY candidates that
+  // pass the anticipatory filter. Used to let Grok rotate a weak name out
+  // of a FULL bucket for a clearly stronger pick without the SELL-veto
+  // freezing the swap. Skipped when BUYs can't execute this scan (Friday
+  // blackout) — a rotation only makes sense if the replacement can be bought.
+  const bucketIsFull = positionsByTicker.size >= blueprint.params.maxPositions;
+  let bestIncomingBuyRs: number | null = null;
+  if (!(fridayBlackout && !isCrypto)) {
+    for (const dec of buyDecs) {
+      if (positionsByTicker.has(dec.ticker)) continue; // top-up, not a new slot
+      if (cooldownTickers.has(dec.ticker)) continue;   // won't execute (cool-down)
+      const snap = snapshots.get(dec.ticker);
+      if (!snap || !isAnticipatorySignal(snap).ok) continue;
+      const rs = snap.relative_strength_30d;
+      if (rs == null) continue;
+      if (bestIncomingBuyRs == null || rs > bestIncomingBuyRs) bestIncomingBuyRs = rs;
+    }
+  }
+  // An incoming pick must out-rank the name it replaces by at least this
+  // many RS percentage-points to justify overriding the veto — mirrors the
+  // strategy's ">10 score-point" rotation rule. Wide enough that only a
+  // genuine leader-vs-laggard swap qualifies, never marginal churn.
+  const UPGRADE_ROTATION_RS_MARGIN = 10;
+  // Earned-momentum-tier: a held position that has proven itself — a genuine
+  // winner that still leads and holds its trend — is protected from the
+  // upgrade-rotation ("ride the winner, don't churn it out"). It does NOT
+  // get priority-core's PATH E dip-buying or sector-cap bypass — only this
+  // churn protection. Thresholds tunable.
+  const EARNED_TIER_MIN_PNL = 0.08; // +8 % unrealised — a real winner
+  const EARNED_TIER_MIN_RS = 5;     // +5 pp relative strength — still a leader
+
   // ── Grok-SELL sanity check ────────────────────────────────────────────
   // Grok's SELL recommendations previously bypassed the engine entirely
   // (only BUYs went through the anticipatory filter). That's correct when
@@ -1498,6 +1575,12 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   // the ATR-stop / trailing-stop / fast-deterioration paths catch genuine
   // breakdowns that Grok also flagged. Vetoed SELL ⇒ position held until
   // next Grok tick or mechanical trigger.
+  //
+  // Upgrade-rotation exception: a no-evidence SELL is still allowed when it
+  // frees a slot in a FULL bucket for a clearly stronger incoming pick (see
+  // `isUpgradeRotation` below). The veto exists to block panic-dumps of
+  // healthy positions — not to freeze the bucket against a real upgrade.
+  // Priority-core names are never sold via this exception.
   const sellEvidenceMissing: typeof payload.decisions = [];
   const sellDecsAfterVeto: typeof payload.decisions = [];
   for (const dec of sellDecs) {
@@ -1519,7 +1602,31 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     const blowoffTop = snap.rsi_14 != null && snap.rsi_14 > 80;
     const hasEvidence =
       rsFalling || belowSma50 || intradayLoss || underwater || blowoffTop;
-    if (hasEvidence) {
+    // Earned-momentum-tier: a held winner (P&L ≥ +8 %) that still leads
+    // (RS ≥ +5 pp) and holds its short-term trend (price > SMA50). These
+    // get "ride the winner" protection — the upgrade-rotation may NOT sell
+    // them to free a slot. A genuine breakdown still exits them via the
+    // mechanical stops / an evidence-backed Grok SELL.
+    const isEarnedMomentumTier =
+      held != null &&
+      pnlPct >= EARNED_TIER_MIN_PNL &&
+      snap.relative_strength_30d != null &&
+      snap.relative_strength_30d >= EARNED_TIER_MIN_RS &&
+      snap.sma_50 != null &&
+      snap.sma_50 > 0 &&
+      snap.price > snap.sma_50;
+    // Upgrade-rotation exception: a healthy name may be sold without
+    // deterioration evidence ONLY to free a slot in a full bucket for a
+    // clearly stronger incoming pick. Priority-core and earned-momentum-tier
+    // winners are never sold this way — only genuinely weak/middling names.
+    const sellRs = snap.relative_strength_30d ?? 0;
+    const isUpgradeRotation =
+      !isPriorityCore(dec.ticker) &&
+      !isEarnedMomentumTier &&
+      bucketIsFull &&
+      bestIncomingBuyRs != null &&
+      bestIncomingBuyRs >= sellRs + UPGRADE_ROTATION_RS_MARGIN;
+    if (hasEvidence || isUpgradeRotation) {
       sellDecsAfterVeto.push(dec);
     } else {
       sellEvidenceMissing.push(dec);
@@ -2398,10 +2505,11 @@ async function mechanicalSafetyPass(args: {
       // Intraday "fast deterioration" detection. Cuts the position when a
       // big intraday drop coincides with a break of short-term trend —
       // catches earnings-disaster gaps, regulatory shocks, FDA rejects,
-      // etc. before they bleed further. Doesn't fire on normal -6 %
-      // pullback within uptrend (those should be HELD or even bought via
-      // PATH E). Conditions:
-      //   - intraday change ≤ -7 %
+      // etc. before they bleed further. The SMA50 condition keeps this from
+      // firing on a normal pullback inside an intact uptrend — a healthy
+      // pullback holds above SMA50. Conditions:
+      //   - intraday change ≤ -5 % (tightened from -7 % on 2026-05-22 for
+      //     earlier downside protection)
       //   - price has crossed below SMA50 (short-term trend broken)
       //   - position is currently underwater OR peak gain < +20 %
       //     (don't dump winners that gave back; trailing stop handles those)
@@ -2409,7 +2517,7 @@ async function mechanicalSafetyPass(args: {
       const intradayPct = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0;
       const belowSma50 = sma50 != null && sma50 > 0 && price < sma50;
       const isFastDeterioration =
-        intradayPct <= -7 &&
+        intradayPct <= -5 &&
         belowSma50 &&
         (pnlPct < 0 || peakPnlPct < 0.20);
 
@@ -2644,6 +2752,9 @@ async function runBlueprint(args: {
    *  which the symbol-only set above doesn't carry. */
   openOrdersData: AlpacaOrder[];
   killSwitchOn: boolean;
+  /** Account down ≥ CIRCUIT_BREAKER_DRAWDOWN from its trailing ~1-month
+   *  peak — halts new BUYs + the always-invested mandate (crash protection). */
+  circuitBreakerActive: boolean;
   account: AccountSnapshot;
   recentOrders: OrderSummary[];
   marketClock: MarketClockSummary | null;
@@ -2678,6 +2789,7 @@ async function runBlueprint(args: {
     openOrderSymbols,
     openOrdersData,
     killSwitchOn,
+    circuitBreakerActive,
     account,
     recentOrders,
     marketClock,
@@ -2708,7 +2820,11 @@ async function runBlueprint(args: {
     trades: [],
     killSwitchTriggered: killSwitchOn,
     grokCalled: false,
-    reason: killSwitchOn ? 'daily_kill_switch' : undefined,
+    reason: killSwitchOn
+      ? 'daily_kill_switch'
+      : circuitBreakerActive
+        ? 'crash_circuit_breaker'
+        : undefined,
   };
 
   // If user has zero allocation to this bucket but positions still exist
@@ -2791,11 +2907,15 @@ async function runBlueprint(args: {
     openOrdersData,
   });
 
-  // Daily kill-switch: account is down ≥ dailyKillSwitchPct on the day. The
-  // mechanical safety pass above has already run, so existing positions keep
-  // their stop-losses; from here we only stop opening NEW risk — no Grok
-  // call, no BUYs, no rebalancing — until the daily P&L resets.
-  if (killSwitchOn) return { ...result, deployedNotional: 0 };
+  // Risk gates — stop opening NEW risk while either fires. The mechanical
+  // safety pass above has already run, so existing positions keep their
+  // stop-losses; from here we skip the Grok call, all BUYs, rotation and
+  // the always-invested mandate.
+  //  - Daily kill-switch: account down ≥ dailyKillSwitchPct on the day.
+  //  - Crash circuit breaker: account down ≥ CIRCUIT_BREAKER_DRAWDOWN from
+  //    its trailing ~1-month peak — a sustained bleed the daily switch
+  //    resets out of every morning.
+  if (killSwitchOn || circuitBreakerActive) return { ...result, deployedNotional: 0 };
 
   // 1b. Portfolio Mirror Mode — followers rebalance their portfolio %s to
   // match the leader's per-ticker composition. Replaces the decision-stream
@@ -3142,6 +3262,10 @@ export async function runScanForUser(
   const isBearRegime = bear?.isBear ?? false;
   const spyReturn30d = bear?.return30d ?? null;
 
+  // Multi-day crash circuit breaker — account-wide, computed once per scan.
+  // See detectCrashCircuitBreaker. Passed to every blueprint run below.
+  const circuitBreakerActive = await detectCrashCircuitBreaker(creds, equity);
+
   // Friday-afternoon equity-BUY blackout (weekend gap risk).
   const fridayBlackout = isFridayBlackout();
 
@@ -3203,6 +3327,7 @@ export async function runScanForUser(
       openOrderSymbols,
       openOrdersData: openOrdersRes.success ? openOrdersRes.data : [],
       killSwitchOn,
+      circuitBreakerActive,
       account,
       recentOrders,
       marketClock,

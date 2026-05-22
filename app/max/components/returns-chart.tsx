@@ -2,6 +2,8 @@
 
 import { useMemo } from 'react';
 
+export type ChartMode = 'return' | 'index';
+
 interface Props {
   /** Equity values over time. If empty, renders a placeholder line. */
   points?: number[];
@@ -12,6 +14,13 @@ interface Props {
   xTicks?: string[];
   /** When set, draws a peak label on the chart at the value's index. */
   peakIndex?: number;
+  /**
+   * 'return' — APEX equity area chart with faint benchmark overlays.
+   * 'index'  — APEX, S&P 500 and NASDAQ 100 each rebased to % return from
+   *            the period start, plotted as comparable lines for a direct
+   *            head-to-head performance comparison.
+   */
+  mode?: ChartMode;
 }
 
 const DEFAULT_TICKS = ['09:30', '10:30', '11:30', '12:30', '13:30', '14:30', '15:30', '16:00'];
@@ -43,51 +52,103 @@ function rebaseToPortfolio(bench: number[] | undefined, pts: number[]): number[]
   return scaled;
 }
 
+/**
+ * Convert a price/equity series to percentage return from its first point
+ * (e.g. [100, 110, 105] → [0, 10, 5]). Length-aligned to `targetLen` so the
+ * portfolio and both benchmarks share one x-axis. Returns null if the data
+ * isn't usable.
+ */
+function toPctSeries(series: number[] | undefined, targetLen: number): number[] | null {
+  if (!series || series.length < 2 || targetLen < 2) return null;
+  const base = series[0];
+  if (base <= 0) return null;
+  if (series.length === targetLen) {
+    return series.map((v) => (v / base - 1) * 100);
+  }
+  const out: number[] = [];
+  for (let i = 0; i < targetLen; i++) {
+    const idx = Math.min(
+      series.length - 1,
+      Math.floor((i / (targetLen - 1)) * (series.length - 1)),
+    );
+    out.push((series[idx] / base - 1) * 100);
+  }
+  return out;
+}
+
 export function ReturnsChart({
   points,
   spyPoints,
   qqqPoints,
   xTicks = DEFAULT_TICKS,
   peakIndex,
+  mode = 'return',
 }: Props) {
   const pts = useMemo(() => {
     if (points && points.length > 1) return points;
     const out: number[] = [];
     let v = 1_000_000;
     for (let i = 0; i < 120; i++) {
-      v += (Math.sin(i / 9) + 0.6) * 450 + (Math.random() - 0.45) * 900;
+      // Deterministic placeholder curve (no Math.random — keeps useMemo pure).
+      v += (Math.sin(i / 9) + 0.6) * 450 + Math.sin(i / 2.3) * 120;
       out.push(v);
     }
     return out;
   }, [points]);
 
+  const isIndex = mode === 'index';
+
+  // Return mode: benchmarks rebased to the portfolio's starting value.
   const spy = useMemo(() => rebaseToPortfolio(spyPoints, pts), [spyPoints, pts]);
   const qqq = useMemo(() => rebaseToPortfolio(qqqPoints, pts), [qqqPoints, pts]);
+
+  // Index mode: each series expressed as its own % return from period start.
+  const apexPct = useMemo(() => toPctSeries(pts, pts.length), [pts]);
+  const spyPct = useMemo(() => toPctSeries(spyPoints, pts.length), [spyPoints, pts.length]);
+  const qqqPct = useMemo(() => toPctSeries(qqqPoints, pts.length), [qqqPoints, pts.length]);
 
   const W = 1200;
   const H = 320;
   const pad = 24;
 
-  const allValues: number[] = [...pts, ...(spy ?? []), ...(qqq ?? [])];
+  // Active series for the chosen mode.
+  const apexSeries = isIndex ? apexPct ?? pts.map(() => 0) : pts;
+  const spySeries = isIndex ? spyPct : spy;
+  const qqqSeries = isIndex ? qqqPct : qqq;
+
+  const allValues: number[] = [
+    ...apexSeries,
+    ...(spySeries ?? []),
+    ...(qqqSeries ?? []),
+    ...(isIndex ? [0] : []), // keep the 0 % baseline in frame
+  ];
   const min = Math.min(...allValues);
   const max = Math.max(...allValues);
   const span = max - min || 1;
-  const x = (i: number) => pad + (i / (pts.length - 1)) * (W - pad * 2);
+  const n = apexSeries.length;
+  const x = (i: number) => pad + (i / (n - 1)) * (W - pad * 2);
   const y = (v: number) => pad + (1 - (v - min) / span) * (H - pad * 2);
-  const path = pts.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
-  const area = `${path} L${x(pts.length - 1)},${H - pad} L${pad},${H - pad} Z`;
-  const spyPath = spy
-    ? spy.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
-    : null;
-  const qqqPath = qqq
-    ? qqq.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ')
-    : null;
+  const toPath = (s: number[]) =>
+    s.map((v, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(' ');
 
-  // Peak marker.
-  const pi = typeof peakIndex === 'number' ? peakIndex : pts.indexOf(Math.max(...pts));
+  const path = toPath(apexSeries);
+  // Area fill only in return mode — an index comparison reads cleaner as lines.
+  const area = isIndex ? null : `${path} L${x(n - 1)},${H - pad} L${pad},${H - pad} Z`;
+  const spyPath = spySeries ? toPath(spySeries) : null;
+  const qqqPath = qqqSeries ? toPath(qqqSeries) : null;
+
+  // Peak marker — return mode only (an index comparison has no single peak).
+  const pi = !isIndex
+    ? typeof peakIndex === 'number'
+      ? peakIndex
+      : pts.indexOf(Math.max(...pts))
+    : -1;
   const peakX = pi >= 0 ? x(pi) : null;
   const peakY = pi >= 0 ? y(pts[pi]) : null;
   const peakValue = pi >= 0 ? pts[pi] : null;
+
+  // 0 % reference line — index mode only.
+  const baselineY = isIndex ? y(0) : null;
 
   return (
     <div className="chart">
@@ -113,32 +174,42 @@ export function ReturnsChart({
             strokeDasharray="2 4"
           />
         ))}
-        <path d={area} fill="url(#rc-grn)" />
+        {baselineY !== null && (
+          <line
+            x1={pad}
+            x2={W - pad}
+            y1={baselineY}
+            y2={baselineY}
+            stroke="rgba(255,255,255,0.22)"
+            strokeWidth="1"
+          />
+        )}
+        {area && <path d={area} fill="url(#rc-grn)" />}
         {spyPath && (
           <path
             d={spyPath}
-            stroke="rgba(255,255,255,0.45)"
-            strokeWidth="1.4"
+            stroke={isIndex ? 'rgba(255,255,255,0.7)' : 'rgba(255,255,255,0.45)'}
+            strokeWidth={isIndex ? 1.8 : 1.4}
             fill="none"
-            strokeDasharray="4 5"
+            strokeDasharray={isIndex ? undefined : '4 5'}
           />
         )}
         {qqqPath && (
           <path
             d={qqqPath}
-            stroke="rgba(96,165,250,0.55)"
-            strokeWidth="1.4"
+            stroke={isIndex ? 'rgba(96,165,250,0.9)' : 'rgba(96,165,250,0.55)'}
+            strokeWidth={isIndex ? 1.8 : 1.4}
             fill="none"
-            strokeDasharray="2 3"
+            strokeDasharray={isIndex ? undefined : '2 3'}
           />
         )}
         <path d={path} stroke="url(#rc-line)" strokeWidth="2" fill="none" />
-        <circle cx={x(pts.length - 1)} cy={y(pts[pts.length - 1])} r="4" fill="#34D399">
+        <circle cx={x(n - 1)} cy={y(apexSeries[n - 1])} r="4" fill="#34D399">
           <animate attributeName="r" values="4;7;4" dur="1.6s" repeatCount="indefinite" />
           <animate attributeName="opacity" values="1;.5;1" dur="1.6s" repeatCount="indefinite" />
         </circle>
 
-        {peakX !== null && peakY !== null && peakValue !== null && pi !== pts.length - 1 && (
+        {peakX !== null && peakY !== null && peakValue !== null && pi !== n - 1 && (
           <g>
             <circle cx={peakX} cy={peakY} r="4" fill="rgba(255,255,255,0.85)" />
             <text
@@ -153,22 +224,22 @@ export function ReturnsChart({
             </text>
           </g>
         )}
-        {spyPath && spy && (
+        {spyPath && spySeries && (
           <text
-            x={x(spy.length - 1) + 4}
-            y={y(spy[spy.length - 1]) + 4}
+            x={x(n - 1) + 4}
+            y={y(spySeries[n - 1]) + 4}
             fontSize="10"
             fontFamily="JetBrains Mono"
-            fill="rgba(255,255,255,0.6)"
+            fill={isIndex ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.6)'}
             textAnchor="start"
           >
             S&amp;P 500
           </text>
         )}
-        {qqqPath && qqq && (
+        {qqqPath && qqqSeries && (
           <text
-            x={x(qqq.length - 1) + 4}
-            y={y(qqq[qqq.length - 1]) - 8}
+            x={x(n - 1) + 4}
+            y={y(qqqSeries[n - 1]) - 8}
             fontSize="10"
             fontFamily="JetBrains Mono"
             fill="rgba(96,165,250,0.85)"
