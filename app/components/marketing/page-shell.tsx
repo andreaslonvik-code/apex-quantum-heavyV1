@@ -1,21 +1,23 @@
 'use client';
 
 import { useEffect, useState, type ReactNode } from 'react';
-import { MHeader } from './header';
-import { MFooter } from './footer';
+import '../marketing-v2/styles.css';
+import { HeaderV2 } from '../marketing-v2/header';
+import { FooterV2 } from '../marketing-v2/cta-footer';
 import type { Lang } from './types';
 import { readLangCookie } from '@/lib/i18n/lang-cookie';
 
 /**
- * Shared chrome for sub-pages reached from the marketing footer / header.
- * Mirrors the structure of `app/page.tsx` so headers, ambient effects, and
- * footers stay aligned across all marketing surfaces.
+ * Shared chrome for info / legal sub-pages (Personvern, Vilkår, Om oss,
+ * Risikofaktorer, Cookies, Kontakt, etc.). Wraps every sub-page in the
+ * v2 editorial design — same atmosphere, header and footer as the landing
+ * — so every public surface reads as one site.
  *
- * Initial render uses `'no'` so SSR HTML matches between server and client.
- * After hydration we read the `aq-lang` cookie (set by the homepage's
- * server-side geo detection or by the user's explicit toggle) and switch.
- * Direct sub-page landings from foreign IPs without a cookie show NO for
- * one paint then flip — acceptable since marketing entry flows through `/`.
+ * Initial render uses 'no' to match SSR; after hydration we read the
+ * `aq-lang` cookie set by the homepage's geo detection or the user's
+ * explicit toggle. Direct sub-page landings from foreign IPs without a
+ * cookie show NO for one paint then flip — acceptable, since marketing
+ * entry flows through `/`.
  */
 export function PageShell({ children }: { children: (lang: Lang) => ReactNode }) {
   const [lang, setLang] = useState<Lang>('no');
@@ -28,21 +30,22 @@ export function PageShell({ children }: { children: (lang: Lang) => ReactNode })
   }, []);
 
   return (
-    <>
-      <div className="ambient" aria-hidden="true" />
-      <div className="grain" aria-hidden="true" />
-      <MHeader lang={lang} setLang={setLang} />
-      <main className="relative" style={{ zIndex: 2 }}>
+    <div className="aqv2">
+      <div className="atmosphere" aria-hidden="true" />
+      <div className="aqv2-grain" aria-hidden="true" />
+      <HeaderV2 lang={lang} setLang={setLang} />
+      <main>
         {children(lang)}
-        <MFooter lang={lang} />
+        <FooterV2 lang={lang} />
       </main>
-    </>
+    </div>
   );
 }
 
 /**
- * Generic article-style body block for legal / informational pages.
- * Sections accept either NO or EN content; the host page picks based on lang.
+ * Editorial article body used by every legal / informational sub-page.
+ * Renders a tall serif title, a discreet "last updated" caption, and a
+ * body slot styled by `.article-body` rules in `marketing-v2/styles.css`.
  */
 export function ArticleBody({
   title,
@@ -56,40 +59,11 @@ export function ArticleBody({
   body: ReactNode;
 }) {
   return (
-    <section style={{ padding: '140px 24px 80px' }}>
-      <div style={{ maxWidth: 820, margin: '0 auto' }}>
-        <h1
-          style={{
-            fontSize: 'clamp(36px, 5vw, 56px)',
-            fontWeight: 700,
-            letterSpacing: '-0.025em',
-            lineHeight: 1.05,
-            margin: 0,
-          }}
-        >
-          {title}
-        </h1>
-        <p
-          style={{
-            marginTop: 16,
-            color: 'rgba(255,255,255,0.5)',
-            fontSize: 14,
-            letterSpacing: '0.02em',
-            textTransform: 'uppercase',
-          }}
-        >
-          {updatedLabel}: {updatedDate}
-        </p>
-        <div
-          style={{
-            marginTop: 40,
-            color: 'rgba(255,255,255,0.78)',
-            fontSize: 16,
-            lineHeight: 1.7,
-          }}
-        >
-          {body}
-        </div>
+    <section className="article">
+      <div className="article-inner">
+        <h1>{title}</h1>
+        <p className="article-updated">{updatedLabel}: {updatedDate}</p>
+        <div className="article-body">{body}</div>
       </div>
     </section>
   );

@@ -11,27 +11,27 @@ const PRINCIPLES_COPY: Record<Lang, {
   items: Array<{ n: string; t: string; d: string }>;
 }> = {
   no: {
-    eye: '02 · Prinsipper',
-    titlePre: 'Tre ting vi ',
+    eye: '02 · Plattformen',
+    titlePre: 'Tre ting som ',
     titleEm:  'aldri',
-    titlePost: ' fraviker.',
-    sub: 'Disse styrer hver linje kode i blåkopien, hver feature på siden, og hver anbefaling motoren gir.',
+    titlePost: ' fravikes.',
+    sub: 'Alle Apex Quantum-produkter er bygget over de samme prinsippene — disse styrer hvordan koden er skrevet og hvordan kunden behandles.',
     items: [
-      { n: 'I',   t: 'Vis motoren.',           d: 'Modellens resonnement er aldri skjult. Hvert signal kommer med begrunnelse, sannsynlighet, og hvilke datapunkter som var avgjørende. Du forstår — eller du forkaster.' },
-      { n: 'II',  t: 'Disiplin slår overbevisning.', d: 'Vi optimerer for risikojustert avkastning over en syklus, ikke for spektakulære måneder. Sharpe over storytelling. Maksimal drawdown er en hard grense, ikke en fotnote.' },
-      { n: 'III', t: 'Renter, ikke spekulasjon.', d: 'Apex Quantum er bygget for å holdes i år, ikke i uker. Posisjoner skaleres. Avkastning realiseres. Konto-grunnlaget vokser — og motoren komponerer videre.' },
+      { n: 'I',   t: 'Du beholder kontrollen.',  d: 'Du velger megler. Du velger paper eller live. Du kan koble fra når som helst. Apex Quantum kobler seg til din egen Alpaca-konto — vi tar aldri imot dine midler, og vi flytter dem aldri.' },
+      { n: 'II',  t: 'Sikkerhet er ikke en fotnote.', d: 'Alpaca API-nøkler lagres kryptert med AES-256-GCM, per bruker. Rate-limiting og DDoS-beskyttelse i kanten. Strukturert revisjons-logging på hver handling. Juridiske ansvarsfraskrivelser er inkludert, ikke gjemt.' },
+      { n: 'III', t: 'Du ser hva motoren gjør.',  d: 'Live dashboard med porteføljeoversikt, handelslogg og performance-metrikker. Hver AI-anbefaling kommer med fullstendig begrunnelse. Ingen svart boks — du forstår, eller du forkaster.' },
     ],
   },
   en: {
-    eye: '02 · Principles',
+    eye: '02 · The Platform',
     titlePre: 'Three things we ',
     titleEm:  'never',
     titlePost: ' bend.',
-    sub: 'These govern every line of code in the blueprint, every feature on the page, and every recommendation the engine produces.',
+    sub: 'Every Apex Quantum product is built on the same principles — they govern how the code is written and how the customer is treated.',
     items: [
-      { n: 'I',   t: 'Show the engine.',           d: 'The model’s reasoning is never hidden. Every signal arrives with a rationale, a probability, and the data points that mattered. You understand it — or you reject it.' },
-      { n: 'II',  t: 'Discipline beats conviction.', d: 'We optimise for risk-adjusted return over a full cycle, not spectacular months. Sharpe over storytelling. Max drawdown is a hard limit, not a footnote.' },
-      { n: 'III', t: 'Compounding, not speculation.', d: 'Apex Quantum is built to be held for years, not weeks. Positions scale. Returns are realised. The base grows — and the engine keeps compounding.' },
+      { n: 'I',   t: 'You keep control.',             d: 'You pick the broker. You pick paper or live. You can disconnect at any time. Apex Quantum connects to your own Alpaca account — we never receive your funds, and we never move them.' },
+      { n: 'II',  t: 'Security is not a footnote.',   d: 'Alpaca API keys are stored AES-256-GCM encrypted, per user. Rate-limiting and DDoS protection at the edge. Structured audit logging on every action. Legal disclaimers are included, not hidden.' },
+      { n: 'III', t: 'You see what the engine does.', d: 'A live dashboard with portfolio overview, trade log and performance metrics. Every AI recommendation arrives with full reasoning. No black box — you understand it, or you reject it.' },
     ],
   },
 };

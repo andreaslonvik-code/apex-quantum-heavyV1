@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import type { Lang } from '../marketing/types';
 import type { MarketingStats } from '@/lib/marketing-stats';
 import { ArrowRight } from './icons';
@@ -21,14 +22,14 @@ const HERO_COPY: Record<Lang, {
   kpiPositions: string;
 }> = {
   no: {
-    eye: 'Apex Quantum · siden 2024',
-    titleA: 'Markedet hviler aldri.',
-    titleB: 'Ikke vår ',
-    titleEm: 'blåkopi',
-    titleC: ' heller.',
-    desc: 'AI-drevet aksjeinnsikt for seriøse investorer. Plus leverer signaler og resonnement, daglig. Max — den autonome motoren — utfører handler døgnet rundt når den lanseres i 2026.',
-    ctaPrimary: 'Få tilgang',
-    ctaSecondary: 'Les filosofien',
+    eye: 'Apex Quantum · AI-drevet aksjeinnsikt',
+    titleA: 'Lær markedet,',
+    titleB: 'eller la motoren ',
+    titleEm: 'ta over',
+    titleC: '.',
+    desc: 'Apex Quantum + gir deg daglige AI-signaler med fullstendig begrunnelse, ukentlige rapporter og strukturert læring fra 199 kr/mnd. Apex Quantum Max — den autonome trading-motoren via Alpaca — lanseres i 2026. Drevet av en blueprint utviklet over et år for ekspertise i aksjeanalyse.',
+    ctaPrimary: 'Start med Apex Quantum +',
+    ctaSecondary: 'Se produktene',
     panelTitle: 'Live posisjoner · paper trading',
     panelFoot: ['Auto-oppdatert', 'NASDAQ · NYSE · ARCA'],
     panelEmpty: 'Ingen åpne posisjoner akkurat nå.',
@@ -37,14 +38,14 @@ const HERO_COPY: Record<Lang, {
     kpiPositions: 'Aktive posisjoner',
   },
   en: {
-    eye: 'Apex Quantum · since 2024',
-    titleA: 'The market never rests.',
-    titleB: 'Neither does our ',
-    titleEm: 'blueprint',
+    eye: 'Apex Quantum · AI-powered market insight',
+    titleA: 'Learn the market,',
+    titleB: 'or let the engine ',
+    titleEm: 'take over',
     titleC: '.',
-    desc: 'AI-driven equity intelligence for serious investors. Plus delivers signals and reasoning, daily. Max — the autonomous engine — executes around the clock when it ships in 2026.',
-    ctaPrimary: 'Get access',
-    ctaSecondary: 'Read the thesis',
+    desc: 'Apex Quantum + gives you daily AI signals with full reasoning, weekly reports and structured learning from $19/month. Apex Quantum Max — the autonomous trading engine via Alpaca — launches in 2026. Driven by a blueprint developed over a year for stock-analysis expertise.',
+    ctaPrimary: 'Start with Apex Quantum +',
+    ctaSecondary: 'See the products',
     panelTitle: 'Live positions · paper trading',
     panelFoot: ['Live · auto-refresh', 'NASDAQ · NYSE · ARCA'],
     panelEmpty: 'No open positions right now.',
@@ -84,10 +85,10 @@ export function HeroV2({ lang, stats }: { lang: Lang; stats: MarketingStats }) {
             </h1>
             <p className="hero-desc">{t.desc}</p>
             <div className="hero-ctas">
-              <a href="#products" className="btn btn-gold btn-lg">
+              <Link href="/sign-up" className="btn btn-gold btn-lg">
                 {t.ctaPrimary} <ArrowRight size={16} />
-              </a>
-              <a href="#thesis" className="btn btn-ghost btn-lg">{t.ctaSecondary}</a>
+              </Link>
+              <a href="#products" className="btn btn-ghost btn-lg">{t.ctaSecondary}</a>
             </div>
             {stats.ok && (
               <div className="hero-meta">

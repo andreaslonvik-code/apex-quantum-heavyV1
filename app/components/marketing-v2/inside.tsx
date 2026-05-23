@@ -12,25 +12,25 @@ const INSIDE_COPY: Record<Lang, {
   steps: Array<{ tag: [string, string]; parts: Part[] }>;
 }> = {
   no: {
-    eye: '05 · Innsiden av motoren',
-    quote: ['Vi sier ikke ', { em: 'kjøp NVDA' }, '. Vi sier ', { em: 'her er hvorfor' }, ', og du bestemmer.'],
-    cite: 'Apex Quantum-blåkopien · § 2.4 transparens',
+    eye: '04 · Inni motoren',
+    quote: ['Hver anbefaling kommer med ', { em: 'fullstendig begrunnelse' }, '. Ingen svart boks, ingen ', { em: 'stol på oss' }, '.'],
+    cite: 'Apex Quantum + · daglige signaler med begrunnelse',
     steps: [
-      { tag: ['SIGNAL',       '09:31 EDT'], parts: ['Posisjon foreslått: ', { sym: 'NVDA' }, ' — 1,2 % av portefølje, stop −1,8 %.'] },
-      { tag: ['RESONNEMENT',  '09:31 EDT'], parts: ['Akkumulasjon over 4 dager, RSI 58, momentum reagerer på sektorrotasjon mot halvledere.'] },
-      { tag: ['UTFØRELSE',    '09:32 EDT'], parts: ['Plassert hos Alpaca · fill ', { up: '+2.84 %' }, ' over 6 t.'] },
-      { tag: ['REVURDERING',  '15:48 EDT'], parts: ['VIX-justert risiko fortsatt OK. Holder posisjonen til neste signal.'] },
+      { tag: ['SIGNAL',       'utløst'], parts: ['Modellen flagger ', { sym: 'NVDA' }, ' for posisjon. Forslått størrelse 1,2 % av portefølje, stop −1,8 %.'] },
+      { tag: ['BEGRUNNELSE',  'fullt synlig'], parts: ['Akkumulasjon over fire dager, RSI 58, momentum reagerer på sektorrotasjon mot halvledere. Datapunktene som veide tyngst er listet med signalet.'] },
+      { tag: ['UTFØRELSE',    'via Alpaca'], parts: ['Max plasserer ordren mot din Alpaca-konto. Du kan se hver handling i live cockpiten — eller skru av motoren med ', { sym: 'kill switch' }, '.'] },
+      { tag: ['REVURDERING',  'kontinuerlig'], parts: ['Modellen revurderer hver posisjon. Når begrunnelsen ikke lenger holder, lukkes den — og du ser hvorfor.'] },
     ],
   },
   en: {
-    eye: '05 · Inside the engine',
-    quote: ['We don’t say ', { em: 'buy NVDA' }, '. We say ', { em: 'here is why' }, ', and you decide.'],
-    cite: 'Apex Quantum blueprint · § 2.4 transparency',
+    eye: '04 · Inside the engine',
+    quote: ['Every recommendation arrives with ', { em: 'full reasoning' }, '. No black box, no ', { em: 'trust us' }, '.'],
+    cite: 'Apex Quantum + · daily signals with reasoning',
     steps: [
-      { tag: ['SIGNAL',    '09:31 EDT'], parts: ['Position proposed: ', { sym: 'NVDA' }, ' — 1.2 % of portfolio, stop −1.8 %.'] },
-      { tag: ['RATIONALE', '09:31 EDT'], parts: ['Four-day accumulation, RSI 58, momentum responds to sector rotation into semis.'] },
-      { tag: ['EXECUTION', '09:32 EDT'], parts: ['Filled at Alpaca · ', { up: '+2.84 %' }, ' over 6 h.'] },
-      { tag: ['RE-EVAL',   '15:48 EDT'], parts: ['VIX-adjusted risk still OK. Holding through next signal.'] },
+      { tag: ['SIGNAL',    'triggered'], parts: ['The model flags ', { sym: 'NVDA' }, ' for a position. Suggested size 1.2 % of portfolio, stop −1.8 %.'] },
+      { tag: ['RATIONALE', 'fully visible'], parts: ['Four-day accumulation, RSI 58, momentum responds to sector rotation into semis. The data points that mattered most are listed alongside the signal.'] },
+      { tag: ['EXECUTION', 'via Alpaca'], parts: ['Max places the order against your Alpaca account. You see every action in the live cockpit — or shut the engine off with the ', { sym: 'kill switch' }, '.'] },
+      { tag: ['RE-EVAL',   'continuous'], parts: ['The model reassesses every position. When the rationale no longer holds, it closes — and you see why.'] },
     ],
   },
 };

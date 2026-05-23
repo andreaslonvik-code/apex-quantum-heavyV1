@@ -12,21 +12,21 @@ const THESIS_COPY: Record<Lang, {
   byline: string;
 }> = {
   no: {
-    eye: '01 · Filosofien',
-    titlePre: 'En blåkopi, ikke en ',
-    titleEm:  'svart boks',
+    eye: '01 · Hva vi bygger',
+    titlePre: 'Maskiner som lærer raskere, ',
+    titleEm:  'og handler disiplinert',
     titlePost: '.',
-    lede: 'Apex Quantum er ikke en signalkanal eller en gambling-app. Det er en disiplinert handelsmotor — bygget på et år med forskning, kalibrert mot levende markedsdata, og gjennomsiktig der det betyr noe.',
-    body: 'Vi tror på to ting som er upopulære i et marked som elsker hype. Først: at en seriøs investor fortjener å se hvordan modellen tenker — ikke bare hva den anbefaler. Dernest: at konsistent risikojustert avkastning, levert over tid, er mer verdt enn ett spektakulært kvartal. Plus gir deg motoren som læremester. Max lar den jobbe for deg.',
+    lede: 'Apex Quantum AS er et norsk teknologiselskap som bygger autonome handelssystemer for det amerikanske aksjemarkedet. Vi tror at maskiner som lærer raskere og handler disiplinert kan levere bedre risikojustert avkastning enn de fleste menneskelige forvaltere.',
+    body: 'Plattformen ble bygget for å gi privatkunder tilgang til de samme kvantitative strategiene som tidligere bare var tilgjengelige for hedgefond og proprietære handelsbord. Plus lærer deg modellen og leverer signaler. Max — den autonome motoren — kobler seg til din egen Alpaca-konto via krypterte API-nøkler. Vi tar aldri i mot, oppbevarer eller flytter dine midler.',
     byline: 'Apex Quantum AS · Oslo',
   },
   en: {
-    eye: '01 · The Thesis',
-    titlePre: 'A blueprint, not a ',
-    titleEm:  'black box',
+    eye: '01 · What we build',
+    titlePre: 'Machines that learn faster, ',
+    titleEm:  'and trade with discipline',
     titlePost: '.',
-    lede: 'Apex Quantum is not a signal channel or a gambling app. It is a disciplined trading engine — built on a year of research, calibrated against live market data, and transparent where it matters.',
-    body: 'We believe in two things that are unpopular in a market addicted to hype. First, that a serious investor deserves to see how the model thinks — not just what it recommends. Second, that consistent risk-adjusted returns, delivered over time, are worth more than one spectacular quarter. Plus gives you the engine as a tutor. Max lets it work for you.',
+    lede: 'Apex Quantum AS is a Norwegian technology company building autonomous trading systems for the US equity market. We believe machines that learn faster and trade with discipline can deliver better risk-adjusted returns than most human portfolio managers.',
+    body: 'The platform was built to give retail customers access to the kinds of quantitative strategies historically reserved for hedge funds and proprietary trading desks. Plus teaches you the model and delivers signals. Max — the autonomous engine — connects to your own Alpaca account via encrypted API keys. We never receive, hold or move your funds.',
     byline: 'Apex Quantum AS · Oslo',
   },
 };

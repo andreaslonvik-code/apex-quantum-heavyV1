@@ -1,5 +1,7 @@
 'use client';
 
+import Link from 'next/link';
+import { PLUS_FOR_SALE, PLUS_DEV_LABELS } from '@/lib/product-status';
 import type { Lang } from '../marketing/types';
 import { ArrowRight, Check } from './icons';
 
@@ -9,6 +11,7 @@ interface TierData {
   tagline: string;
   currency: string;
   cycle: string;
+  desc: string;
   bullets: string[];
   cta1: string;
   cta2: string;
@@ -25,75 +28,96 @@ const TIERS_COPY: Record<Lang, {
 }> = {
   no: {
     eye: '03 · Produktene',
-    titlePre: 'To måter å ',
-    titleEm:  'eie',
-    titlePost: ' blåkopien.',
-    sub: 'Lær med Plus. Lås opp motoren med Max når den ankommer. Prisen er den samme for alle — fordi resultatene skal være det også.',
+    titlePre: 'To måter å bruke ',
+    titleEm:  'Apex Quantum',
+    titlePost: '.',
+    sub: 'Lær markedet med signaler og rapporter — eller la den fullautomatiske motoren ta over når den lanseres.',
     plus: {
       name: 'Plus', tag: 'TILGJENGELIG NÅ',
-      tagline: 'For investoren som vil forstå selv.',
-      currency: '199', cycle: '/ mnd · NOK',
+      tagline: 'Signaler, rapporter og læring.',
+      currency: '199', cycle: 'kr / mnd',
+      desc: 'For deg som vil forstå markedet selv. Daglige AI-signaler med begrunnelse, ukentlige rapporter, læringsmoduler og praksisportefølje. Du velger megler. Du tar beslutningene.',
       bullets: [
         'Daglige signaler med fullstendig begrunnelse',
-        'Ukentlige markedsrapporter på norsk og engelsk',
-        'Tilgang til hele blåkopien — alle indikatorer, all logikk',
+        'Ukentlige markedsrapporter',
+        'Læringsmoduler — nybegynner til avansert',
         'Praksisportefølje med live priser',
-        'Tilgjengelig globalt — du velger megler',
+        'Tilgjengelig globalt — ingen meglerbinding',
       ],
-      cta1: 'Opprett konto', cta2: 'Hva er inkludert',
+      cta1: 'Start nå', cta2: 'Les mer',
     },
     max: {
-      name: 'Max', tag: 'KOMMER 2026',
-      tagline: 'For den som vil ha motoren i arbeid.',
-      currency: '4 990', cycle: '/ mnd · NOK',
+      name: 'Max', tag: 'UNDER UTVIKLING',
+      tagline: 'Fullautomatisk AI-trading.',
+      currency: '4 990', cycle: 'kr / mnd',
+      desc: 'Den autonome trading-motoren. AI-en analyserer markedsdynamikk og utfører aksjehandel for deg via Alpaca, døgnet rundt — drevet av en blueprint utviklet over et år for ekspertise i aksjeanalyse. Lansering planlagt 2026.',
       bullets: [
-        'Fullautomatisk handel via Alpaca Trading API',
-        'AI med selvlærende parametere — kontinuerlig kalibrering',
-        'AES-256-GCM-kryptering på alle API-nøkler',
-        'Live cockpit, P&L per posisjon, og kill-switch',
+        'Fullautomatisk handel via Alpaca',
+        'AI med selvlærende parametere',
+        'Krypterte API-nøkler (AES-256-GCM)',
+        'Live cockpit, P&L og porteføljegraf',
         'Ta ut avkastning på ett klikk',
       ],
-      cta1: 'Varsle meg', cta2: 'Tekniske detaljer',
+      cta1: 'Varsle meg', cta2: 'Detaljer',
     },
   },
   en: {
     eye: '03 · The Products',
-    titlePre: 'Two ways to ',
-    titleEm:  'own',
-    titlePost: ' the blueprint.',
-    sub: 'Learn with Plus. Unlock the engine with Max when it arrives. The price is the same for everyone — because the results should be, too.',
+    titlePre: 'Two ways to use ',
+    titleEm:  'Apex Quantum',
+    titlePost: '.',
+    sub: 'Learn the market with signals and reports — or let the fully autonomous engine take over once it launches.',
     plus: {
       name: 'Plus', tag: 'AVAILABLE NOW',
-      tagline: 'For the investor who wants to understand.',
-      currency: '19', cycle: '/ mo · USD',
+      tagline: 'Signals, reports and learning.',
+      currency: '19', cycle: '$ / month',
+      desc: 'For those who want to understand the market themselves. Daily AI signals with reasoning, weekly reports, learning modules and a practice portfolio. You pick the broker. You make the calls.',
       bullets: [
         'Daily signals with full reasoning',
-        'Weekly market reports in Norwegian and English',
-        'Access to the full blueprint — every indicator, all logic',
+        'Weekly market reports',
+        'Learning modules — beginner to advanced',
         'Practice portfolio with live prices',
-        'Available globally — pick any broker',
+        'Available globally — no broker lock-in',
       ],
-      cta1: 'Create account', cta2: 'What’s included',
+      cta1: 'Start now', cta2: 'Learn more',
     },
     max: {
-      name: 'Max', tag: 'SHIPPING 2026',
-      tagline: 'For the one who wants the engine working.',
-      currency: '499', cycle: '/ mo · USD',
+      name: 'Max', tag: 'IN DEVELOPMENT',
+      tagline: 'Fully autonomous AI trading.',
+      currency: '499', cycle: '$ / month',
+      desc: 'The autonomous trading engine. AI analyzes market dynamics and executes equity trading for you via Alpaca, around the clock — driven by a blueprint developed over a year for stock-analysis expertise. Launch planned 2026.',
       bullets: [
-        'Fully autonomous trading via Alpaca Trading API',
-        'AI with self-tuning parameters — continuous calibration',
-        'AES-256-GCM encryption on every API key',
-        'Live cockpit, per-position P&L, and kill switch',
-        'Withdraw realised profits with one click',
+        'Fully automated trading via Alpaca',
+        'AI with self-tuning parameters',
+        'Encrypted API keys (AES-256-GCM)',
+        'Live cockpit, P&L and portfolio chart',
+        'Withdraw profits with one click',
       ],
-      cta1: 'Notify me', cta2: 'Technical specs',
+      cta1: 'Notify me', cta2: 'Details',
     },
   },
 };
 
-function Tier({ data, kind, available }: { data: TierData; kind: 'cyan' | 'gold'; available: boolean }) {
+function Tier({
+  data,
+  kind,
+  available,
+  primaryHref,
+  secondaryHref,
+  primaryTag,
+  primaryCta,
+}: {
+  data: TierData;
+  kind: 'cyan' | 'gold';
+  available: boolean;
+  primaryHref: string;
+  secondaryHref: string;
+  primaryTag: string;
+  primaryCta: string;
+}) {
   const cls = kind === 'gold' ? 'tier gold' : 'tier';
   const tagCls = kind === 'gold' ? 'aqv2-tag gold' : available ? 'aqv2-tag cy' : 'aqv2-tag dev';
+  const isMailto = primaryHref.startsWith('mailto:');
   return (
     <div className={available ? cls : `${cls} dev`}>
       <div className="tier-head">
@@ -103,7 +127,7 @@ function Tier({ data, kind, available }: { data: TierData; kind: 'cyan' | 'gold'
         </h3>
         <span className={tagCls}>
           {available ? <span className="aqv2-dot" /> : null}
-          {data.tag}
+          {primaryTag}
         </span>
       </div>
       <p className="tier-tagline">{data.tagline}</p>
@@ -111,16 +135,28 @@ function Tier({ data, kind, available }: { data: TierData; kind: 'cyan' | 'gold'
         <span className="tier-price">{data.currency}</span>
         <span className="tier-cycle">{data.cycle}</span>
       </div>
+      <p style={{ color: 'var(--aq-text-mid)', fontSize: 14.5, lineHeight: 1.6, margin: '0 0 8px' }}>{data.desc}</p>
       <ul>
         {data.bullets.map((b) => (
           <li key={b}><span className="mark"><Check /></span>{b}</li>
         ))}
       </ul>
       <div className="tier-actions">
-        <button type="button" className={kind === 'gold' ? 'btn btn-gold' : 'btn btn-cyan'} disabled={!available}>
-          {data.cta1} <ArrowRight size={14} />
-        </button>
-        <button type="button" className="btn btn-ghost">{data.cta2}</button>
+        {isMailto ? (
+          <a href={primaryHref} className={kind === 'gold' ? 'btn btn-gold' : 'btn btn-cyan'}>
+            {primaryCta} <ArrowRight size={14} />
+          </a>
+        ) : (
+          <Link
+            href={primaryHref}
+            className={kind === 'gold' ? 'btn btn-gold' : 'btn btn-cyan'}
+            aria-disabled={!available}
+            style={!available ? { opacity: 0.6, pointerEvents: 'none' } : undefined}
+          >
+            {primaryCta} <ArrowRight size={14} />
+          </Link>
+        )}
+        <Link href={secondaryHref} className="btn btn-ghost">{data.cta2}</Link>
       </div>
     </div>
   );
@@ -128,6 +164,8 @@ function Tier({ data, kind, available }: { data: TierData; kind: 'cyan' | 'gold'
 
 export function TiersV2({ lang }: { lang: Lang }) {
   const t = TIERS_COPY[lang];
+  const plusTag = PLUS_FOR_SALE ? t.plus.tag : PLUS_DEV_LABELS[lang].tag;
+  const plusCta = PLUS_FOR_SALE ? t.plus.cta1 : PLUS_DEV_LABELS[lang].cta;
   return (
     <section id="products" className="tiers">
       <div className="container">
@@ -137,8 +175,24 @@ export function TiersV2({ lang }: { lang: Lang }) {
           <p>{t.sub}</p>
         </div>
         <div className="tiers-grid">
-          <Tier data={t.plus} kind="cyan" available />
-          <Tier data={t.max}  kind="gold" available={false} />
+          <Tier
+            data={t.plus}
+            kind="cyan"
+            available={PLUS_FOR_SALE}
+            primaryHref={PLUS_FOR_SALE ? '/sign-up' : '#'}
+            secondaryHref="/plus"
+            primaryTag={plusTag}
+            primaryCta={plusCta}
+          />
+          <Tier
+            data={t.max}
+            kind="gold"
+            available={false}
+            primaryHref="mailto:post@apex-quantum.com?subject=Apex%20Quantum%20Max%20%E2%80%94%20notify%20me"
+            secondaryHref="/pris"
+            primaryTag={t.max.tag}
+            primaryCta={t.max.cta1}
+          />
         </div>
       </div>
     </section>
