@@ -501,7 +501,9 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
             />
           )}
 
-          {/* Per-blueprint watchlists — each market gets its own panel. */}
+          {/* Per-blueprint watchlists — each market gets its own panel.
+              Rendered as collapsed drawers: head is a button, click expands.
+              Stocks get sector sub-headers; crypto / commodities stay flat. */}
           {(['stocks', 'crypto', 'commodities'] as const).map((bp) => (
             <Watchlist
               key={bp}
@@ -509,6 +511,9 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
               rows={watchlistRowsByBlueprint[bp]}
               title={BLUEPRINT_TITLES[bp][lang]}
               subtitle={BLUEPRINTS[bp].name}
+              collapsible
+              defaultExpanded={false}
+              groupBySector={bp === 'stocks'}
             />
           ))}
         </div>
