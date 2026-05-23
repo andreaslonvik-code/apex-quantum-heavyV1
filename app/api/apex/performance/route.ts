@@ -101,7 +101,11 @@ const YAHOO_TF: Record<Tf, { range: string; interval: string }> = {
   '30D': { range: '1mo', interval: '1d'  },
   'MTD': { range: '1mo', interval: '1d'  },
   'YTD': { range: 'ytd', interval: '1d'  },
-  'ALL': { range: '2y',  interval: '1wk' },
+  // ALL: daily granularity over 5 years. Weekly was too coarse — recent
+  // account histories (days/weeks) collapsed to 1-2 weekly bars and the
+  // index lines rendered near-flat. Daily covers any realistic account
+  // span with proper variation.
+  'ALL': { range: '5y',  interval: '1d'  },
 };
 const yahooIndexCache: Map<string, { fetchedAt: number; data: BenchSeries }> = new Map();
 

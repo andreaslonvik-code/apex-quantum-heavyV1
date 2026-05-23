@@ -98,9 +98,6 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const router = useRouter();
   const [lang, setLang] = useState<Lang>('no');
   const [tf, setTf] = useState<Timeframe>('24H');
-  // Hero chart view: 'return' = APEX equity curve; 'index' = APEX vs
-  // S&P 500 vs NASDAQ 100, each rebased to % return for direct comparison.
-  const [chartMode, setChartMode] = useState<'return' | 'index'>('return');
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
   const [accountInfo, setAccountInfo] = useState<AccountInfo | null>(null);
@@ -458,30 +455,11 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
               mode={mode}
               currency={accountInfo?.currency ?? null}
             />
-            <div style={{ display: 'flex', justifyContent: 'flex-end', padding: '4px 4px 0' }}>
-              <div className="tfgrp">
-                <button
-                  type="button"
-                  className={`tf ${chartMode === 'return' ? 'is-active' : ''}`}
-                  onClick={() => setChartMode('return')}
-                >
-                  {lang === 'no' ? 'Avkastning' : 'Return'}
-                </button>
-                <button
-                  type="button"
-                  className={`tf ${chartMode === 'index' ? 'is-active' : ''}`}
-                  onClick={() => setChartMode('index')}
-                >
-                  {lang === 'no' ? 'Indeks' : 'Index'}
-                </button>
-              </div>
-            </div>
             <ReturnsChart
               points={equityPoints}
               sp500Points={sp500Points}
               nasdaqPoints={nasdaqPoints}
               xTicks={chartTicks}
-              mode={chartMode}
             />
             <ChartSummary
               lang={lang}
