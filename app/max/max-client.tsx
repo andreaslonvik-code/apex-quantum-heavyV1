@@ -20,6 +20,7 @@ import { WithdrawModal, type WithdrawStatus } from './components/withdraw-modal'
 import { GrokThesisCard } from './components/grok-thesis-card';
 import type { Lang } from './components/i18n';
 import { BLUEPRINTS, type AssetClass } from '@/lib/blueprints';
+import '../components/marketing-v2/styles.css';
 
 const BLUEPRINT_TITLES: Record<AssetClass, { no: string; en: string }> = {
   stocks: { no: 'Aksjer', en: 'Stocks' },
@@ -427,7 +428,7 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const mode: 'sim' | 'live' = accountInfo?.environment === 'live' ? 'live' : 'sim';
 
   return (
-    <>
+    <div className="aqv2-dash">
       <div className="ambient" aria-hidden="true" />
       <div className="grain" aria-hidden="true" />
       <Topbar
@@ -563,6 +564,6 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
           setTimeout(() => setWdStatus('idle'), 250);
         }}
       />
-    </>
+    </div>
   );
 }

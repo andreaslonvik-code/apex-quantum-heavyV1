@@ -818,6 +818,361 @@
 }
 
 /* ============================================================
+   PLUS DASHBOARD — v2 chrome overrides
+   Scoped under .aqv2-dash so the existing .aqp-* layout stays
+   intact but the brand mark, background, fonts, active states
+   and Max-card pick up the editorial palette (ink + parchment
+   + gold + cyan, Fraunces for the wordmark).
+   ============================================================ */
+.aqv2-dash {
+  /* Same token layer as the landing — applies via cascade to all
+     .aqp-* rules that reference these CSS vars. */
+  --aq-ink:          #0A1424;
+  --aq-ink-deep:     #060D1A;
+  --aq-ink-lift:     #11203A;
+  --aq-ink-2:        #1A2D4D;
+  --aq-bg:           #0A1424;
+  --aq-bg-lift:      #11203A;
+  --aq-bg-deep:      #060D1A;
+  --aq-text:         #F0E6D2;
+  --aq-text-mid:     rgba(240,230,210,0.66);
+  --aq-muted:        rgba(240,230,210,0.42);
+  --aq-border:       rgba(240,230,210,0.08);
+  --aq-border-hi:    rgba(0,200,214,0.30);
+  --aq-cyan:         #00C8D6;
+  --aq-cyan-hi:      #4FE0EA;
+  --aq-cyan-deep:    #008A95;
+  --aq-cyan-tint:    rgba(0,200,214,0.10);
+  --aq-gold:         #C9A961;
+  --aq-gold-hi:      #DEC080;
+  --aq-gold-deep:    #8E7637;
+  --aq-gold-tint:    rgba(201,169,97,0.12);
+
+  background: var(--aq-ink);
+  color: var(--aq-text);
+  font-family: "Satoshi", "Inter", system-ui, -apple-system, sans-serif;
+  min-height: 100vh;
+  position: relative;
+}
+
+/* The dashboard's brand mark: editorial Fraunces wordmark with gold italic. */
+.aqv2-dash .aqp-brand-wm {
+  font-family: "Fraunces", "Source Serif Pro", Georgia, serif;
+  font-weight: 500;
+  font-size: 17px;
+  letter-spacing: 0.02em;
+  font-variation-settings: "opsz" 14, "SOFT" 30;
+}
+.aqv2-dash .aqp-brand-wm .v2-apex {
+  color: var(--aq-text);
+}
+.aqv2-dash .aqp-brand-wm .v2-quantum {
+  color: var(--aq-gold);
+  font-style: italic;
+  font-variation-settings: "opsz" 14, "SOFT" 50, "WONK" 1;
+}
+.aqv2-dash .aqp-plus-tag {
+  color: var(--aq-cyan);
+  font-family: "Fraunces", "Source Serif Pro", Georgia, serif;
+  font-style: italic;
+  font-weight: 500;
+}
+
+/* Nav — uppercase mono labels, gold rule on active. */
+.aqv2-dash .aqp-nav-item {
+  font-family: "JetBrains Mono", "Fira Code", ui-monospace, monospace;
+  font-size: 11.5px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: var(--aq-muted);
+  border-radius: 4px;
+}
+.aqv2-dash .aqp-nav-item:hover { color: var(--aq-text); background: rgba(240,230,210,0.04); }
+.aqv2-dash .aqp-nav-item.is-active {
+  background: var(--aq-cyan-tint);
+  color: var(--aq-cyan);
+  position: relative;
+}
+.aqv2-dash .aqp-nav-item.is-active::before {
+  content: ""; position: absolute; left: 0; top: 8px; bottom: 8px;
+  width: 2px; background: var(--aq-cyan);
+}
+
+/* Max card — gold premium tier, matching landing TiersV2. */
+.aqv2-dash .aqp-max-card {
+  border: 1px solid var(--aq-gold-tint);
+  background: linear-gradient(180deg, rgba(201,169,97,0.06), rgba(201,169,97,0.01));
+  border-radius: 6px;
+  padding: 16px;
+  margin: 24px 0;
+}
+.aqv2-dash .aqp-max-card::before { display: none; }
+.aqv2-dash .aqp-max-eye {
+  color: var(--aq-gold);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+}
+.aqv2-dash .aqp-max-dot { background: var(--aq-gold); box-shadow: 0 0 6px var(--aq-gold); }
+.aqv2-dash .aqp-max-title {
+  font-family: "Fraunces", serif;
+  font-weight: 400;
+  font-size: 18px;
+  color: var(--aq-text);
+  font-variation-settings: "opsz" 48, "SOFT" 50;
+}
+.aqv2-dash .aqp-max-sub { color: var(--aq-text-mid); font-size: 12.5px; }
+.aqv2-dash .aqp-max-cta {
+  background: var(--aq-gold);
+  color: var(--aq-ink);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.aqv2-dash .aqp-max-cta:hover { background: var(--aq-gold-hi); }
+
+/* Lang toggle + sign-out — discreet parchment tones. */
+.aqv2-dash .aqp-lang.is-on {
+  background: var(--aq-parch, #F0E6D2);
+  color: var(--aq-ink);
+  font-weight: 700;
+}
+.aqv2-dash .aqp-user-name { color: var(--aq-text); font-family: "Fraunces", serif; font-weight: 400; font-size: 14px; }
+.aqv2-dash .aqp-signout { color: var(--aq-muted); font-family: "JetBrains Mono", monospace; font-size: 10.5px; letter-spacing: 0.12em; }
+.aqv2-dash .aqp-signout:hover { color: var(--aq-gold); }
+
+/* Subtle radial atmosphere behind the dashboard (matches landing). */
+.aqv2-dash::before {
+  content: ""; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  background:
+    radial-gradient(ellipse 70% 50% at 20% 0%, rgba(0,200,214,0.06), transparent 60%),
+    radial-gradient(ellipse 60% 50% at 80% 100%, rgba(201,169,97,0.04), transparent 60%);
+}
+.aqv2-dash .aqp-shell { position: relative; z-index: 1; }
+
+/* ============================================================
+   LEGACY MARKETING CLASS OVERRIDES
+   /plus, /pris, /blogg, /quantum still use the .m-* classes
+   from globals.css for their internal sections. When they are
+   inside .aqv2 (via the v2 PageShell), the rules below repaint
+   them with the editorial palette without rewriting the markup.
+   ============================================================ */
+.aqv2 .m-eyebrow {
+  font-family: "JetBrains Mono", monospace;
+  color: var(--aq-gold);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+.aqv2 .m-badge-dot { background: var(--aq-gold); box-shadow: 0 0 6px var(--aq-gold); }
+
+.aqv2 .m-section-t,
+.aqv2 .m-hero-title,
+.aqv2 .m-cta-t {
+  font-family: "Fraunces", "Source Serif Pro", Georgia, serif;
+  font-weight: 300;
+  letter-spacing: -0.025em;
+  color: var(--aq-text);
+  font-variation-settings: "opsz" 144, "SOFT" 40;
+  text-wrap: balance;
+}
+.aqv2 .m-hero-accent {
+  font-family: "Fraunces", serif;
+  font-style: italic;
+  color: var(--aq-gold);
+  font-variation-settings: "opsz" 144, "SOFT" 100, "WONK" 1;
+  display: block;
+  font-weight: 400;
+}
+
+.aqv2 .m-section-sub,
+.aqv2 .m-hero-desc,
+.aqv2 .m-cta-sub,
+.aqv2 .m-feat-d,
+.aqv2 .m-foot-strip {
+  color: var(--aq-text-mid);
+}
+
+/* Feature cards in /plus and elsewhere — warm border, ink lift fill. */
+.aqv2 .m-feat-card {
+  background: var(--aq-surface);
+  border: 1px solid var(--aq-border);
+  border-radius: 16px;
+}
+.aqv2 .m-feat-card:hover { border-color: rgba(201,169,97,0.30); }
+.aqv2 .m-feat-t {
+  font-family: "Fraunces", serif;
+  font-weight: 400;
+  color: var(--aq-text);
+  font-variation-settings: "opsz" 48, "SOFT" 50;
+}
+.aqv2 .m-feat-icbox {
+  background: var(--aq-cyan-tint);
+  color: var(--aq-cyan);
+  border: 1px solid var(--aq-border);
+}
+
+/* Hero "feats" row — small mono items with gold arrow. */
+.aqv2 .m-feat-ic { color: var(--aq-gold); font-family: "JetBrains Mono", monospace; }
+.aqv2 .m-feat-tx { color: var(--aq-text-mid); }
+
+/* Trust list ticks turn cyan/gold instead of generic. */
+.aqv2 .m-trust-t {
+  font-family: "Fraunces", serif;
+  font-weight: 400;
+  color: var(--aq-text);
+}
+.aqv2 .m-tick { color: var(--aq-cyan); }
+
+/* CTA card — gold rim glow. */
+.aqv2 .m-cta-card {
+  background: linear-gradient(180deg, var(--aq-ink-lift), var(--aq-ink));
+  border: 1px solid var(--aq-border);
+  border-radius: 24px;
+  position: relative;
+}
+.aqv2 .m-cta-card::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, var(--aq-gold), transparent);
+  opacity: 0.6;
+}
+.aqv2 .m-cta-glow { display: none; }
+
+/* Pills + tags pick up v2 palette (live/up/down stay semantic). */
+.aqv2 .tag-live {
+  background: var(--aq-cyan-tint);
+  color: var(--aq-cyan);
+  border-color: var(--aq-cyan);
+  font-family: "JetBrains Mono", monospace;
+}
+
+/* Buttons used by m-* surfaces. */
+.aqv2 .btn-primary-v8 {
+  background: var(--aq-gold);
+  color: var(--aq-ink);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+}
+.aqv2 .btn-primary-v8:hover { background: var(--aq-gold-hi); }
+.aqv2 .btn-ghost-v8 {
+  background: transparent;
+  color: var(--aq-text);
+  border: 1px solid rgba(240,230,210,0.20);
+}
+.aqv2 .btn-ghost-v8:hover { border-color: var(--aq-gold); color: var(--aq-gold); }
+
+/* ============================================================
+   MAX COCKPIT — v2 chrome overrides
+   Same token redefinition as .aqv2-dash; specific overrides for
+   the trading cockpit's topbar brand wordmark, panel chrome and
+   pill / tag accents. Functional colors (cyan = data accent,
+   green = up, red = down) are kept — they are semantic, not decor.
+   ============================================================ */
+.aqv2-dash .v2-brand-wm {
+  font-family: "Fraunces", "Source Serif Pro", Georgia, serif !important;
+  font-weight: 500 !important;
+  font-size: 19px !important;
+  letter-spacing: 0.02em !important;
+  font-variation-settings: "opsz" 14, "SOFT" 30 !important;
+}
+.aqv2-dash .v2-brand-wm .v2-apex { color: var(--aq-text); }
+.aqv2-dash .v2-brand-wm .v2-quantum {
+  color: var(--aq-gold);
+  font-style: italic;
+  font-variation-settings: "opsz" 14, "SOFT" 50, "WONK" 1;
+}
+.aqv2-dash .v2-brand-wm .v2-max-tag {
+  color: var(--aq-gold);
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  margin-left: 10px;
+  padding: 3px 7px;
+  border: 1px solid var(--aq-gold-tint);
+  border-radius: 3px;
+}
+
+/* Topbar background: cool institutional ink with the same blur the v2 header uses. */
+.aqv2-dash .dbar-v8 {
+  background: rgba(10,20,36,0.72) !important;
+  backdrop-filter: blur(24px) saturate(150%);
+  -webkit-backdrop-filter: blur(24px) saturate(150%);
+  border-bottom-color: var(--aq-border) !important;
+}
+
+/* Ghost buttons + lang toggle in the topbar — parchment text, gold hover. */
+.aqv2-dash .btn-ghost-sm:hover { color: var(--aq-gold) !important; border-color: var(--aq-gold-tint) !important; }
+.aqv2-dash .lang-tog button.is-on { background: var(--aq-parch); color: var(--aq-ink); }
+
+/* Stop-all button stays oxblood — it is a destructive action, must look it. */
+.aqv2-dash .stop-all-btn:hover { background: var(--aq-down) !important; color: var(--aq-text) !important; }
+
+/* Bot pill — green when running (matches up-signal), gold border tint. */
+.aqv2-dash .bot-pill-on { border-color: var(--aq-up-tint, rgba(16,168,106,0.25)) !important; }
+
+/* Panels (Eksponering, Grok-thesis, Withdraw, Recent orders, etc.) —
+   institutional ink with warm parchment border. */
+.aqv2-dash .panel {
+  background: var(--aq-surface, rgba(240,230,210,0.04)) !important;
+  border-color: var(--aq-border) !important;
+}
+.aqv2-dash .panel:hover { border-color: rgba(201,169,97,0.18) !important; }
+.aqv2-dash .panel-head .cap,
+.aqv2-dash .cap,
+.aqv2-dash .cap-sm {
+  font-family: "JetBrains Mono", monospace;
+  color: var(--aq-muted);
+  letter-spacing: 0.18em;
+}
+
+/* Section / panel headings inside the cockpit pick up Fraunces. */
+.aqv2-dash .panel h1,
+.aqv2-dash .panel h2,
+.aqv2-dash .panel h3 {
+  font-family: "Fraunces", serif;
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  font-variation-settings: "opsz" 48, "SOFT" 50;
+}
+
+/* "Mine posisjoner" headline + the big P&L number — Fraunces. */
+.aqv2-dash .ph-num {
+  font-family: "Fraunces", serif !important;
+  font-weight: 400 !important;
+  font-variation-settings: "opsz" 144, "SOFT" 50 !important;
+  letter-spacing: -0.025em !important;
+}
+
+/* Numerics stay mono. tabular-nums is already on .aq-mono. */
+.aqv2-dash .aq-mono { font-family: "JetBrains Mono", monospace; }
+
+/* Pills + tags inside the cockpit pick up the v2 palette. */
+.aqv2-dash .tag-live { background: var(--aq-cyan-tint); color: var(--aq-cyan); border-color: var(--aq-cyan); }
+.aqv2-dash .pill-ok { background: rgba(16,168,106,0.18); color: var(--aq-up, #10A86A); }
+.aqv2-dash .pill-err { background: rgba(165,50,65,0.18); color: var(--aq-down, #A53241); }
+.aqv2-dash .pill-canceled { background: rgba(240,230,210,0.08); color: var(--aq-muted); }
+
+/* Watchlist & positions table — parchment header, warm row separators. */
+.aqv2-dash .dtable-v8 thead th {
+  font-family: "JetBrains Mono", monospace;
+  color: var(--aq-muted);
+  letter-spacing: 0.14em;
+  border-bottom-color: var(--aq-border);
+}
+.aqv2-dash .dtable-v8 tbody tr { border-bottom-color: var(--aq-border-soft); }
+.aqv2-dash .tk-name { color: var(--aq-text); font-weight: 600; }
+.aqv2-dash .tk-sub  { color: var(--aq-muted); font-family: "Satoshi", system-ui, sans-serif; font-weight: 400; }
+
+/* Signal sub-styles (BUY/SELL/HOLD/WATCH) — keep semantic, lift palette. */
+.aqv2-dash .sig-buy   { background: rgba(16,168,106,0.14); color: var(--aq-up, #10A86A); }
+.aqv2-dash .sig-sell  { background: rgba(165,50,65,0.16);  color: var(--aq-down, #A53241); }
+.aqv2-dash .sig-hold  { background: rgba(240,230,210,0.06); color: var(--aq-muted); }
+.aqv2-dash .sig-watch { background: rgba(0,200,214,0.10); color: var(--aq-cyan); }
+
+/* ============================================================
    RESPONSIVE
    ============================================================ */
 @media (max-width: 980px) {

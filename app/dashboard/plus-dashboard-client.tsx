@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { SignOutButton, useUser } from '@clerk/nextjs';
+import '../components/marketing-v2/styles.css';
 import { PLUS_LANGS, PLUS_LANG_LABELS, type PlusLang } from '@/lib/i18n/plus-lang';
 import { SignalsView } from './views/signals-view';
 import { AskView } from './views/ask-view';
@@ -160,32 +161,33 @@ export default function PlusDashboardClient({ allowlisted, hasSubscription }: Pr
   };
 
   return (
-    <div className="aqp-shell">
-      <button
-        type="button"
-        className="aqp-mobile-toggle"
-        aria-label="Toggle navigation"
-        onClick={() => setNavOpen((v) => !v)}
-      >
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2">
-          <path d="M3 6h18M3 12h18M3 18h18" />
-        </svg>
-      </button>
+    <div className="aqv2-dash">
+      <div className="aqp-shell">
+        <button
+          type="button"
+          className="aqp-mobile-toggle"
+          aria-label="Toggle navigation"
+          onClick={() => setNavOpen((v) => !v)}
+        >
+          <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M3 6h18M3 12h18M3 18h18" />
+          </svg>
+        </button>
 
-      <aside className={`aqp-sidebar ${navOpen ? 'is-open' : ''}`}>
-        <div className="aqp-brand">
-          <Link href="/" className="aqp-brand-link">
-            <span className="aqp-brand-mk">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src="/aq-logo.png" alt="" />
-            </span>
-            <span className="aqp-brand-wm">
-              <span style={{ color: 'rgba(255,255,255,0.55)' }}>APEX</span>{' '}
-              <span style={{ color: 'var(--aq-cyan)' }}>QUANTUM</span>
-              <span className="aqp-plus-tag">+</span>
-            </span>
-          </Link>
-        </div>
+        <aside className={`aqp-sidebar ${navOpen ? 'is-open' : ''}`}>
+          <div className="aqp-brand">
+            <Link href="/" className="aqp-brand-link">
+              <span className="aqp-brand-mk">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/aq-logo.png" alt="" />
+              </span>
+              <span className="aqp-brand-wm">
+                <span className="v2-apex">Apex</span>{' '}
+                <span className="v2-quantum">Quantum</span>
+                <span className="aqp-plus-tag">+</span>
+              </span>
+            </Link>
+          </div>
 
         <nav className="aqp-nav">
           {NAV.map((item) => {
@@ -267,6 +269,7 @@ export default function PlusDashboardClient({ allowlisted, hasSubscription }: Pr
       <main className="aqp-main">{renderView()}</main>
 
       <OnboardingModal lang={lang} />
+      </div>
     </div>
   );
 }

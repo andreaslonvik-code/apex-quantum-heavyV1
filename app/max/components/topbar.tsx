@@ -34,9 +34,9 @@ export function Topbar({ lang, setLang, mode, balance, currency, accountId, botR
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img src="/aq-logo.png" alt="" />
         </div>
-        <div className="aq-word">
-          <span style={{ color: 'rgba(255,255,255,0.55)' }}>APEX</span>{' '}
-          <span style={{ color: 'var(--aq-cyan)' }}>QUANTUM</span>
+        <div className="aq-word v2-brand-wm">
+          <span className="v2-apex">Apex</span> <span className="v2-quantum">Quantum</span>
+          <span className="v2-max-tag">Max</span>
         </div>
         <div className="mode-toggle-v8">
           <span className={`mode-opt-v8 ${mode === 'sim' ? 'is-active' : ''}`}>
