@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { I18N, fmtUSD, type Lang } from './i18n';
+import { I18N, formatMoney, fmtUSD, type Currency, type Lang } from './i18n';
 import { sectorOf, type Sector } from '@/lib/blueprints/sectors';
 
 export type Signal = 'BUY' | 'SELL' | 'HOLD' | 'WATCH';
@@ -37,6 +37,11 @@ interface Props {
    *  per sector. Only meaningful for the stocks blueprint — crypto and
    *  commodities tickers fall into "Other" and read better flat. */
   groupBySector?: boolean;
+  /** Display currency for monetary columns (avg, mark, P&L). Defaults to USD
+   *  if omitted so older call sites keep working. */
+  displayCurrency?: Currency;
+  /** USD→NOK rate for conversion. Ignored unless displayCurrency='NOK'. */
+  fxRate?: number | null;
 }
 
 type GroupKey = Sector | 'other';
@@ -78,6 +83,8 @@ export function Watchlist({
   collapsible = false,
   defaultExpanded = true,
   groupBySector = false,
+  displayCurrency = 'USD',
+  fxRate = null,
 }: Props) {
   const t = I18N[lang];
   const sigLabel: Record<Signal, string> = {
@@ -109,6 +116,16 @@ export function Watchlist({
       })()
     : [{ key: 'other', rows: sorted }];
 
+  // Per-share price formatter — keeps 2 decimals because individual share
+  // prices need cent-precision even in NOK (otherwise $182.43 → "2 020 kr"
+  // hides moves under 1%). P&L gets 0-decimals to keep the table calm.
+  const fmtPrice = (usd: number): string =>
+    displayCurrency === 'NOK' && fxRate
+      ? formatMoney(usd, 'NOK', fxRate, { decimals: 2 })
+      : `$${fmtUSD(usd)}`;
+  const fmtPnl = (usd: number): string =>
+    formatMoney(usd, displayCurrency, fxRate, { decimals: 0, signed: true });
+
   const renderRow = (p: WatchlistRow) => {
     const held = p.qty > 0;
     const pnl = held ? (p.mark - p.avg) * p.qty : 0;
@@ -128,12 +145,12 @@ export function Watchlist({
           </div>
         </td>
         <td className="r aq-mono">{held ? p.qty : <span className="mute">—</span>}</td>
-        <td className="r aq-mono">{held ? `$${fmtUSD(p.avg)}` : <span className="mute">—</span>}</td>
+        <td className="r aq-mono">{held ? fmtPrice(p.avg) : <span className="mute">—</span>}</td>
         <td className={`r aq-mono ${held ? '' : 'mute'}`}>
-          {p.mark > 0 ? `$${fmtUSD(p.mark)}` : <span className="mute">—</span>}
+          {p.mark > 0 ? fmtPrice(p.mark) : <span className="mute">—</span>}
         </td>
         <td className={`r aq-mono ${held ? (up ? 'up' : 'dn') : 'mute'}`}>
-          {held ? `${up ? '+' : ''}$${fmtUSD(pnl)}` : '—'}
+          {held ? fmtPnl(pnl) : '—'}
         </td>
         <td className={`r aq-mono ${held ? (up ? 'up' : 'dn') : 'mute'}`}>
           {held ? `${up ? '+' : ''}${pct.toFixed(2)}%` : '—'}

@@ -2,17 +2,22 @@
 
 import Link from 'next/link';
 import { SignOutButton, UserButton } from '@clerk/nextjs';
-import { I18N, fmtMoney, moneySuffix, type Lang } from './i18n';
+import { I18N, formatMoney, type Currency, type Lang } from './i18n';
 
 interface Props {
   lang: Lang;
   setLang: (l: Lang) => void;
   mode: 'sim' | 'live';
+  /** Portfolio total in USD (Alpaca's native ledger). Topbar converts at render. */
   balance: number;
-  /** ISO currency from Alpaca (e.g. "USD") — drives the suffix. */
-  currency: string | null;
   accountId: string | null;
   botRunning: boolean;
+  /** Display currency preference — affects how `balance` is rendered. */
+  displayCurrency: Currency;
+  /** USD→NOK rate. null = unknown, falls back to USD display. */
+  fxRate: number | null;
+  /** Toggle the display currency. */
+  setDisplayCurrency: (c: Currency) => void;
   /** Disconnects the Alpaca account (does NOT sign the user out of Clerk). */
   onDisconnect: () => void;
   /** Halts all trading (kill switch). */
@@ -25,7 +30,19 @@ function maskAccount(id: string): string {
   return `${id.slice(0, 4)}•••••${id.slice(-3)}`;
 }
 
-export function Topbar({ lang, setLang, mode, balance, currency, accountId, botRunning, onDisconnect, onStopAll }: Props) {
+export function Topbar({
+  lang,
+  setLang,
+  mode,
+  balance,
+  accountId,
+  botRunning,
+  displayCurrency,
+  fxRate,
+  setDisplayCurrency,
+  onDisconnect,
+  onStopAll,
+}: Props) {
   const t = I18N[lang];
   return (
     <header className="dbar-v8">
@@ -54,7 +71,7 @@ export function Topbar({ lang, setLang, mode, balance, currency, accountId, botR
           </span>
         )}
         <span className="dbar-meta">
-          {t.balance}: <b className="aq-mono cy">{fmtMoney(balance, lang)} {moneySuffix(lang, currency)}</b>
+          {t.balance}: <b className="aq-mono cy">{formatMoney(balance, displayCurrency, fxRate, { decimals: 2 })}</b>
         </span>
       </div>
       <div className="dbar-right">
@@ -65,6 +82,29 @@ export function Topbar({ lang, setLang, mode, balance, currency, accountId, botR
         <button type="button" className="stop-all-btn" onClick={onStopAll}>
           {t.stopAll}
         </button>
+        <div
+          className="lang-tog ccy-tog"
+          title={lang === 'no'
+            ? 'Visningsvaluta · Alpaca handler alltid i USD'
+            : 'Display currency · Alpaca always trades in USD'}
+        >
+          <button
+            type="button"
+            className={displayCurrency === 'USD' ? 'is-on' : ''}
+            onClick={() => setDisplayCurrency('USD')}
+            aria-label="Show amounts in USD"
+          >
+            $
+          </button>
+          <button
+            type="button"
+            className={displayCurrency === 'NOK' ? 'is-on' : ''}
+            onClick={() => setDisplayCurrency('NOK')}
+            aria-label="Show amounts in NOK"
+          >
+            kr
+          </button>
+        </div>
         <div className="lang-tog">
           <button className={lang === 'no' ? 'is-on' : ''} onClick={() => setLang('no')}>NO</button>
           <button className={lang === 'en' ? 'is-on' : ''} onClick={() => setLang('en')}>EN</button>

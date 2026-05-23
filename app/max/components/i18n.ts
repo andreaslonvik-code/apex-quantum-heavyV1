@@ -1,6 +1,17 @@
 // Single source of truth for all dashboard copy + locale-aware number formatters.
 export type Lang = 'no' | 'en';
 
+/**
+ * User's display currency preference. The underlying Alpaca ledger is
+ * always USD — this only affects how amounts are rendered. NOK uses the
+ * USD→NOK reference rate from lib/fx.ts (ECB-published).
+ *
+ * Order-tickets, the "Koble til Alpaca" page, and anything that talks
+ * directly to the broker must keep showing USD regardless of this
+ * preference, so the user always sees what actually hit the exchange.
+ */
+export type Currency = 'USD' | 'NOK';
+
 export const I18N = {
   no: {
     // Topbar
@@ -248,3 +259,63 @@ export const moneySuffix = (lang: Lang, currency?: string | null): string => {
 
 export const fmtUSD = (n: number): string =>
   n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+/**
+ * Format an amount stored in USD for display in the user's chosen currency.
+ *
+ *   formatMoney(1250, 'USD', 11.07)  // "$1,250.00"
+ *   formatMoney(1250, 'NOK', 11.07)  // "13 837,50 kr"
+ *
+ * The `usdAmount` argument is always USD — the function does the
+ * conversion. Passing already-converted NOK would double-convert.
+ *
+ * Decimals: 2 for USD (cents), 0 for NOK (kroner round nicely without
+ * øre noise on retail displays). Callers needing øre can pass `decimals`.
+ *
+ * Returns a fully composed string with symbol/suffix. Use this anywhere
+ * a $-sign would have been hardcoded. Order-related amounts (Recent
+ * Orders, Connect Alpaca, broker dialogs) should keep using `fmtUSD`
+ * because those reflect what actually hit the exchange.
+ */
+export function formatMoney(
+  usdAmount: number,
+  ccy: Currency,
+  fxRate: number | null,
+  opts?: { decimals?: number; signed?: boolean }
+): string {
+  const signed = opts?.signed ?? false;
+  const isNeg = usdAmount < 0;
+  const abs = Math.abs(usdAmount);
+
+  if (ccy === 'NOK' && fxRate && Number.isFinite(fxRate) && fxRate > 0) {
+    const nok = abs * fxRate;
+    const decimals = opts?.decimals ?? 0;
+    const parts = nok.toFixed(decimals).split('.');
+    // No-break-space thousands separator, Norwegian convention.
+    parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    const body = decimals > 0 ? parts.join(',') : parts[0];
+    const sign = isNeg ? '−' : signed ? '+' : '';
+    return `${sign}${body} kr`;
+  }
+
+  // USD path (default + fallback when fxRate is missing).
+  const decimals = opts?.decimals ?? 2;
+  const body = abs.toLocaleString('en-US', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  const sign = isNeg ? '−' : signed ? '+' : '';
+  return `${sign}$${body}`;
+}
+
+/**
+ * Currency-aware shorthand for compact callouts like the chart summary
+ * "Drawdown: $1,250" — same as formatMoney with zero decimals.
+ */
+export function formatMoneyCompact(
+  usdAmount: number,
+  ccy: Currency,
+  fxRate: number | null
+): string {
+  return formatMoney(usdAmount, ccy, fxRate, { decimals: 0 });
+}

@@ -1,6 +1,6 @@
 'use client';
 
-import { I18N, fmtMoney, moneySuffix, type Lang } from './i18n';
+import { I18N, formatMoney, type Currency, type Lang } from './i18n';
 
 export type Timeframe = '1H' | '24H' | '7D' | '30D' | 'MTD' | 'YTD' | 'ALL';
 
@@ -15,25 +15,39 @@ interface Props {
   lang: Lang;
   tf: Timeframe;
   onTf: (tf: Timeframe) => void;
+  /** P&L in USD (Alpaca-native). Rendered in displayCurrency. */
   profit: number;
   profitPct: number;
   mode: 'sim' | 'live';
-  currency: string | null;
+  displayCurrency: Currency;
+  fxRate: number | null;
 }
 
-export function PortfolioHeader({ lang, tf, onTf, profit, profitPct, mode, currency }: Props) {
+export function PortfolioHeader({ lang, tf, onTf, profit, profitPct, mode, displayCurrency, fxRate }: Props) {
   const t = I18N[lang];
+  const profitStr = formatMoney(profit, displayCurrency, fxRate, { decimals: 2, signed: true });
+  // Split into number body + suffix so the existing CSS treatment for
+  // .ph-num (big Fraunces) and .ph-suffix (small mono) keeps working.
+  // formatMoney returns either "+$1,234.56" / "−$1,234.56" or
+  // "+1 234 kr" / "−1 234 kr". Peel sign + symbol off the front,
+  // suffix off the tail.
+  let numBody = profitStr;
+  let suffix = displayCurrency === 'NOK' ? 'kr' : 'USD';
+  if (displayCurrency === 'NOK' && profitStr.endsWith(' kr')) {
+    numBody = profitStr.slice(0, -3);
+    suffix = 'kr';
+  } else if (displayCurrency === 'USD') {
+    // Keep the $-prefix attached to the number for visual weight.
+    suffix = 'USD';
+  }
   return (
     <>
       <div className="ph">
         <div className="ph-l">
           <div className="cap">{t.eyebrowByTf[tf] ?? t.eyebrow}</div>
           <div className="ph-row">
-            <h1 className={`ph-num ${profit >= 0 ? 'up' : 'dn'}`}>
-              {profit >= 0 ? '+' : '−'}
-              {fmtMoney(Math.abs(profit), lang)}
-            </h1>
-            <span className="ph-suffix">{moneySuffix(lang, currency)}</span>
+            <h1 className={`ph-num ${profit >= 0 ? 'up' : 'dn'}`}>{numBody}</h1>
+            <span className="ph-suffix">{suffix}</span>
             <span className={`ph-pct ${profit >= 0 ? 'up' : 'dn'}`}>
               {profitPct >= 0 ? '+' : ''}{profitPct.toFixed(2)}%
             </span>

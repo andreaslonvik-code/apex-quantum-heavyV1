@@ -1,27 +1,61 @@
 'use client';
 
-import { I18N, fmtMoney, moneySuffix, type Lang } from './i18n';
+import { I18N, formatMoney, type Currency, type Lang } from './i18n';
 
 export type WithdrawStatus = 'idle' | 'pending' | 'done' | 'error';
 
 interface Props {
   open: boolean;
   lang: Lang;
+  /** Starting capital in USD (Alpaca-native). */
   startVal: number;
+  /** Current portfolio total in USD. */
   currentVal: number;
-  currency: string | null;
+  /** User's display preference — affects the headline number. */
+  displayCurrency: Currency;
+  fxRate: number | null;
   status: WithdrawStatus;
   errorMessage?: string;
   onConfirm: () => void;
   onClose: () => void;
 }
 
-export function WithdrawModal({ open, lang, startVal, currentVal, currency, status, errorMessage, onConfirm, onClose }: Props) {
+export function WithdrawModal({
+  open,
+  lang,
+  startVal,
+  currentVal,
+  displayCurrency,
+  fxRate,
+  status,
+  errorMessage,
+  onConfirm,
+  onClose,
+}: Props) {
   if (!open) return null;
   const t = I18N[lang];
   const profit = currentVal - startVal;
   const pct = startVal > 0 ? (profit / startVal) * 100 : 0;
   const profitable = profit > 0 && (status === 'idle' || status === 'pending');
+
+  // Helper: when NOK is the display preference, show the NOK estimate
+  // first and the USD amount in parentheses — Alpaca actually moves USD,
+  // so the user must always see what hits the broker.
+  const dual = (usdAmount: number): { primary: string; secondary: string | null } => {
+    if (displayCurrency === 'NOK' && fxRate && Number.isFinite(fxRate)) {
+      return {
+        primary: formatMoney(usdAmount, 'NOK', fxRate, { decimals: 0 }),
+        secondary: formatMoney(usdAmount, 'USD', null, { decimals: 0 }),
+      };
+    }
+    return { primary: formatMoney(usdAmount, 'USD', null, { decimals: 0 }), secondary: null };
+  };
+
+  const profitPrimary = formatMoney(profit, displayCurrency, fxRate, { decimals: 0, signed: true });
+  const profitUsdNote =
+    displayCurrency === 'NOK' && fxRate
+      ? ` (${formatMoney(profit, 'USD', null, { decimals: 0, signed: true })})`
+      : '';
 
   return (
     <div className="wd-overlay" onClick={onClose}>
@@ -42,7 +76,8 @@ export function WithdrawModal({ open, lang, startVal, currentVal, currency, stat
             </div>
             <h2 className="wd-t">{t.withdrawDone}</h2>
             <p className="wd-sub">
-              {fmtMoney(profit, lang)} {moneySuffix(lang, currency)} {t.transferDone}
+              {formatMoney(profit, displayCurrency, fxRate, { decimals: 0 })}
+              {profitUsdNote && <span className="mute"> {profitUsdNote}</span>} {t.transferDone}
             </p>
             <button className="btn-primary-v8 btn-lg wd-ok" onClick={onClose}>OK</button>
           </div>
@@ -76,30 +111,22 @@ export function WithdrawModal({ open, lang, startVal, currentVal, currency, stat
           <>
             <div className="cap wd-eye">{t.withdraw.toUpperCase()}</div>
             <h2 className="wd-t">{t.withdrawAmount}</h2>
-            <div className="wd-amount aq-mono">
-              +{fmtMoney(profit, lang)} <span className="wd-cur">{moneySuffix(lang, currency)}</span>
-            </div>
+            <div className="wd-amount aq-mono">{profitPrimary}</div>
+            {profitUsdNote && (
+              <div className="wd-sub mute" style={{ marginTop: -8, marginBottom: 6 }}>
+                {lang === 'no' ? 'tilsvarer' : 'equals'}{profitUsdNote}
+              </div>
+            )}
             <div className="wd-pct aq-mono">▲ +{pct.toFixed(2)}% {t.abovePrincipal}</div>
             <p className="wd-desc">
-              {t.withdrawDesc} <b>{fmtMoney(startVal, lang)} {moneySuffix(lang, currency)}</b>.
+              {t.withdrawDesc}{' '}
+              <b>{formatMoney(startVal, displayCurrency, fxRate, { decimals: 0 })}</b>.
             </p>
             <div className="wd-rows">
-              <div className="wd-row">
-                <span>{t.startVal.toLowerCase()}</span>
-                <span className="aq-mono">{fmtMoney(startVal, lang)} {moneySuffix(lang, currency)}</span>
-              </div>
-              <div className="wd-row">
-                <span>{t.nowVal.toLowerCase()}</span>
-                <span className="aq-mono">{fmtMoney(currentVal, lang)} {moneySuffix(lang, currency)}</span>
-              </div>
-              <div className="wd-row wd-row-out">
-                <span>{t.payout}</span>
-                <span className="aq-mono up">+{fmtMoney(profit, lang)} {moneySuffix(lang, currency)}</span>
-              </div>
-              <div className="wd-row">
-                <span>{t.remaining}</span>
-                <span className="aq-mono">{fmtMoney(startVal, lang)} {moneySuffix(lang, currency)}</span>
-              </div>
+              <Row label={t.startVal.toLowerCase()} {...dual(startVal)} />
+              <Row label={t.nowVal.toLowerCase()} {...dual(currentVal)} />
+              <Row label={t.payout} tone="up" {...dual(profit)} prefix="+" />
+              <Row label={t.remaining} {...dual(startVal)} />
             </div>
             <div className="wd-cta">
               <button className="btn-ghost-v8 btn-lg" onClick={onClose} disabled={status === 'pending'}>
@@ -118,6 +145,30 @@ export function WithdrawModal({ open, lang, startVal, currentVal, currency, stat
           </>
         )}
       </div>
+    </div>
+  );
+}
+
+function Row({
+  label,
+  primary,
+  secondary,
+  tone,
+  prefix,
+}: {
+  label: string;
+  primary: string;
+  secondary: string | null;
+  tone?: 'up';
+  prefix?: string;
+}) {
+  return (
+    <div className={`wd-row${tone === 'up' ? ' wd-row-out' : ''}`}>
+      <span>{label}</span>
+      <span className={`aq-mono${tone === 'up' ? ' up' : ''}`}>
+        {prefix ?? ''}{primary}
+        {secondary && <span className="mute" style={{ marginLeft: 6, fontSize: '0.85em' }}>({prefix ?? ''}{secondary})</span>}
+      </span>
     </div>
   );
 }

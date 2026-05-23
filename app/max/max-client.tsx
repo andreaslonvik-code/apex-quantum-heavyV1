@@ -18,7 +18,7 @@ import { RecentOrders, type RecentOrder } from './components/recent-orders';
 import { BenchmarkBar, type BenchmarkBarPayload } from './components/benchmark-bar';
 import { WithdrawModal, type WithdrawStatus } from './components/withdraw-modal';
 import { GrokThesisCard } from './components/grok-thesis-card';
-import type { Lang } from './components/i18n';
+import type { Currency, Lang } from './components/i18n';
 import { BLUEPRINTS, type AssetClass } from '@/lib/blueprints';
 import '../components/marketing-v2/styles.css';
 
@@ -98,6 +98,13 @@ interface AlpacaPositionPayload {
 export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const router = useRouter();
   const [lang, setLang] = useState<Lang>('no');
+  // Display currency for monetary figures. Defaults to NOK for Norwegian
+  // locale (most users today), USD otherwise. Alpaca's ledger is always
+  // USD — this is purely a presentation switch. Stored in localStorage so
+  // the preference survives reloads.
+  const [displayCurrency, setDisplayCurrencyState] = useState<Currency>('NOK');
+  const [fxRate, setFxRate] = useState<number | null>(null);
+  const [fxMeta, setFxMeta] = useState<{ sourceDate: string; stale: boolean } | null>(null);
   const [tf, setTf] = useState<Timeframe>('24H');
   const [isLoading, setIsLoading] = useState(true);
   const [isConnected, setIsConnected] = useState(false);
@@ -111,6 +118,53 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const [wdStatus, setWdStatus] = useState<WithdrawStatus>('idle');
   const [wdError, setWdError] = useState<string | undefined>();
   const tickerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Hydrate display-currency preference from localStorage on mount. Default
+  // stays NOK for Norwegian users (most of our base today) — a manual
+  // toggle overrides it. Wrapping setter persists every change.
+  useEffect(() => {
+    try {
+      const stored = window.localStorage.getItem('aq_display_ccy');
+      if (stored === 'USD' || stored === 'NOK') setDisplayCurrencyState(stored);
+      else if (typeof navigator !== 'undefined' && !navigator.language.toLowerCase().startsWith('no')) {
+        setDisplayCurrencyState('USD');
+      }
+    } catch {
+      /* localStorage may be blocked — keep default */
+    }
+  }, []);
+
+  const setDisplayCurrency = useCallback((c: Currency) => {
+    setDisplayCurrencyState(c);
+    try { window.localStorage.setItem('aq_display_ccy', c); } catch {}
+  }, []);
+
+  // Fetch FX once on mount + every 15 min. The server-side cache in
+  // lib/fx.ts already protects Frankfurter from per-request hammering;
+  // this just keeps the client value warm while the cockpit is open.
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      try {
+        const res = await fetch('/api/apex/fx');
+        if (!res.ok) return;
+        const data = (await res.json()) as { rate: number; source_date: string; stale: boolean };
+        if (cancelled) return;
+        if (Number.isFinite(data.rate) && data.rate > 0) {
+          setFxRate(data.rate);
+          setFxMeta({ sourceDate: data.source_date, stale: data.stale });
+        }
+      } catch {
+        /* keep null — formatMoney falls back to USD */
+      }
+    };
+    load();
+    const id = setInterval(load, 15 * 60 * 1000);
+    return () => {
+      cancelled = true;
+      clearInterval(id);
+    };
+  }, []);
 
   const refreshAll = useCallback(async () => {
     try {
@@ -436,9 +490,11 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
         setLang={setLang}
         mode={mode}
         balance={currentVal}
-        currency={accountInfo?.currency ?? null}
         accountId={accountInfo?.accountId ?? null}
         botRunning={botRunning}
+        displayCurrency={displayCurrency}
+        fxRate={fxRate}
+        setDisplayCurrency={setDisplayCurrency}
         onDisconnect={handleDisconnect}
         onStopAll={handleStopAll}
       />
@@ -454,7 +510,8 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
               profit={profit}
               profitPct={profitPct}
               mode={mode}
-              currency={accountInfo?.currency ?? null}
+              displayCurrency={displayCurrency}
+              fxRate={fxRate}
             />
             <ReturnsChart
               points={equityPoints}
@@ -468,7 +525,8 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
               drawdownAbs={fromPeakAbs}
               drawdownPct={fromPeakPct}
               vsBenchPct={vsBenchPct}
-              currency={accountInfo?.currency ?? null}
+              displayCurrency={displayCurrency}
+              fxRate={fxRate}
             />
           </div>
 
@@ -498,6 +556,8 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
                   ? `${myHoldingsRows.length} aktive posisjoner på tvers av aksjer, krypto og råvarer`
                   : `${myHoldingsRows.length} active positions across stocks, crypto, and commodities`
               }
+              displayCurrency={displayCurrency}
+              fxRate={fxRate}
             />
           )}
 
@@ -514,8 +574,31 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
               collapsible
               defaultExpanded={false}
               groupBySector={bp === 'stocks'}
+              displayCurrency={displayCurrency}
+              fxRate={fxRate}
             />
           ))}
+
+          {/* FX badge — shows the NOK reference rate when NOK is active so
+              the user always sees what the conversion is based on. */}
+          {displayCurrency === 'NOK' && fxRate && fxMeta && (
+            <div className="fx-badge">
+              <span className="cap">{lang === 'no' ? 'Visningskurs' : 'Display rate'}</span>
+              <span className="aq-mono">
+                {fxRate.toFixed(2)} NOK/USD · ECB · {fxMeta.sourceDate}
+                {fxMeta.stale && (
+                  <span className="fx-stale">
+                    {' · '}{lang === 'no' ? 'sist kjente kurs' : 'last known'}
+                  </span>
+                )}
+              </span>
+              <span className="fx-note mute">
+                {lang === 'no'
+                  ? 'Alpaca handler i USD. NOK-tall er kun visning.'
+                  : 'Alpaca trades in USD. NOK figures are display only.'}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="col-r">
@@ -545,7 +628,8 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
             lang={lang}
             startVal={startVal}
             currentVal={currentVal}
-            currency={accountInfo?.currency ?? null}
+            displayCurrency={displayCurrency}
+            fxRate={fxRate}
             onWithdraw={() => {
               setWdStatus('idle');
               setWdError(undefined);
@@ -560,7 +644,8 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
         lang={lang}
         startVal={startVal}
         currentVal={currentVal}
-        currency={accountInfo?.currency ?? null}
+        displayCurrency={displayCurrency}
+        fxRate={fxRate}
         status={wdStatus}
         errorMessage={wdError}
         onConfirm={handleWithdrawConfirm}

@@ -10,7 +10,6 @@ import { ThesisV2 } from './components/marketing-v2/thesis';
 import { PrinciplesV2 } from './components/marketing-v2/principles';
 import { TiersV2 } from './components/marketing-v2/tiers';
 import { RecordV2 } from './components/marketing-v2/record';
-import { InsideV2 } from './components/marketing-v2/inside';
 import { CTAV2, FooterV2 } from './components/marketing-v2/cta-footer';
 
 /**
@@ -43,7 +42,6 @@ export function LandingClient({
         <PrinciplesV2 lang={lang} />
         <TiersV2 lang={lang} />
         <RecordV2 lang={lang} stats={stats} />
-        <InsideV2 lang={lang} />
         <CTAV2 lang={lang} />
         <FooterV2 lang={lang} />
       </main>
