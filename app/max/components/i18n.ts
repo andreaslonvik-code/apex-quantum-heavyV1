@@ -281,9 +281,10 @@ export function formatMoney(
   usdAmount: number,
   ccy: Currency,
   fxRate: number | null,
-  opts?: { decimals?: number; signed?: boolean }
+  opts?: { decimals?: number; signed?: boolean; omitSuffix?: boolean }
 ): string {
   const signed = opts?.signed ?? false;
+  const omitSuffix = opts?.omitSuffix ?? false;
   const isNeg = usdAmount < 0;
   const abs = Math.abs(usdAmount);
 
@@ -295,7 +296,7 @@ export function formatMoney(
     parts[0] = parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
     const body = decimals > 0 ? parts.join(',') : parts[0];
     const sign = isNeg ? '−' : signed ? '+' : '';
-    return `${sign}${body} kr`;
+    return omitSuffix ? `${sign}${body}` : `${sign}${body} kr`;
   }
 
   // USD path (default + fallback when fxRate is missing).
@@ -305,7 +306,13 @@ export function formatMoney(
     maximumFractionDigits: decimals,
   });
   const sign = isNeg ? '−' : signed ? '+' : '';
-  return `${sign}$${body}`;
+  return omitSuffix ? `${sign}${body}` : `${sign}$${body}`;
+}
+
+/** Display-currency unit label, useful when rendering the suffix separately
+ *  from the formatted body. */
+export function currencyLabel(ccy: Currency): string {
+  return ccy === 'NOK' ? 'kr' : 'USD';
 }
 
 /**

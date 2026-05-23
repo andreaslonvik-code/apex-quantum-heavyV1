@@ -1,6 +1,6 @@
 'use client';
 
-import { I18N, formatMoney, type Currency, type Lang } from './i18n';
+import { I18N, formatMoney, currencyLabel, type Currency, type Lang } from './i18n';
 
 interface Props {
   lang: Lang;
@@ -17,14 +17,17 @@ interface Props {
 
 export function ChartSummary({ lang, current, drawdownAbs, drawdownPct, vsBenchPct, displayCurrency, fxRate }: Props) {
   const t = I18N[lang];
-  const currentStr = formatMoney(current, displayCurrency, fxRate, { decimals: 0 });
-  const ddStr = formatMoney(-drawdownAbs, displayCurrency, fxRate, { decimals: 0 });
+  // omitSuffix → the unit goes in `chart-summary-sub` so it never duplicates
+  // inline with the value above. NÅ shows unit; NED FRA TOPP shows pct.
+  const currentStr = formatMoney(current, displayCurrency, fxRate, { decimals: 0, omitSuffix: true });
+  const ddStr = formatMoney(-drawdownAbs, displayCurrency, fxRate, { decimals: 0, omitSuffix: true });
+  const unitLabel = currencyLabel(displayCurrency);
   return (
     <div className="chart-summary">
       <div className="chart-summary-cell">
         <div className="chart-summary-label">{t.chartNow}</div>
         <div className="chart-summary-value">{currentStr}</div>
-        <div className="chart-summary-sub">{displayCurrency === 'NOK' ? 'kr' : 'USD'}</div>
+        <div className="chart-summary-sub">{unitLabel}</div>
       </div>
       <div className="chart-summary-cell">
         <div className="chart-summary-label">{t.chartFromPeak}</div>

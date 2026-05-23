@@ -1,6 +1,6 @@
 'use client';
 
-import { I18N, formatMoney, type Currency, type Lang } from './i18n';
+import { I18N, formatMoney, currencyLabel, type Currency, type Lang } from './i18n';
 
 export type Timeframe = '1H' | '24H' | '7D' | '30D' | 'MTD' | 'YTD' | 'ALL';
 
@@ -25,21 +25,12 @@ interface Props {
 
 export function PortfolioHeader({ lang, tf, onTf, profit, profitPct, mode, displayCurrency, fxRate }: Props) {
   const t = I18N[lang];
-  const profitStr = formatMoney(profit, displayCurrency, fxRate, { decimals: 2, signed: true });
-  // Split into number body + suffix so the existing CSS treatment for
+  // Split number body and unit so the existing CSS treatment for
   // .ph-num (big Fraunces) and .ph-suffix (small mono) keeps working.
-  // formatMoney returns either "+$1,234.56" / "−$1,234.56" or
-  // "+1 234 kr" / "−1 234 kr". Peel sign + symbol off the front,
-  // suffix off the tail.
-  let numBody = profitStr;
-  let suffix = displayCurrency === 'NOK' ? 'kr' : 'USD';
-  if (displayCurrency === 'NOK' && profitStr.endsWith(' kr')) {
-    numBody = profitStr.slice(0, -3);
-    suffix = 'kr';
-  } else if (displayCurrency === 'USD') {
-    // Keep the $-prefix attached to the number for visual weight.
-    suffix = 'USD';
-  }
+  // omitSuffix tells formatMoney to drop "kr" / "$" so we can render the
+  // unit in a separate styled span.
+  const numBody = formatMoney(profit, displayCurrency, fxRate, { decimals: 2, signed: true, omitSuffix: true });
+  const suffix = currencyLabel(displayCurrency);
   return (
     <>
       <div className="ph">
