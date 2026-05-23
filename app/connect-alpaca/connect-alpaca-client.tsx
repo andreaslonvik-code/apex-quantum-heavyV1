@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { toast } from 'sonner';
+import '../components/marketing-v2/styles.css';
 
 type Env = 'paper' | 'live';
 
@@ -74,7 +75,7 @@ export default function ConnectAlpacaClient() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="aqv2-dash min-h-screen bg-background flex flex-col">
       <header className="py-6 px-4 sm:px-6 lg:px-8 border-b border-border/50">
         <div className="max-w-2xl mx-auto flex items-center gap-3">
           <Link href="/" className="font-semibold text-lg tracking-tight text-foreground">
