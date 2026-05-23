@@ -1,9 +1,8 @@
 'use client';
 
 import type { Lang } from '../marketing/types';
+import type { MarketingStats } from '@/lib/marketing-stats';
 import { ArrowRight } from './icons';
-
-type MetaCls = 'em' | 'gold' | null;
 
 const HERO_COPY: Record<Lang, {
   eye: string;
@@ -14,9 +13,12 @@ const HERO_COPY: Record<Lang, {
   desc: string;
   ctaPrimary: string;
   ctaSecondary: string;
-  meta: Array<[string, string, MetaCls]>;
   panelTitle: string;
   panelFoot: [string, string];
+  panelEmpty: string;
+  kpiYtd: string;
+  kpiCapital: string;
+  kpiPositions: string;
 }> = {
   no: {
     eye: 'Apex Quantum · siden 2024',
@@ -27,14 +29,12 @@ const HERO_COPY: Record<Lang, {
     desc: 'AI-drevet aksjeinnsikt for seriøse investorer. Plus leverer signaler og resonnement, daglig. Max — den autonome motoren — utfører handler døgnet rundt når den lanseres i 2026.',
     ctaPrimary: 'Få tilgang',
     ctaSecondary: 'Les filosofien',
-    meta: [
-      ['+187,5%', 'YTD avkastning', 'em'],
-      ['4,12',    'Sharpe-ratio',    null],
-      ['73,4%',   'Vinnerrate',      null],
-      ['$2,4M',   'Forvaltet kapital', 'gold'],
-    ],
     panelTitle: 'Live posisjoner · paper trading',
     panelFoot: ['Auto-oppdatert', 'NASDAQ · NYSE · ARCA'],
+    panelEmpty: 'Ingen åpne posisjoner akkurat nå.',
+    kpiYtd: 'YTD avkastning',
+    kpiCapital: 'Forvaltet kapital',
+    kpiPositions: 'Aktive posisjoner',
   },
   en: {
     eye: 'Apex Quantum · since 2024',
@@ -45,27 +45,32 @@ const HERO_COPY: Record<Lang, {
     desc: 'AI-driven equity intelligence for serious investors. Plus delivers signals and reasoning, daily. Max — the autonomous engine — executes around the clock when it ships in 2026.',
     ctaPrimary: 'Get access',
     ctaSecondary: 'Read the thesis',
-    meta: [
-      ['+187.5%', 'YTD return',           'em'],
-      ['4.12',    'Sharpe ratio',         null],
-      ['73.4%',   'Win rate',             null],
-      ['$2.4M',   'Capital under model',  'gold'],
-    ],
     panelTitle: 'Live positions · paper trading',
     panelFoot: ['Live · auto-refresh', 'NASDAQ · NYSE · ARCA'],
+    panelEmpty: 'No open positions right now.',
+    kpiYtd: 'YTD return',
+    kpiCapital: 'Capital under model',
+    kpiPositions: 'Active positions',
   },
 };
 
-const HERO_POSITIONS: Array<{ sw: 'up' | 'gold' | 'dn'; tk: string; px: string; chg: string; cls: 'chg-up' | 'chg-dn' }> = [
-  { sw: 'up',   tk: 'NVDA', px: '1,184.30', chg: '+2.84%', cls: 'chg-up' },
-  { sw: 'gold', tk: 'MU',   px: '110.50',   chg: '+0.43%', cls: 'chg-up' },
-  { sw: 'up',   tk: 'AMD',  px: '165.22',   chg: '+1.12%', cls: 'chg-up' },
-  { sw: 'dn',   tk: 'TSLA', px: '244.12',   chg: '−1.42%', cls: 'chg-dn' },
-  { sw: 'up',   tk: 'AAPL', px: '191.65',   chg: '+0.08%', cls: 'chg-up' },
-  { sw: 'up',   tk: 'MSFT', px: '438.91',   chg: '+0.92%', cls: 'chg-up' },
-];
+function fmtPct(v: number | null, lang: Lang): string {
+  if (v == null) return '—';
+  const sign = v >= 0 ? '+' : '−';
+  const abs = Math.abs(v).toFixed(1).replace('.', lang === 'no' ? ',' : '.');
+  return `${sign}${abs} %`;
+}
 
-export function HeroV2({ lang }: { lang: Lang }) {
+function fmtUsd(v: number | null, lang: Lang): string {
+  if (v == null || v <= 0) return '—';
+  if (v >= 1_000_000) {
+    const m = v / 1_000_000;
+    return `$${m.toFixed(2).replace('.', lang === 'no' ? ',' : '.')}M`;
+  }
+  return `$${Math.round(v).toLocaleString(lang === 'no' ? 'nb-NO' : 'en-US')}`;
+}
+
+export function HeroV2({ lang, stats }: { lang: Lang; stats: MarketingStats }) {
   const t = HERO_COPY[lang];
   return (
     <section className="hero">
@@ -84,14 +89,22 @@ export function HeroV2({ lang }: { lang: Lang }) {
               </a>
               <a href="#thesis" className="btn btn-ghost btn-lg">{t.ctaSecondary}</a>
             </div>
-            <div className="hero-meta">
-              {t.meta.map(([num, lab, cls], i) => (
-                <div key={i} className="hero-meta-item">
-                  <span className={`hero-meta-num ${cls ?? ''}`}>{num}</span>
-                  <span className="hero-meta-lab">{lab}</span>
+            {stats.ok && (
+              <div className="hero-meta">
+                <div className="hero-meta-item">
+                  <span className="hero-meta-num em">{fmtPct(stats.ytdReturnPct, lang)}</span>
+                  <span className="hero-meta-lab">{t.kpiYtd}</span>
                 </div>
-              ))}
-            </div>
+                <div className="hero-meta-item">
+                  <span className="hero-meta-num gold">{fmtUsd(stats.totalValue, lang)}</span>
+                  <span className="hero-meta-lab">{t.kpiCapital}</span>
+                </div>
+                <div className="hero-meta-item">
+                  <span className="hero-meta-num">{stats.positionsHeld ?? '—'}</span>
+                  <span className="hero-meta-lab">{t.kpiPositions}</span>
+                </div>
+              </div>
+            )}
           </div>
           <div className="hero-right">
             <div className="hero-panel">
@@ -100,13 +113,23 @@ export function HeroV2({ lang }: { lang: Lang }) {
                 <span className="aqv2-tag cy"><span className="aqv2-dot" />LIVE</span>
               </div>
               <div className="panel-rows">
-                {HERO_POSITIONS.map((p) => (
-                  <div key={p.tk} className="panel-row">
-                    <span className="tk"><span className={`swatch-${p.sw}`} />{p.tk}</span>
-                    <span className="px">$ {p.px}</span>
-                    <span className={`chg ${p.cls}`}>{p.chg}</span>
+                {stats.positions.length === 0 ? (
+                  <div className="panel-row" style={{ gridTemplateColumns: '1fr' }}>
+                    <span style={{ color: 'var(--aq-muted)', fontSize: 13 }}>{t.panelEmpty}</span>
                   </div>
-                ))}
+                ) : (
+                  stats.positions.map((p) => (
+                    <div key={p.ticker} className="panel-row">
+                      <span className="tk">
+                        <span className={`swatch-${p.side}`} />{p.ticker}
+                      </span>
+                      <span className="px">$ {p.price.toFixed(2)}</span>
+                      <span className={`chg chg-${p.side}`}>
+                        {p.changePct >= 0 ? '+' : '−'}{Math.abs(p.changePct).toFixed(2)}%
+                      </span>
+                    </div>
+                  ))
+                )}
               </div>
               <div className="hero-panel-foot">
                 <span>{t.panelFoot[0]}</span>

@@ -1,9 +1,7 @@
 'use client';
 
-import { useMemo } from 'react';
 import type { Lang } from '../marketing/types';
-
-type StatCls = 'up' | 'gold' | null;
+import type { MarketingStats } from '@/lib/marketing-stats';
 
 const RECORD_COPY: Record<Lang, {
   eye: string;
@@ -11,125 +9,108 @@ const RECORD_COPY: Record<Lang, {
   titleEm: string;
   titlePost: string;
   lede: string;
-  stats: Array<[string, string, StatCls]>;
+  ledeNoData: string;
+  kpiYtd: string;
+  kpiDrawdown: string;
+  kpiCapital: string;
+  kpiPositions: string;
   legendApex: string;
-  legendBench: string;
   liveTag: string;
+  emptyChart: string;
 }> = {
   no: {
     eye: '04 · Resultater',
-    titlePre: 'Tolv måneder ',
-    titleEm:  'mot',
-    titlePost: ' indeksen.',
-    lede: 'Apex Quantum kjører live på Alpaca paper trading siden juni 2025. Grafen sammenligner modellens kapitalvekst mot S&P 500 — samme periode, ulik disiplin.',
-    stats: [
-      ['YTD avkastning',  '+187,5 %', 'up'],
-      ['S&P 500 YTD',     '+14,2 %',  null],
-      ['Sharpe (12 mnd)', '4,12',     'gold'],
-      ['Vinnerrate',      '73,4 %',   'up'],
-      ['Maks drawdown',   '−4,8 %',   null],
-      ['Handler i alt',   '12 481',   null],
-    ],
+    titlePre: 'Disiplin ',
+    titleEm: 'mot',
+    titlePost: ' markedet.',
+    lede: 'Apex Quantum kjører live på Alpaca paper trading. Tallene under speiles direkte fra leder-kontoens cockpit — ingen prototyper, ingen tilbakeberegnede backtests.',
+    ledeNoData: 'Live-tall fra leder-kontoen blir publisert her så snart cockpit-data er tilgjengelig.',
+    kpiYtd: 'YTD avkastning',
+    kpiDrawdown: 'Maks drawdown',
+    kpiCapital: 'Forvaltet kapital',
+    kpiPositions: 'Aktive posisjoner',
     legendApex: 'Apex Quantum',
-    legendBench: 'S&P 500',
     liveTag: 'LIVE · PAPER',
+    emptyChart: 'For lite historikk til å vise kurve enda.',
   },
   en: {
     eye: '04 · Track Record',
-    titlePre: 'Twelve months ',
-    titleEm:  'against',
-    titlePost: ' the index.',
-    lede: 'Apex Quantum has been running live on Alpaca paper trading since June 2025. The chart compares the model’s capital growth against the S&P 500 — same period, different discipline.',
-    stats: [
-      ['YTD return',     '+187.5 %', 'up'],
-      ['S&P 500 YTD',    '+14.2 %',  null],
-      ['Sharpe (12 mo)', '4.12',     'gold'],
-      ['Win rate',       '73.4 %',   'up'],
-      ['Max drawdown',   '−4.8 %',   null],
-      ['Total trades',   '12,481',   null],
-    ],
+    titlePre: 'Discipline ',
+    titleEm: 'against',
+    titlePost: ' the market.',
+    lede: 'Apex Quantum runs live on Alpaca paper trading. The numbers below mirror the leader account’s cockpit directly — no prototypes, no back-tested figures.',
+    ledeNoData: 'Live numbers from the leader account will appear here as soon as cockpit data is available.',
+    kpiYtd: 'YTD return',
+    kpiDrawdown: 'Max drawdown',
+    kpiCapital: 'Capital under model',
+    kpiPositions: 'Active positions',
     legendApex: 'Apex Quantum',
-    legendBench: 'S&P 500',
     liveTag: 'LIVE · PAPER',
+    emptyChart: 'Not enough history to plot yet.',
   },
 };
 
-// Deterministic pseudo-random curve seeded per-line — same shape every render
-// so React hydration matches and the chart stays stable on re-renders.
-function curve(seed: number, n: number, base: number, drift: number, vol: number): number[] {
-  const out: number[] = [];
-  let v = base;
-  let s = seed;
-  for (let i = 0; i < n; i++) {
-    s = (s * 9301 + 49297) % 233280;
-    const r = s / 233280 - 0.5;
-    v *= 1 + drift + r * vol;
-    out.push(v);
-  }
-  return out;
+function fmtPct(v: number | null, lang: Lang): string {
+  if (v == null) return '—';
+  const sign = v >= 0 ? '+' : '−';
+  const abs = Math.abs(v).toFixed(1).replace('.', lang === 'no' ? ',' : '.');
+  return `${sign}${abs} %`;
 }
 
-function Chart() {
+function fmtUsd(v: number | null, lang: Lang): string {
+  if (v == null || v <= 0) return '—';
+  if (v >= 1_000_000) {
+    const m = v / 1_000_000;
+    return `$${m.toFixed(2).replace('.', lang === 'no' ? ',' : '.')}M`;
+  }
+  return `$${Math.round(v).toLocaleString(lang === 'no' ? 'nb-NO' : 'en-US')}`;
+}
+
+function fmtCompactUsd(v: number, lang: Lang): string {
+  if (v >= 1_000_000) return `$${(v / 1_000_000).toFixed(2).replace('.', lang === 'no' ? ',' : '.')}M`;
+  if (v >= 1_000) return `$${(v / 1_000).toFixed(0)}k`;
+  return `$${Math.round(v)}`;
+}
+
+function EquityChart({ history, lang }: { history: number[]; lang: Lang }) {
   const w = 800;
   const h = 380;
-  const apex = useMemo(() => curve(7, 60, 100, 0.018, 0.040), []);
-  const bench = useMemo(() => curve(13, 60, 100, 0.0023, 0.018), []);
-  const all = [...apex, ...bench];
-  const min = Math.min(...all);
-  const max = Math.max(...all);
+  const min = Math.min(...history);
+  const max = Math.max(...history);
   const span = max - min || 1;
-  const sx = (i: number, len: number) => (i / (len - 1)) * w;
+  const sx = (i: number) => (i / Math.max(1, history.length - 1)) * w;
   const sy = (v: number) => h - ((v - min) / span) * (h - 20) - 10;
-  const pts = (arr: number[]) => arr.map((v, i) => `${sx(i, arr.length).toFixed(1)},${sy(v).toFixed(1)}`).join(' ');
-  const area = (arr: number[]) => `0,${h} ${pts(arr)} ${w},${h}`;
-  const yTicks = [min, (min + max) / 2, max];
+  const pts = history.map((v, i) => `${sx(i).toFixed(1)},${sy(v).toFixed(1)}`).join(' ');
+  const area = `0,${h} ${pts} ${w},${h}`;
+  const yTicks = [max, (min + max) / 2, min];
   return (
     <div className="record-chart">
       {yTicks.map((v, i) => (
         <span key={i} className="y-lab" style={{ top: `${sy(v) - 6}px` }}>
-          {v >= 100 ? v.toFixed(0) : v.toFixed(1)}
+          {fmtCompactUsd(v, lang)}
         </span>
       ))}
       <svg viewBox={`0 0 ${w} ${h}`} preserveAspectRatio="none">
         <defs>
           <linearGradient id="rc-apex-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%"   stopColor="#C9A961" stopOpacity="0.22" />
+            <stop offset="0%" stopColor="#C9A961" stopOpacity="0.22" />
             <stop offset="100%" stopColor="#C9A961" stopOpacity="0" />
-          </linearGradient>
-          <linearGradient id="rc-bench-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%"   stopColor="#00C8D6" stopOpacity="0.08" />
-            <stop offset="100%" stopColor="#00C8D6" stopOpacity="0" />
           </linearGradient>
         </defs>
         {[0.25, 0.5, 0.75].map((p) => (
           <line key={p} x1="0" x2={w} y1={h * p} y2={h * p} stroke="rgba(240,230,210,0.04)" strokeDasharray="3 3" />
         ))}
-        <polygon points={area(bench)} fill="url(#rc-bench-fill)" />
-        <polyline points={pts(bench)} fill="none" stroke="#00C8D6" strokeWidth="1.4" strokeOpacity="0.7" strokeDasharray="3 3" />
-        <polygon points={area(apex)} fill="url(#rc-apex-fill)" />
-        <polyline points={pts(apex)} fill="none" stroke="#C9A961" strokeWidth="2.2" />
-        <circle cx={w} cy={sy(apex[apex.length - 1])} r="4" fill="#C9A961" />
-        <circle cx={w} cy={sy(bench[bench.length - 1])} r="3" fill="#00C8D6" opacity="0.7" />
+        <polygon points={area} fill="url(#rc-apex-fill)" />
+        <polyline points={pts} fill="none" stroke="#C9A961" strokeWidth="2.2" />
+        <circle cx={w} cy={sy(history[history.length - 1])} r="4" fill="#C9A961" />
       </svg>
-      <span className="x-lab" style={{ left: '60px' }}>Jun 2025</span>
-      <span className="x-lab" style={{ right: '0' }}>May 2026</span>
     </div>
   );
 }
 
-function Legend({ color, dashed, label }: { color: string; dashed?: boolean; label: string }) {
-  return (
-    <span className="record-legend">
-      {dashed
-        ? <span className="swatch-dashed" style={{ borderTopColor: color }} />
-        : <span className="swatch-solid" style={{ background: color }} />}
-      {label}
-    </span>
-  );
-}
-
-export function RecordV2({ lang }: { lang: Lang }) {
+export function RecordV2({ lang, stats }: { lang: Lang; stats: MarketingStats }) {
   const t = RECORD_COPY[lang];
+  const ytdUp = (stats.ytdReturnPct ?? 0) >= 0;
   return (
     <section id="record" className="record">
       <div className="container">
@@ -137,25 +118,49 @@ export function RecordV2({ lang }: { lang: Lang }) {
           <div>
             <span className="eyebrow"><span className="rule" />{t.eye}</span>
             <h2>{t.titlePre}<em>{t.titleEm}</em>{t.titlePost}</h2>
-            <p className="record-lede">{t.lede}</p>
-            <div className="record-stats">
-              {t.stats.map(([lab, val, cls], i) => (
-                <div key={i} className="record-stat">
-                  <span className="record-stat-lab">{lab}</span>
-                  <span className={`record-stat-val ${cls ?? ''}`}>{val}</span>
+            <p className="record-lede">{stats.ok ? t.lede : t.ledeNoData}</p>
+            {stats.ok && (
+              <div className="record-stats">
+                <div className="record-stat">
+                  <span className="record-stat-lab">{t.kpiYtd}</span>
+                  <span className={`record-stat-val ${ytdUp ? 'up' : ''}`}>{fmtPct(stats.ytdReturnPct, lang)}</span>
                 </div>
-              ))}
-            </div>
+                <div className="record-stat">
+                  <span className="record-stat-lab">{t.kpiDrawdown}</span>
+                  <span className="record-stat-val">
+                    {stats.maxDrawdownPct == null
+                      ? '—'
+                      : `−${stats.maxDrawdownPct.toFixed(1).replace('.', lang === 'no' ? ',' : '.')} %`}
+                  </span>
+                </div>
+                <div className="record-stat">
+                  <span className="record-stat-lab">{t.kpiCapital}</span>
+                  <span className="record-stat-val gold">{fmtUsd(stats.totalValue, lang)}</span>
+                </div>
+                <div className="record-stat">
+                  <span className="record-stat-lab">{t.kpiPositions}</span>
+                  <span className="record-stat-val">{stats.positionsHeld ?? '—'}</span>
+                </div>
+              </div>
+            )}
           </div>
           <div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 16 }}>
-              <div style={{ display: 'flex', gap: 24 }}>
-                <Legend color="#C9A961" label={t.legendApex} />
-                <Legend color="#00C8D6" dashed label={t.legendBench} />
-              </div>
+              <span className="record-legend">
+                <span className="swatch-solid" style={{ background: '#C9A961' }} />
+                {t.legendApex}
+              </span>
               <span className="aqv2-tag cy"><span className="aqv2-dot" />{t.liveTag}</span>
             </div>
-            <Chart />
+            {stats.hasChart ? (
+              <EquityChart history={stats.equityHistory} lang={lang} />
+            ) : (
+              <div className="record-chart" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <span style={{ color: 'var(--aq-muted)', fontSize: 13, fontFamily: 'var(--aq-font-mono)', letterSpacing: '0.08em' }}>
+                  {t.emptyChart}
+                </span>
+              </div>
+            )}
           </div>
         </div>
       </div>
