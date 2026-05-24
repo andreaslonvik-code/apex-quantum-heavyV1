@@ -24,11 +24,42 @@ export interface BlueprintParams {
   barLimit: number;
 }
 
+/**
+ * A ticker the blueprint is *watching* but cannot trade yet — typically
+ * because it has not IPO'd or is otherwise not yet on Alpaca. The engine
+ * MUST ignore this list entirely; it is for UI display + manual promotion
+ * to the live `watchlist` once the symbol becomes tradable on Alpaca.
+ *
+ * Why we keep this separate: putting a non-listed ticker in `watchlist`
+ * causes Alpaca's `/v2/assets/{symbol}` and `/v2/stocks/{symbol}/bars` to
+ * 404, which spams logs and may trigger failed-order alerts in the UI.
+ * Promotion is intentionally manual — IPOs slip, get pulled, or list
+ * under a different ticker. We don't want an auto-promote race condition.
+ */
+export interface PendingTicker {
+  ticker: string;
+  /** Full company name for UI subline. */
+  name: string;
+  /** Sector taxonomy bucket — same set as lib/blueprints/sectors.ts. */
+  sector: 'tech_ai' | 'consumer' | 'health' | 'energy' | 'financial' | 'industrial' | 'auto_ev' | 'telecom_media' | 'other';
+  /** Expected listing date as ISO YYYY-MM-DD. Best estimate; verify externally. */
+  expectedListing: string;
+  /** One-line context — why we're watching, source of the listing claim. */
+  notes?: string;
+}
+
 export interface Blueprint {
   id: AssetClass;
   name: string;
   /** Tradable symbols. Crypto uses Alpaca data-API form (e.g. "BTC/USD"). */
   watchlist: readonly string[];
+  /**
+   * Symbols we're tracking but that the engine MUST NOT touch — typically
+   * pre-IPO names. Listed here so the UI can show a "Kommer snart"-strip
+   * and the user can promote to `watchlist` with a one-line edit once the
+   * symbol is actually live on Alpaca.
+   */
+  pendingWatchlist?: readonly PendingTicker[];
   /** Optional human-readable name override per ticker (used by UI). */
   tickerNames?: Readonly<Record<string, string>>;
   params: BlueprintParams;

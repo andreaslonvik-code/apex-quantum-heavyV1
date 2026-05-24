@@ -18,6 +18,7 @@ import { RecentOrders, type RecentOrder } from './components/recent-orders';
 import { BenchmarkBar, type BenchmarkBarPayload } from './components/benchmark-bar';
 import { WithdrawModal, type WithdrawStatus } from './components/withdraw-modal';
 import { GrokThesisCard } from './components/grok-thesis-card';
+import { PendingIposCard } from './components/pending-ipos-card';
 import type { Currency, Lang } from './components/i18n';
 import { BLUEPRINTS, type AssetClass } from '@/lib/blueprints';
 import '../components/marketing-v2/styles.css';
@@ -27,6 +28,22 @@ const BLUEPRINT_TITLES: Record<AssetClass, { no: string; en: string }> = {
   crypto: { no: 'Krypto', en: 'Crypto' },
   commodities: { no: 'Råvarer', en: 'Commodities' },
 };
+
+/**
+ * Flatten `pendingWatchlist` from every blueprint into a single sorted
+ * list (earliest expected listing first) for the PendingIposCard. Static
+ * — built once per render from blueprint config; cheap.
+ */
+function collectPendingTickers(lang: Lang) {
+  const items = (['stocks', 'crypto', 'commodities'] as const).flatMap((bp) => {
+    const pending = BLUEPRINTS[bp].pendingWatchlist ?? [];
+    return pending.map((p) => ({
+      ...p,
+      blueprintLabel: BLUEPRINT_TITLES[bp][lang],
+    }));
+  });
+  return items.sort((a, b) => a.expectedListing.localeCompare(b.expectedListing));
+}
 
 interface AccountInfo {
   accountId: string;
@@ -560,6 +577,11 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
               fxRate={fxRate}
             />
           )}
+
+          {/* Pre-IPO / pending tickers (SpaceX, etc.) — engine ignores
+              these; this card exists so we see what's coming and can
+              promote symbols manually once they list on Alpaca. */}
+          <PendingIposCard lang={lang} items={collectPendingTickers(lang)} />
 
           {/* Per-blueprint watchlists — each market gets its own panel.
               Rendered as collapsed drawers: head is a button, click expands.

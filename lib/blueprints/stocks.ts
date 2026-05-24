@@ -47,6 +47,32 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     // Biotech phase-3 catalyst — Cybin. Added 2026-05-22. Wider-watchlist
     // candidate; engine monitors phase-3 readout news each scan.
     'HELP',
+    // Batch added 2026-05-24 — momentum / breakout candidates flagged via
+    // Bollinger Squeeze, unusual options activity, news-sentiment lift.
+    // All wider-watchlist (not priority-core). Engine treats them as PATH
+    // B/C/D/F candidates per blueprint rules.
+    'DELL', 'ESTC', 'MDB', 'CRWD', 'ZS', 'CLS', 'FN', 'SYM', 'SOUN',
+    'PATH', 'HUBS', 'CRSP', 'EDIT', 'NTLA', 'KTOS', 'AVAV', 'ASTS',
+    'BBAI', 'UPST', 'AI',
+    // Defense / drone / autonomy primes added 2026-05-24. Geopolitisk hedge
+    // + drone-momentum-eksponering. Alle wider-watchlist (ikke priority-
+    // core). KTOS, AVAV og BWXT er ikke listet på nytt her — de var allerede
+    // i watchlisten over.
+    'TXT', 'HII', 'LDOS', 'SAIC', 'PSN', 'BAH', 'GD',
+  ],
+  // Pre-IPO / not-yet-listed names the cockpit is tracking. Engine ignores
+  // these — they exist for UI visibility and manual promotion to the live
+  // `watchlist` once the symbol is verified tradable on Alpaca.
+  // Promotion procedure: move the ticker into `watchlist` above, drop the
+  // entry from here, and verify `tradable: true` via /v2/assets/{symbol}.
+  pendingWatchlist: [
+    {
+      ticker: 'SPCX',
+      name: 'SpaceX',
+      sector: 'industrial',
+      expectedListing: '2026-06-12',
+      notes: 'Roadshow rapportert ~4. juni 2026. Ticker SPCX på Nasdaq, kilde: user-forwarded news brief. Verifiser mot S-1 prospekt før promotering — IPOer slipper datoer og endrer ticker.',
+    },
   ],
   // Human-readable company names — rendered as the sub-line under each
   // ticker in the dashboard tables. Without this the UI fell back to
@@ -116,6 +142,38 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     SAP: 'SAP SE',
     RGTI: 'Rigetti Computing',
     HELP: 'Cybin',
+    // Batch added 2026-05-24.
+    DELL: 'Dell Technologies',
+    ESTC: 'Elastic NV',
+    MDB: 'MongoDB',
+    CRWD: 'CrowdStrike Holdings',
+    ZS: 'Zscaler',
+    CLS: 'Celestica',
+    FN: 'Fabrinet',
+    SYM: 'Symbotic',
+    SOUN: 'SoundHound AI',
+    PATH: 'UiPath',
+    HUBS: 'HubSpot',
+    CRSP: 'CRISPR Therapeutics',
+    EDIT: 'Editas Medicine',
+    NTLA: 'Intellia Therapeutics',
+    KTOS: 'Kratos Defense & Security',
+    AVAV: 'AeroVironment',
+    ASTS: 'AST SpaceMobile',
+    BBAI: 'BigBear.ai Holdings',
+    UPST: 'Upstart Holdings',
+    AI: 'C3.ai',
+    // Defense primes added 2026-05-24.
+    TXT: 'Textron',
+    HII: 'Huntington Ingalls Industries',
+    LDOS: 'Leidos Holdings',
+    SAIC: 'Science Applications International',
+    PSN: 'Parsons Corporation',
+    BAH: 'Booz Allen Hamilton',
+    GD: 'General Dynamics',
+    // Pending IPO — name is also shown in the pending-IPOs strip in the UI,
+    // but we keep the mapping here so a one-line promotion-to-active works.
+    SPCX: 'SpaceX',
   },
   params: {
     rsiOversold: 35,
