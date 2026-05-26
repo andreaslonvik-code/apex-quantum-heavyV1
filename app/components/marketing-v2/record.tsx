@@ -25,7 +25,7 @@ const RECORD_COPY: Record<Lang, {
     titlePost: ' markedet.',
     lede: 'Apex Quantum kjører live på Alpaca paper trading. Tallene under speiles direkte fra leder-kontoens cockpit — ingen prototyper, ingen tilbakeberegnede backtests.',
     ledeNoData: 'Live-tall fra leder-kontoen blir publisert her så snart cockpit-data er tilgjengelig.',
-    kpiYtd: 'YTD avkastning',
+    kpiYtd: 'Dager siden oppstart',
     kpiDrawdown: 'Maks drawdown',
     kpiCapital: 'Forvaltet kapital',
     kpiPositions: 'Aktive posisjoner',
@@ -40,7 +40,7 @@ const RECORD_COPY: Record<Lang, {
     titlePost: ' the market.',
     lede: 'Apex Quantum runs live on Alpaca paper trading. The numbers below mirror the leader account’s cockpit directly — no prototypes, no back-tested figures.',
     ledeNoData: 'Live numbers from the leader account will appear here as soon as cockpit data is available.',
-    kpiYtd: 'YTD return',
+    kpiYtd: 'Days since launch',
     kpiDrawdown: 'Max drawdown',
     kpiCapital: 'Capital under model',
     kpiPositions: 'Active positions',
@@ -50,11 +50,16 @@ const RECORD_COPY: Record<Lang, {
   },
 };
 
-function fmtPct(v: number | null, lang: Lang): string {
-  if (v == null) return '—';
-  const sign = v >= 0 ? '+' : '−';
-  const abs = Math.abs(v).toFixed(1).replace('.', lang === 'no' ? ',' : '.');
-  return `${sign}${abs} %`;
+/**
+ * Days since Apex Quantum went live on 2026-05-06. Same source-of-truth
+ * as the hero KPI — keep these two in lock-step. If the launch date ever
+ * shifts (e.g. corporate re-launch), update both `LAUNCH_DATE_MS`
+ * constants. Computed on render so the number flips at midnight UTC.
+ */
+const LAUNCH_DATE_MS = Date.UTC(2026, 4, 6);
+function daysSinceLaunch(): number {
+  const days = Math.floor((Date.now() - LAUNCH_DATE_MS) / (24 * 60 * 60 * 1000));
+  return Math.max(1, days);
 }
 
 function fmtUsd(v: number | null, lang: Lang): string {
@@ -110,7 +115,6 @@ function EquityChart({ history, lang }: { history: number[]; lang: Lang }) {
 
 export function RecordV2({ lang, stats }: { lang: Lang; stats: MarketingStats }) {
   const t = RECORD_COPY[lang];
-  const ytdUp = (stats.ytdReturnPct ?? 0) >= 0;
   return (
     <section id="record" className="record">
       <div className="container">
@@ -123,7 +127,7 @@ export function RecordV2({ lang, stats }: { lang: Lang; stats: MarketingStats })
               <div className="record-stats">
                 <div className="record-stat">
                   <span className="record-stat-lab">{t.kpiYtd}</span>
-                  <span className={`record-stat-val ${ytdUp ? 'up' : ''}`}>{fmtPct(stats.ytdReturnPct, lang)}</span>
+                  <span className="record-stat-val">{daysSinceLaunch()}</span>
                 </div>
                 <div className="record-stat">
                   <span className="record-stat-lab">{t.kpiDrawdown}</span>

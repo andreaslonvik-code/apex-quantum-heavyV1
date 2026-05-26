@@ -23,43 +23,53 @@ const HERO_COPY: Record<Lang, {
 }> = {
   no: {
     eye: 'Apex Quantum · AI-drevet aksjeinnsikt',
-    titleA: 'Lær markedet,',
-    titleB: 'eller la motoren ',
-    titleEm: 'ta over',
-    titleC: '.',
+    titleA: 'Lær markedet',
+    titleB: 'eller la ',
+    titleEm: 'KI-motoren',
+    titleC: ' ta over.',
     desc: 'Apex Quantum + gir deg daglige AI-signaler med fullstendig begrunnelse, ukentlige rapporter og strukturert læring fra 199 kr/mnd. Apex Quantum Max — den autonome trading-motoren via Alpaca — lanseres i 2026. Drevet av en blueprint utviklet over et år for ekspertise i aksjeanalyse.',
     ctaPrimary: 'Start med Apex Quantum +',
     ctaSecondary: 'Se produktene',
     panelTitle: 'Live posisjoner · paper trading',
     panelFoot: ['Auto-oppdatert', 'NASDAQ · NYSE · ARCA'],
     panelEmpty: 'Ingen åpne posisjoner akkurat nå.',
-    kpiYtd: 'YTD avkastning',
+    kpiYtd: 'dager siden oppstart',
     kpiCapital: 'Forvaltet kapital',
     kpiPositions: 'Aktive posisjoner',
   },
   en: {
     eye: 'Apex Quantum · AI-powered market insight',
-    titleA: 'Learn the market,',
-    titleB: 'or let the engine ',
-    titleEm: 'take over',
-    titleC: '.',
+    titleA: 'Learn the market',
+    titleB: 'or let the ',
+    titleEm: 'AI engine',
+    titleC: ' take over.',
     desc: 'Apex Quantum + gives you daily AI signals with full reasoning, weekly reports and structured learning from $19/month. Apex Quantum Max — the autonomous trading engine via Alpaca — launches in 2026. Driven by a blueprint developed over a year for stock-analysis expertise.',
     ctaPrimary: 'Start with Apex Quantum +',
     ctaSecondary: 'See the products',
     panelTitle: 'Live positions · paper trading',
     panelFoot: ['Live · auto-refresh', 'NASDAQ · NYSE · ARCA'],
     panelEmpty: 'No open positions right now.',
-    kpiYtd: 'YTD return',
+    kpiYtd: 'days since launch',
     kpiCapital: 'Capital under model',
     kpiPositions: 'Active positions',
   },
 };
 
-function fmtPct(v: number | null, lang: Lang): string {
-  if (v == null) return '—';
-  const sign = v >= 0 ? '+' : '−';
-  const abs = Math.abs(v).toFixed(1).replace('.', lang === 'no' ? ',' : '.');
-  return `${sign}${abs} %`;
+/**
+ * Days since Apex Quantum went live on 2026-05-06. Increments each day
+ * the page is rendered. Computed at module import so SSR + first client
+ * paint agree; the daily flip happens at midnight UTC server-side, which
+ * is close enough to local for marketing copy. Reads "1 dag" on day 1,
+ * "2 dager" on day 2, etc.
+ */
+const LAUNCH_DATE_MS = Date.UTC(2026, 4, 6); // month is 0-indexed → 4 = May
+function daysSinceLaunch(): number {
+  const now = Date.now();
+  const diffMs = now - LAUNCH_DATE_MS;
+  const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
+  // Minimum 1 so the copy never reads "0 dager siden oppstart" before
+  // anyone has had a chance to fix the clock.
+  return Math.max(1, days);
 }
 
 function fmtUsd(v: number | null, lang: Lang): string {
@@ -93,7 +103,7 @@ export function HeroV2({ lang, stats }: { lang: Lang; stats: MarketingStats }) {
             {stats.ok && (
               <div className="hero-meta">
                 <div className="hero-meta-item">
-                  <span className="hero-meta-num em">{fmtPct(stats.ytdReturnPct, lang)}</span>
+                  <span className="hero-meta-num">{daysSinceLaunch()}</span>
                   <span className="hero-meta-lab">{t.kpiYtd}</span>
                 </div>
                 <div className="hero-meta-item">
