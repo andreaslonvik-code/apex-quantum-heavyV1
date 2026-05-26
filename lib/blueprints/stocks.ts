@@ -189,6 +189,13 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     // slots that means the rest split the other 50 %, ~10 % each on
     // average. Dynamic allocation guidance lives in the strategy text.
     maxPctPerPosition: 50,
+    // Combined top-2 cap added 2026-05-26. Without this, the engine could
+    // legitimately end up with two positions at ~47 % each (e.g. VRT +
+    // AAPL = 90 % of bucket) because each individual cap-check passed.
+    // 70 % allows one truly dominant pick (≤ 50 %) + a strong second
+    // (≤ 20-25 %) without locking out capital for the 4 remaining slots.
+    // Cap is enforced both during autonomous top-up AND new BUYs.
+    maxCombinedTopTwoPct: 70,
     // Tightened from –25 % to –3 %. –25 % is a catastrophe stop, not discipline.
     // –3 % daily cuts off the kind of bleed-out we saw on 2026-04-30 before
     // it compounds. Engine pauses ALL new buys when daily PnL ≤ –3 %; existing

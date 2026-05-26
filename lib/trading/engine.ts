@@ -1823,6 +1823,50 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   const TARGET_PCT_PER_POSITION = (blueprint.params.maxPctPerPosition / 100) * 0.95;
   const targetPositionValue = bucketCapital * TARGET_PCT_PER_POSITION;
   const TOP_UP_THRESHOLD = 0.75; // top up if below 75 % of target
+
+  // ── Combined top-2 concentration cap (defensive — preventive only) ────
+  // Returns the maximum allowable ADDITIONAL notional for `ticker` such
+  // that, after the buy, the top-2 positions combined do not exceed
+  // `maxCombinedTopTwoPct` × bucketCapital. Returns the requested amount
+  // unchanged when the param is unset (crypto / commodities today).
+  //
+  // This NEVER sells existing positions — it only blocks fresh deployment
+  // from creating new over-concentration. If positions are already over
+  // the cap (e.g. mid-rally appreciation), the cap is treated as "no
+  // headroom" and returns 0; the position is left to mean-revert or be
+  // trimmed by Grok / mechanical stops naturally.
+  //
+  // `pendingDeltas` lets the BUY phase pass in tentative deployments
+  // already approved earlier this tick (so two BUYs in the same scan
+  // can't both pass while individually within limits).
+  const combinedTopTwoCap = blueprint.params.maxCombinedTopTwoPct;
+  const computeCombinedHeadroom = (
+    ticker: string,
+    requestedDelta: number,
+    pendingDeltas: Map<string, number> = new Map(),
+  ): number => {
+    if (combinedTopTwoCap == null) return requestedDelta;
+    const capValue = bucketCapital * (combinedTopTwoCap / 100);
+    // Build current value map including pending deltas from earlier in
+    // this tick and the proposed delta for THIS ticker.
+    const values = new Map<string, number>();
+    for (const [t, p] of positionsByTicker) {
+      values.set(t, parseFloat(p.market_value) || 0);
+    }
+    for (const [t, d] of pendingDeltas) {
+      values.set(t, (values.get(t) ?? 0) + d);
+    }
+    values.set(ticker, (values.get(ticker) ?? 0) + requestedDelta);
+    const sorted = Array.from(values.values()).sort((a, b) => b - a);
+    const top2 = (sorted[0] ?? 0) + (sorted[1] ?? 0);
+    if (top2 <= capValue) return requestedDelta;
+    const overflow = top2 - capValue;
+    return Math.max(0, requestedDelta - overflow);
+  };
+  // Tracks notional approved for top-up / BUY this tick so subsequent
+  // sizing checks see a realistic post-deployment view. Crypto/commodities
+  // skip it because they don't have the param set.
+  const pendingDeployments = new Map<string, number>();
   const sellTickerSetForTopup = new Set(sellDecs.map((d) => d.ticker));
   const buyTickerSetForTopup = new Set(buyDecs.map((d) => d.ticker));
   for (const [ticker, pos] of positionsByTicker) {
@@ -1838,11 +1882,16 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     const sig = isAnticipatorySignal(snap);
     if (!sig.ok) continue; // never top up unhealthy positions
 
-    const topUpAmount = Math.min(
+    const rawTopUpAmount = Math.min(
       targetPositionValue - existingValue,
       maxNotionalPerTicker - existingValue,
       Math.max(0, remainingBuyingPower) * 0.95 - netDeployed,
     );
+    // Combined top-2 cap: shrink top-up if it would push the bucket past
+    // the combined concentration limit. When this caps the top-up to
+    // below MIN_NOTIONAL, we skip — the position stays at its current
+    // size, freeing capital for runners-up to be topped instead.
+    const topUpAmount = computeCombinedHeadroom(ticker, rawTopUpAmount, pendingDeployments);
     const topUpRound = round(topUpAmount, 2);
     if (topUpRound < MIN_NOTIONAL_USD) continue;
 
@@ -1880,7 +1929,14 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
       reason: 'AUTONOMOUS_TOPUP',
       error: r.success ? undefined : r.error,
     });
-    if (r.success) netDeployed += topUpRound;
+    if (r.success) {
+      netDeployed += topUpRound;
+      // Track this deployment so subsequent top-ups + BUYs see it when
+      // checking the combined cap. Without this, the BUY phase could
+      // approve a second deployment that, combined with this top-up,
+      // pushes past the cap.
+      pendingDeployments.set(ticker, (pendingDeployments.get(ticker) ?? 0) + topUpRound);
+    }
   }
 
   // ── Phase 2: BUYs (sequential, all at engine-forced size) ────────────
@@ -1999,10 +2055,18 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
       perPickNotional * volMultiplier * newsMultiplier,
       remainingTickerCap,
     );
-    const notional = round(cappedByTicker, 2);
+    // Combined top-2 cap (same logic as top-up phase). Passing
+    // `pendingDeployments` lets this BUY see any approved top-ups from
+    // Phase 1.5 so we don't blow the cap by stacking the two phases.
+    const cappedByCombined = computeCombinedHeadroom(ticker, cappedByTicker, pendingDeployments);
+    const notional = round(cappedByCombined, 2);
     if (notional < MIN_NOTIONAL_USD) {
       let reason: string;
-      if (remainingTickerCap < MIN_NOTIONAL_USD) {
+      if (cappedByCombined < cappedByTicker - 0.01) {
+        // The combined-cap was the binding constraint, not the per-ticker
+        // one. Log explicitly so post-trade audit can see this kicked in.
+        reason = 'combined_top2_cap_reached';
+      } else if (remainingTickerCap < MIN_NOTIONAL_USD) {
         reason = 'concentration_cap_reached';
       } else if (perPickNotional < MIN_NOTIONAL_USD) {
         reason = 'no_free_capital';
@@ -2056,6 +2120,8 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     });
     if (r.success) {
       netDeployed += notional;
+      // Track for combined-cap visibility on later BUYs in the same scan.
+      pendingDeployments.set(ticker, (pendingDeployments.get(ticker) ?? 0) + notional);
       // Increment sector count so subsequent BUYs in the same scan respect
       // the per-sector cap (currently 2).
       if (sec) sectorCounts.set(sec, (sectorCounts.get(sec) ?? 0) + 1);

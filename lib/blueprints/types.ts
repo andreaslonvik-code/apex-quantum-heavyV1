@@ -11,6 +11,18 @@ export interface BlueprintParams {
   maxPositions: number;
   /** Cap on a single ticker as % of bucket capital. */
   maxPctPerPosition: number;
+  /**
+   * Optional combined cap on the TOP-TWO positions as % of bucket capital.
+   * Prevents the "89 % in two names" pattern where both `maxPctPerPosition`
+   * checks pass individually (e.g. AAPL 45 % + VRT 45 % = 90 %), leaving
+   * nothing for runners-up to grow into. When set, the engine refuses any
+   * top-up or BUY that would push top-2 combined above this threshold —
+   * the larger of the two gets capped first, then the smaller gets the
+   * remainder. Omit (undefined) to disable; recommended ~70 % for the
+   * stocks bucket where 6 max positions × 47.5 % target would otherwise
+   * collide.
+   */
+  maxCombinedTopTwoPct?: number;
   /** Halt-for-the-day threshold on bucket-equity drawdown. -0.03 = -3 %. */
   dailyKillSwitchPct: number;
   atrPeriod: number;
