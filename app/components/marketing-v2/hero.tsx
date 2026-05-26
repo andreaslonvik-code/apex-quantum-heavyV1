@@ -17,7 +17,9 @@ const HERO_COPY: Record<Lang, {
   panelTitle: string;
   panelFoot: [string, string];
   panelEmpty: string;
-  kpiYtd: string;
+  /** Tail of the return KPI label — prefixed with the live day-count.
+   *  E.g. "20 dager siden oppstart" / "20 days since launch". */
+  kpiYtdSuffix: string;
   kpiCapital: string;
   kpiPositions: string;
 }> = {
@@ -33,7 +35,7 @@ const HERO_COPY: Record<Lang, {
     panelTitle: 'Live posisjoner · paper trading',
     panelFoot: ['Auto-oppdatert', 'NASDAQ · NYSE · ARCA'],
     panelEmpty: 'Ingen åpne posisjoner akkurat nå.',
-    kpiYtd: 'dager siden oppstart',
+    kpiYtdSuffix: 'dager siden oppstart',
     kpiCapital: 'Forvaltet kapital',
     kpiPositions: 'Aktive posisjoner',
   },
@@ -49,7 +51,7 @@ const HERO_COPY: Record<Lang, {
     panelTitle: 'Live positions · paper trading',
     panelFoot: ['Live · auto-refresh', 'NASDAQ · NYSE · ARCA'],
     panelEmpty: 'No open positions right now.',
-    kpiYtd: 'days since launch',
+    kpiYtdSuffix: 'days since launch',
     kpiCapital: 'Capital under model',
     kpiPositions: 'Active positions',
   },
@@ -70,6 +72,13 @@ function daysSinceLaunch(): number {
   // Minimum 1 so the copy never reads "0 dager siden oppstart" before
   // anyone has had a chance to fix the clock.
   return Math.max(1, days);
+}
+
+function fmtPct(v: number | null, lang: Lang): string {
+  if (v == null) return '—';
+  const sign = v >= 0 ? '+' : '−';
+  const abs = Math.abs(v).toFixed(1).replace('.', lang === 'no' ? ',' : '.');
+  return `${sign}${abs} %`;
 }
 
 function fmtUsd(v: number | null, lang: Lang): string {
@@ -103,8 +112,8 @@ export function HeroV2({ lang, stats }: { lang: Lang; stats: MarketingStats }) {
             {stats.ok && (
               <div className="hero-meta">
                 <div className="hero-meta-item">
-                  <span className="hero-meta-num">{daysSinceLaunch()}</span>
-                  <span className="hero-meta-lab">{t.kpiYtd}</span>
+                  <span className="hero-meta-num em">{fmtPct(stats.ytdReturnPct, lang)}</span>
+                  <span className="hero-meta-lab">{daysSinceLaunch()} {t.kpiYtdSuffix}</span>
                 </div>
                 <div className="hero-meta-item">
                   <span className="hero-meta-num gold">{fmtUsd(stats.totalValue, lang)}</span>

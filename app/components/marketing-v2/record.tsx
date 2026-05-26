@@ -10,7 +10,9 @@ const RECORD_COPY: Record<Lang, {
   titlePost: string;
   lede: string;
   ledeNoData: string;
-  kpiYtd: string;
+  /** Tail of the return KPI label — prefixed with the live day-count.
+   *  E.g. "20 dager siden oppstart" / "20 days since launch". */
+  kpiYtdSuffix: string;
   kpiDrawdown: string;
   kpiCapital: string;
   kpiPositions: string;
@@ -25,7 +27,7 @@ const RECORD_COPY: Record<Lang, {
     titlePost: ' markedet.',
     lede: 'Apex Quantum kjører live på Alpaca paper trading. Tallene under speiles direkte fra leder-kontoens cockpit — ingen prototyper, ingen tilbakeberegnede backtests.',
     ledeNoData: 'Live-tall fra leder-kontoen blir publisert her så snart cockpit-data er tilgjengelig.',
-    kpiYtd: 'Dager siden oppstart',
+    kpiYtdSuffix: 'dager siden oppstart',
     kpiDrawdown: 'Maks drawdown',
     kpiCapital: 'Forvaltet kapital',
     kpiPositions: 'Aktive posisjoner',
@@ -40,7 +42,7 @@ const RECORD_COPY: Record<Lang, {
     titlePost: ' the market.',
     lede: 'Apex Quantum runs live on Alpaca paper trading. The numbers below mirror the leader account’s cockpit directly — no prototypes, no back-tested figures.',
     ledeNoData: 'Live numbers from the leader account will appear here as soon as cockpit data is available.',
-    kpiYtd: 'Days since launch',
+    kpiYtdSuffix: 'days since launch',
     kpiDrawdown: 'Max drawdown',
     kpiCapital: 'Capital under model',
     kpiPositions: 'Active positions',
@@ -60,6 +62,13 @@ const LAUNCH_DATE_MS = Date.UTC(2026, 4, 6);
 function daysSinceLaunch(): number {
   const days = Math.floor((Date.now() - LAUNCH_DATE_MS) / (24 * 60 * 60 * 1000));
   return Math.max(1, days);
+}
+
+function fmtPct(v: number | null, lang: Lang): string {
+  if (v == null) return '—';
+  const sign = v >= 0 ? '+' : '−';
+  const abs = Math.abs(v).toFixed(1).replace('.', lang === 'no' ? ',' : '.');
+  return `${sign}${abs} %`;
 }
 
 function fmtUsd(v: number | null, lang: Lang): string {
@@ -115,6 +124,7 @@ function EquityChart({ history, lang }: { history: number[]; lang: Lang }) {
 
 export function RecordV2({ lang, stats }: { lang: Lang; stats: MarketingStats }) {
   const t = RECORD_COPY[lang];
+  const ytdUp = (stats.ytdReturnPct ?? 0) >= 0;
   return (
     <section id="record" className="record">
       <div className="container">
@@ -126,8 +136,8 @@ export function RecordV2({ lang, stats }: { lang: Lang; stats: MarketingStats })
             {stats.ok && (
               <div className="record-stats">
                 <div className="record-stat">
-                  <span className="record-stat-lab">{t.kpiYtd}</span>
-                  <span className="record-stat-val">{daysSinceLaunch()}</span>
+                  <span className="record-stat-lab">{daysSinceLaunch()} {t.kpiYtdSuffix}</span>
+                  <span className={`record-stat-val ${ytdUp ? 'up' : ''}`}>{fmtPct(stats.ytdReturnPct, lang)}</span>
                 </div>
                 <div className="record-stat">
                   <span className="record-stat-lab">{t.kpiDrawdown}</span>
