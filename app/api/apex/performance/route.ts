@@ -160,19 +160,33 @@ function pctChange(values: number[]): number | null {
 function buildTicks(timestamps: number[], format: 'time' | 'date' | 'month'): string[] {
   if (timestamps.length < 2) return [];
   const N = 8;
-  const out: string[] = [];
+  // Pick label granularity from the actual span, not just the requested
+  // timeframe. A young account viewed on ALL/YTD may span only weeks, in
+  // which case `month` would print "May" eight times.
+  const spanDays = (timestamps[timestamps.length - 1] - timestamps[0]) / 86400;
+  let effective = format;
+  if (format === 'month' && spanDays < 60) effective = 'date';
+  if (format === 'date' && spanDays < 2) effective = 'time';
+  const includeYear = effective === 'month' && spanDays > 365;
+
+  const raw: string[] = [];
   for (let i = 0; i < N; i++) {
     const idx = Math.round((i / (N - 1)) * (timestamps.length - 1));
     const d = new Date(timestamps[idx] * 1000);
-    if (format === 'time') {
-      out.push(d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }));
-    } else if (format === 'date') {
-      out.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }));
+    if (effective === 'time') {
+      raw.push(d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' }));
+    } else if (effective === 'date') {
+      raw.push(d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'America/New_York' }));
     } else {
-      out.push(d.toLocaleDateString('en-US', { month: 'short', timeZone: 'America/New_York' }));
+      raw.push(d.toLocaleDateString('en-US', includeYear
+        ? { month: 'short', year: '2-digit', timeZone: 'America/New_York' }
+        : { month: 'short', timeZone: 'America/New_York' }));
     }
   }
-  return out;
+  // Dedupe adjacent duplicates (e.g. two ticks landing on the same day
+  // through rounding) — render as blanks so the axis stays evenly spaced
+  // but doesn't repeat the same label.
+  return raw.map((label, i) => (i > 0 && label === raw[i - 1] ? '' : label));
 }
 
 function buildEquitySeries(history: AlpacaPortfolioHistory, cfg: TfCfg) {

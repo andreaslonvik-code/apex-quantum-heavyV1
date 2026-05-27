@@ -210,8 +210,8 @@ export function ReturnsChart({ points, sp500Points, nasdaqPoints, xTicks = DEFAU
         )}
       </svg>
       <div className="chart-x">
-        {xTicks.map((tk) => (
-          <span key={tk}>{tk}</span>
+        {xTicks.map((tk, i) => (
+          <span key={i}>{tk}</span>
         ))}
       </div>
     </div>
