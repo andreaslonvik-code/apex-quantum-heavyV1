@@ -80,6 +80,7 @@ export const PLUS_WATCHLIST: readonly PlusTicker[] = [
   { ticker: 'NOVO-B.CO', name: 'Novo Nordisk', region: 'EU', theme: 'health' },
   { ticker: 'ALV.DE', name: 'Allianz', region: 'EU', theme: 'finance' },
   { ticker: 'NBIS', name: 'Nebius Group', region: 'EU', theme: 'ai-infra' },
+  { ticker: 'SHA.DE', name: 'Schaeffler', region: 'EU', theme: 'autos' },
 
   // US — semis & AI infra
   { ticker: 'NVDA', name: 'NVIDIA', region: 'US', theme: 'semiconductors' },
@@ -137,6 +138,7 @@ export const PLUS_WATCHLIST: readonly PlusTicker[] = [
   { ticker: 'QBTS', name: 'D-Wave Quantum', region: 'US', theme: 'ai-infra' },
   { ticker: 'RGTI', name: 'Rigetti Computing', region: 'US', theme: 'ai-infra' },
   { ticker: 'QUBT', name: 'Quantum Computing Inc.', region: 'US', theme: 'ai-infra' },
+  { ticker: 'HUT', name: 'Hut 8', region: 'US', theme: 'ai-infra' },
   { ticker: 'NFE', name: 'New Fortress Energy', region: 'US', theme: 'energy' },
 
   // US — defense / space
@@ -149,6 +151,7 @@ export const PLUS_WATCHLIST: readonly PlusTicker[] = [
   { ticker: 'RTX', name: 'RTX', region: 'US', theme: 'defense' },
   { ticker: 'RKLB', name: 'Rocket Lab', region: 'US', theme: 'space' },
   { ticker: 'ASTS', name: 'AST SpaceMobile', region: 'US', theme: 'space' },
+  { ticker: 'RDW', name: 'Redwire', region: 'US', theme: 'space' },
   { ticker: 'ONDS', name: 'Ondas Holdings', region: 'US', theme: 'defense' },
 
   // US — biotech / health
@@ -156,6 +159,7 @@ export const PLUS_WATCHLIST: readonly PlusTicker[] = [
   { ticker: 'REGN', name: 'Regeneron', region: 'US', theme: 'biotech' },
   { ticker: 'VRTX', name: 'Vertex Pharmaceuticals', region: 'US', theme: 'biotech' },
   { ticker: 'CPRX', name: 'Catalyst Pharmaceuticals', region: 'US', theme: 'biotech' },
+  { ticker: 'ABSI', name: 'Absci', region: 'US', theme: 'biotech' },
   { ticker: 'IBRX', name: 'ImmunityBio', region: 'US', theme: 'biotech' },
   { ticker: 'CRVS', name: 'Corvus Pharmaceuticals', region: 'US', theme: 'biotech' },
   { ticker: 'EDSA', name: 'Edesa Biotech', region: 'US', theme: 'biotech' },
