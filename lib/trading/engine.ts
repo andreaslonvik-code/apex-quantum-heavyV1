@@ -824,8 +824,9 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
     snap.rsi_14_1h == null || snap.uptrend_1h; // null = pass; available = require uptrend
 
   // ── PATH E: PRIORITY-CORE DIP-BUY (highest priority) ────────────────
-  // User-curated leaders (MU/QBTS/IONQ/QUBT/RKLB/VRT) get a dedicated
-  // entry path for healthy pullbacks inside a structural uptrend. Without
+  // User-curated leaders (PRIORITY_CORE_TICKERS — 29 names across 8 sectors;
+  // see PRIORITY_CORE_BY_SECTOR in stocks.ts) get a dedicated entry path
+  // for healthy pullbacks inside a structural uptrend. Without
   // this, a -6 % intraday dip on a leader breaks PATH C (rsi_rising=false,
   // rising_channel=false) and slips through to PATH A which is too weak
   // a signal to allocate the top slot to. PATH E exists so the engine
@@ -885,6 +886,14 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
   //   - No earnings blackout — already enforced above.
   //   - RSI < 80 — block blow-off-top extremes only.
   //   - 5d > -10 % — block obvious decay/crash patterns.
+  //   - sector_avg_rs_30d > -10 pp — sector-bear circuit breaker. Even if
+  //     a single priority-core name is still above SMA200, a deep sector-
+  //     wide drawdown (whole sector trailing SPY by >10 pp over 30d) is
+  //     the canary for narrative break. PATH G is the only path without a
+  //     per-ticker RS guard — without this sector check it would let Grok
+  //     keep BUYing into a collapsing sector before individual SMA200s
+  //     have broken. Null sector_avg_rs falls through (allow) so missing
+  //     data doesn't block trades; the upstream RS guards still bind.
   //
   // This replaces the `structural_laggard` (RS < -5) and `no_dip_no_trend`
   // rejections for priority-core. Non-priority-core tickers still hit the
@@ -892,7 +901,8 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
   if (
     isPriorityCore(snap.ticker) &&
     (snap.rsi_14 == null || snap.rsi_14 < 80) &&
-    (snap.change_5d_pct == null || snap.change_5d_pct > -10)
+    (snap.change_5d_pct == null || snap.change_5d_pct > -10) &&
+    (snap.sector_avg_rs_30d == null || snap.sector_avg_rs_30d > -10)
   ) {
     reasons.push(
       'priority_core_grok_trust_pathG',
@@ -901,6 +911,9 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
     );
     if (snap.relative_strength_30d != null) {
       reasons.push(`rs30d_${snap.relative_strength_30d.toFixed(1)}pp`);
+    }
+    if (snap.sector_avg_rs_30d != null) {
+      reasons.push(`sector_rs_${snap.sector_avg_rs_30d.toFixed(1)}pp`);
     }
     if (snap.rising_channel) reasons.push('rising_channel');
     if (snap.volume_accumulation) reasons.push('volume_accumulation');
@@ -1298,7 +1311,7 @@ function buildUserPrompt(args: {
     `# ALLOKER — KVALITET OVER KVANTITET`,
     ``,
     eveningMode
-      ? `### ★★★ EVENING REBALANCE — ${blueprint.params.maxPositions}-SLOT OVERNIGHT PORTFOLIO\nDette er den daglige 15:40–15:55 ET-rebalansen. Ikke et normalt tick.\nDu velger porteføljen vi går inn i morgendagen MED.\n\nFor hver held position:\n- HOLD: strong-trend leader, robust mot -5 % overnight gap.\n- SELL: mistet momentum / negative news / RS faller.\n\nFyll ledige slot med priority-core (MU/QBTS/IONQ/QUBT/RKLB/VRT) som ser sterkest ut for morgendagen — basert på Asia overnight-futures, breaking news, sektor-rotasjon, og catalysts (earnings, FDA, makro).\n\nIKKE åpne aggressive dip-buys i evening-mode — vi vil ha posisjoner som kan overleve natten, ikke kortsiktig swing-handel før close.`
+      ? `### ★★★ EVENING REBALANCE — ${blueprint.params.maxPositions}-SLOT OVERNIGHT PORTFOLIO\nDette er den daglige 15:40–15:55 ET-rebalansen. Ikke et normalt tick.\nDu velger porteføljen vi går inn i morgendagen MED.\n\nFor hver held position:\n- HOLD: strong-trend leader, robust mot -5 % overnight gap.\n- SELL: mistet momentum / negative news / RS faller.\n\nFyll ledige slot med priority-core (sterkeste innen sektor som ikke er i sektor-drawdown) som ser sterkest ut for morgendagen — basert på Asia overnight-futures, breaking news, sektor-rotasjon, og catalysts (earnings, FDA, makro).\n\nIKKE åpne aggressive dip-buys i evening-mode — vi vil ha posisjoner som kan overleve natten, ikke kortsiktig swing-handel før close.`
       : '',
     `Mål: stretch mot full deployment av bøtte-kapital — men ALDRI bryt blueprint-disiplinen.`,
     `ALLTID-INVESTERT MANDAT: bucket SKAL ha minst 1 åpen posisjon i en rising-channel-ticker under markedstid. 0 % deployment er IKKE akseptabelt utenom strukturell bear (SPY < SMA200) eller kill-switch.`,
@@ -1484,9 +1497,12 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   // stay at 2 (default).
   //
   // Earlier values: 1 → 2 → 2/4 (split, 2026-05-21).
-  // Priority-core tickers (MU/QBTS/IONQ/QUBT/RKLB/VRT) bypass the cap entirely
-  // (see corePass below), so this cap binds only on non-priority-core picks
-  // — typically secondary tech names like TSM/PANW/AVGO.
+  // Priority-core no longer bypasses this cap (changed when priority-core
+  // was expanded from 6 AI-clustered names to 29 cross-sector names). With
+  // 10 priority-core in tech_ai alone, bypass would let engine load 6/6
+  // there and defeat the diversification thesis. Cap now binds equally on
+  // priority-core and non-priority-core; the 4-vs-2 split still encodes AI
+  // bias. Worst-case bucket: 4 tech_ai + 2 from one other sector = 6/6.
   const SECTOR_CAP_DEFAULT = 2;
   const SECTOR_CAP_OVERRIDES: Record<string, number> = { tech_ai: 4 };
   const sectorCapFor = (sec: string | null): number =>
@@ -1682,14 +1698,15 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     if (!snap) continue;
     const sig = isAnticipatorySignal(snap);
     if (!sig.ok) continue;
-    // Priority-core leaders bypass the sector cap entirely (user's 12-
-    // month portfolio is meant to concentrate in AI/quantum core, not
-    // diversify away from it). maxPositions and per-ticker concentration
-    // caps still bind.
+    // Sector cap applies to ALL tickers, including priority-core. With
+    // priority-core now diversified across 8 sectors (10 in tech_ai, 3 in
+    // each other sector), the previous bypass would let engine load 6/6
+    // in tech_ai during AI-bias periods — defeating the cross-sector
+    // diversification this restructure is meant to deliver. The 4-vs-2
+    // sector-cap split (tech_ai gets 4 slots, others 2) preserves AI
+    // bias without allowing full bucket concentration.
     const sec = sectorOf(dec.ticker);
-    const corePass = isPriorityCore(dec.ticker);
     if (
-      !corePass &&
       sec &&
       (preflightSectorCounts.get(sec) ?? 0) >= sectorCapFor(sec)
     ) continue;
@@ -1869,7 +1886,39 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   const pendingDeployments = new Map<string, number>();
   const sellTickerSetForTopup = new Set(sellDecs.map((d) => d.ticker));
   const buyTickerSetForTopup = new Set(buyDecs.map((d) => d.ticker));
-  for (const [ticker, pos] of positionsByTicker) {
+  // Rank top-up candidates by blueprint conviction + rekyl-setup + filter
+  // signal, not by Alpaca's return order (alphabetical). Without this, the
+  // first ticker iterated walks toward 47.5 % and eats the combined top-2
+  // budget — meaning AAPL (non-core) outranked MU (priority-core) just
+  // because A < M. Sort key (descending tuple):
+  //   1. isPriorityCore (1/0) — long-term conviction set from stocks.ts
+  //   2. priority_core_dip_signal (1/0) — engine's "rekyl-ready" flag.
+  //      User mandate: among 29 priority-core, the 6 actually grown should
+  //      be the ones in dip-setup (price ≤ -3 % 1d OR ≤ -5 % 5d AND in
+  //      RSI 25-65 healthy-pullback band). This sorts dip candidates above
+  //      momentum-runners — buying the discount, not the breakout top.
+  //   3. relative_strength_30d desc — tie-break within each group.
+  // Missing snapshots sort last (-Infinity) — they'll be skipped anyway
+  // by the snap/signal guards below, so order doesn't matter for them.
+  const rekylSortKey = (ticker: string): [number, number, number] => {
+    const snap = snapshots.get(ticker);
+    return [
+      isPriorityCore(ticker) ? 1 : 0,
+      snap?.priority_core_dip_signal ? 1 : 0,
+      snap?.relative_strength_30d ?? -Infinity,
+    ];
+  };
+  const rekylCompare = (a: string, b: string): number => {
+    const [aCore, aDip, aRs] = rekylSortKey(a);
+    const [bCore, bDip, bRs] = rekylSortKey(b);
+    if (aCore !== bCore) return bCore - aCore;
+    if (aDip !== bDip) return bDip - aDip;
+    return bRs - aRs;
+  };
+  const topUpCandidates = Array.from(positionsByTicker.entries()).sort(
+    ([ta], [tb]) => rekylCompare(ta, tb),
+  );
+  for (const [ticker, pos] of topUpCandidates) {
     if (sellTickerSetForTopup.has(ticker)) continue; // closing this — skip
     if (buyTickerSetForTopup.has(ticker)) continue; // Grok already BUY — main loop handles
     if (inFlightTickers.has(ticker)) continue;
@@ -1948,6 +1997,13 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   // (The previous early-exit "no_free_capital" loop was removed: it tagged
   // every BUY as no_free_capital even when the real reason was filter-fail.
   // Now each pick gets its precise rejection reason in the main loop below.)
+  //
+  // BUYs are processed sequentially against the combined top-2 cap and the
+  // remaining buying-power budget, so the strongest signal needs to be sized
+  // FIRST — otherwise the cap is eaten by a weaker name and the conviction
+  // pick gets the leftover. Same sort key as Phase 1.5 top-up:
+  //   1. isPriorityCore, 2. priority_core_dip_signal (rekyl-ready), 3. RS desc.
+  buyDecs.sort((a, b) => rekylCompare(a.ticker, b.ticker));
   for (const dec of buyDecs) {
     const ticker = dec.ticker;
 
@@ -1998,17 +2054,17 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     }
 
     // ── Sector concentration cap ─────────────────────────────────────────
-    // Max 2 positions per sector per scan, applied across kept positions +
-    // BUYs queued in this loop. Prevents "3 picks all in semis" on a bad
-    // sector day. Unknown-sector tickers don't trigger or take a slot.
+    // Max N positions per sector per scan (default 2, tech_ai overridden
+    // to 4 for explicit AI/semis bias), applied across kept positions +
+    // BUYs queued in this loop. Prevents "all picks in one sector" on a
+    // bad sector day. Unknown-sector tickers don't trigger or take a slot.
     //
-    // Priority-core exemption: user-curated 12-month portfolio leaders
-    // bypass the cap. Concentration in AI/quantum core is the explicit
-    // point of priority-core. maxPositions + per-ticker cap still bind.
+    // Applies to priority-core too. Priority-core is now diversified
+    // across 8 sectors — bypassing the cap would let engine load 6/6 in
+    // tech_ai (10 priority-core candidates available there) and defeat
+    // the cross-sector safety net. The 4-vs-2 cap still encodes AI bias.
     const sec = sectorOf(ticker);
-    const corePass = isPriorityCore(ticker);
     if (
-      !corePass &&
       sec &&
       (sectorCounts.get(sec) ?? 0) >= sectorCapFor(sec)
     ) {
