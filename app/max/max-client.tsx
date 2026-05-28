@@ -401,10 +401,18 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
     return performance.chartData.map((d) => d.value);
   }, [performance]);
 
-  // Real index levels (^GSPC / ^IXIC), aligned to equity timestamps — drive
-  // the "Indeks" chart mode. The "Avkastning" mode shows the portfolio alone.
-  const sp500Points = performance?.indexSp500?.valuesAligned ?? undefined;
-  const nasdaqPoints = performance?.indexNasdaq?.valuesAligned ?? undefined;
+  // Real index levels (^GSPC / ^IXIC) when available, falling back to SPY/QQQ
+  // (which trade extended hours and so always have data alongside Alpaca's
+  // pre-/post-market equity bars). Yahoo's spot indices have no pre-market
+  // data, so on 1H/24H tabs the chart goes blank without this fallback.
+  const sp500Points =
+    performance?.indexSp500?.valuesAligned && performance.indexSp500.valuesAligned.length > 0
+      ? performance.indexSp500.valuesAligned
+      : performance?.benchmark?.valuesAligned;
+  const nasdaqPoints =
+    performance?.indexNasdaq?.valuesAligned && performance.indexNasdaq.valuesAligned.length > 0
+      ? performance.indexNasdaq.valuesAligned
+      : performance?.benchmarkNasdaq?.valuesAligned;
   const chartTicks = performance?.xTicks && performance.xTicks.length > 0 ? performance.xTicks : undefined;
 
   // First failed order, deduplicated by orderId/time. User can dismiss it.

@@ -337,8 +337,22 @@ export async function GET(req: NextRequest) {
     const spyAligned = alignBenchToEquity(spyChartSeries, ts);
     const qqqAligned = alignBenchToEquity(qqqChartSeries, ts);
     // Real index levels (^GSPC, ^IXIC) for the index-comparison chart mode.
-    const sp500Aligned = alignBenchToEquity(sp500Series, ts);
-    const nasdaqAligned = alignBenchToEquity(nasdaqSeries, ts);
+    // Yahoo's spot indices don't trade pre-/post-market, so on 1H/24H tabs
+    // during extended hours the index series either comes back empty or
+    // entirely covers the prior trading session (no overlap with the equity
+    // window). Both cases align to a flat or empty line, so we fall back to
+    // SPY/QQQ — same % return story, just via the ETF proxy that does trade
+    // extended hours.
+    const overlaps = (bench: BenchSeries): boolean =>
+      bench.timestamps.length >= 2 &&
+      ts.length > 0 &&
+      bench.timestamps[bench.timestamps.length - 1] >= ts[0];
+    const sp500Aligned = overlaps(sp500Series)
+      ? alignBenchToEquity(sp500Series, ts)
+      : spyAligned;
+    const nasdaqAligned = overlaps(nasdaqSeries)
+      ? alignBenchToEquity(nasdaqSeries, ts)
+      : qqqAligned;
     const benchPctWindow = pctChange(spyChartSeries.values);
     const qqqPctWindow = pctChange(qqqChartSeries.values);
     const vsBenchPct = benchPctWindow === null ? null : windowPnlPct - benchPctWindow;
