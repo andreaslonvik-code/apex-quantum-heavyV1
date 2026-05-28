@@ -5,6 +5,7 @@ import type { PlusLang } from '@/lib/i18n/plus-lang';
 import { PLUS_WATCHLIST, type PlusRegion } from '@/lib/blueprints/plus';
 import { type PlusAction, SEED_SIGNALS } from './seed-signals';
 import { useOwnedTickers } from './use-owned-tickers';
+import { IndexChart } from './index-chart';
 
 interface DisplaySignal {
   id: string;
@@ -575,6 +576,8 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
           )}
         </div>
       )}
+
+      <IndexChart lang={lang} />
 
       {!meta.isReal && !loading && <div className="aqp-seed-note">{t.seedNote}</div>}
 
