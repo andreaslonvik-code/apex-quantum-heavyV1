@@ -420,26 +420,36 @@ function validatePayload(
   const obj = v as Record<string, unknown>;
   const thesis = typeof obj.thesis === 'string' ? obj.thesis : '';
   const rawDecisions = Array.isArray(obj.decisions) ? obj.decisions : [];
-  const decisions: GrokDecision[] = [];
+  // C1 fix — dedup decisions by (ticker, action). The 2026-04-30 incident
+  // root cause was multiple SELL signals on the same ticker firing in one
+  // scan, each reading stale qty from the same positionsByTicker snapshot
+  // and submitting a full close → Alpaca paper margin accepted the excess
+  // as shorts. If Grok ever emits two `{ticker:"X", action:"SELL"}` rows
+  // (LLM hallucination, schema drift, retry-stitch glitch), we keep only
+  // the last entry per (ticker, action) pair. Last-wins because the model
+  // sometimes self-corrects within a single response.
+  const dedupedByKey = new Map<string, GrokDecision>();
   for (const d of rawDecisions) {
     if (!d || typeof d !== 'object') continue;
     const o = d as Record<string, unknown>;
-    const ticker = typeof o.ticker === 'string' ? o.ticker.trim().toUpperCase() : '';
+    const tickerRaw = typeof o.ticker === 'string' ? o.ticker.trim().toUpperCase() : '';
     const actionRaw = typeof o.action === 'string' ? o.action.trim().toUpperCase() : '';
-    if (!ticker || !['BUY', 'SELL', 'HOLD'].includes(actionRaw)) continue;
+    if (!tickerRaw || !['BUY', 'SELL', 'HOLD'].includes(actionRaw)) continue;
     const action = actionRaw as GrokAction;
+    const ticker = tickerRaw.replace('-', '/');
     const notional =
       typeof o.notional_usd === 'number' && Number.isFinite(o.notional_usd) && o.notional_usd > 0
         ? o.notional_usd
         : undefined;
     const reason = typeof o.reason === 'string' ? o.reason : '';
-    decisions.push({
-      ticker: ticker.replace('-', '/'),
+    dedupedByKey.set(`${ticker}|${action}`, {
+      ticker,
       action,
       ...(notional !== undefined ? { notional_usd: notional } : {}),
       reason,
     });
   }
+  const decisions: GrokDecision[] = Array.from(dedupedByKey.values());
   const catalysts = parseCatalysts(obj.catalysts);
   return { ok: true, payload: { thesis, decisions, catalysts } };
 }

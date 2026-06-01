@@ -1692,6 +1692,27 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   // non-marginable buying power for fractional notional orders.
   const safeRemainingBP = Math.max(0, remainingBuyingPower) * 0.95;
 
+  // Sort key — also used to order the main BUY loop and the top-up loop.
+  // Hoisted ABOVE the pre-flight (M7 fix) so the pre-flight iterates in
+  // the same order as execution. Otherwise pre-flight approves AAPL first
+  // and consumes the sector slot; main loop then re-sorts and tries MU
+  // first → MU is rejected at the sector cap → perPickNotional was sized
+  // for a pick that won't execute → capital sits in cash.
+  const rekylSortKey = (ticker: string): [number, number, number] => {
+    const snap = snapshots.get(ticker);
+    return [
+      isPriorityCore(ticker) ? 1 : 0,
+      snap?.priority_core_dip_signal ? 1 : 0,
+      snap?.relative_strength_30d ?? -Infinity,
+    ];
+  };
+  const rekylCompare = (a: string, b: string): number => {
+    const [aCore, aDip, aRs] = rekylSortKey(a);
+    const [bCore, bDip, bRs] = rekylSortKey(b);
+    if (aCore !== bCore) return bCore - aCore;
+    if (aDip !== bDip) return bDip - aDip;
+    return bRs - aRs;
+  };
   // ── Pre-flight filter pass ───────────────────────────────────────────
   // Engine used to size each BUY at freeBucketCapital / buyDecs.length.
   // Problem: if Grok proposes 3 BUYs but the anticipatory filter rejects
@@ -1700,6 +1721,7 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   // that will ACTUALLY pass all filters, and size based on that count.
   // Logic mirrors the main BUY-loop's filter checks; if they diverge in
   // the future we'll over- or under-size, so keep them in sync.
+  buyDecs.sort((a, b) => rekylCompare(a.ticker, b.ticker));
   let preApproved = 0;
   const preflightSectorCounts = new Map(sectorCounts);
   for (const dec of buyDecs) {
@@ -1751,6 +1773,14 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
       const ticker = dec.ticker;
       const held = positionsByTicker.get(ticker);
       if (!held) return skipTrade(blueprint.id, ticker, 'SELL', 'no_position');
+      // C2 fix — defense in depth against extending a short. The mechanical
+      // pass and the mirror SELL loop both already check held.side, but the
+      // Grok-decision SELL path was missing this guard. A Grok-SELL fired
+      // against a residual short position (manual ops, prior bug, migration)
+      // would otherwise send `sell_to_close` against a short → Alpaca may
+      // extend the short under intent ambiguity. Same class as the
+      // 2026-04-30 incident.
+      if (held.side !== 'long') return skipTrade(blueprint.id, ticker, 'SELL', 'not_long');
       const qty = parseFloat(held.qty) || 0;
       if (qty <= 0) return skipTrade(blueprint.id, ticker, 'SELL', 'zero_qty');
       let orderReq: import('@/lib/alpaca').AlpacaOrderRequest | null;
@@ -1911,21 +1941,8 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   //   3. relative_strength_30d desc — tie-break within each group.
   // Missing snapshots sort last (-Infinity) — they'll be skipped anyway
   // by the snap/signal guards below, so order doesn't matter for them.
-  const rekylSortKey = (ticker: string): [number, number, number] => {
-    const snap = snapshots.get(ticker);
-    return [
-      isPriorityCore(ticker) ? 1 : 0,
-      snap?.priority_core_dip_signal ? 1 : 0,
-      snap?.relative_strength_30d ?? -Infinity,
-    ];
-  };
-  const rekylCompare = (a: string, b: string): number => {
-    const [aCore, aDip, aRs] = rekylSortKey(a);
-    const [bCore, bDip, bRs] = rekylSortKey(b);
-    if (aCore !== bCore) return bCore - aCore;
-    if (aDip !== bDip) return bDip - aDip;
-    return bRs - aRs;
-  };
+  // (rekylSortKey + rekylCompare hoisted above the pre-flight pass; see
+  //  M7 fix comment up there.)
   const topUpCandidates = Array.from(positionsByTicker.entries()).sort(
     ([ta], [tb]) => rekylCompare(ta, tb),
   );
@@ -2012,9 +2029,8 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   // BUYs are processed sequentially against the combined top-2 cap and the
   // remaining buying-power budget, so the strongest signal needs to be sized
   // FIRST — otherwise the cap is eaten by a weaker name and the conviction
-  // pick gets the leftover. Same sort key as Phase 1.5 top-up:
-  //   1. isPriorityCore, 2. priority_core_dip_signal (rekyl-ready), 3. RS desc.
-  buyDecs.sort((a, b) => rekylCompare(a.ticker, b.ticker));
+  // pick gets the leftover. Already sorted by rekylCompare above the
+  // pre-flight pass (M7 fix), so the iteration here is in correct order.
   for (const dec of buyDecs) {
     const ticker = dec.ticker;
 
@@ -2580,6 +2596,31 @@ function trailingStopFloor(entry: number, peakPnlPct: number): number | null {
  * threshold, or trailing-stop floor, so a flash move between Grok calls
  * doesn't blow through the blueprint's risk floor.
  */
+/** Per-ticker entry timestamps derived from the most recent filled BUY
+ *  in the user's closed-order history. Used by mechanicalSafetyPass to
+ *  scope the peak-pnl scan to bars AFTER position entry — without this,
+ *  a dip-buy on a stock that printed a higher price 6 months pre-entry
+ *  locks the trailing-stop floor above current price and the position
+ *  exits the moment the mechanical pass runs (silent winner-killer). */
+function buildEntryTimestampMap(closedOrders: AlpacaOrder[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const o of closedOrders) {
+    if (o.side !== 'buy') continue;
+    if (o.status !== 'filled') continue;
+    if (!o.filled_at) continue;
+    const ts = new Date(o.filled_at).getTime();
+    if (!Number.isFinite(ts)) continue;
+    // Closed orders arrive sorted desc by submitted_at; keep the most recent
+    // BUY per symbol (i.e. the entry that established the currently-held
+    // position — accepts that a partial position has the latest top-up's
+    // date, which is the right behaviour for trail-stop: peak SINCE THE
+    // CURRENT exposure was established, not since the first ever entry).
+    const existing = out.get(o.symbol);
+    if (existing === undefined || ts > existing) out.set(o.symbol, ts);
+  }
+  return out;
+}
+
 async function mechanicalSafetyPass(args: {
   creds: AlpacaCreds;
   blueprint: Blueprint;
@@ -2593,13 +2634,27 @@ async function mechanicalSafetyPass(args: {
    *  `openOrderSymbols` filtering means `inFlightTickers` no longer blocks
    *  this path, so the dedup has to happen here. */
   openOrdersData: AlpacaOrder[];
+  /** Entry timestamps keyed by Alpaca symbol (most recent filled BUY).
+   *  Empty / missing entry = fall back to a conservative 30-bar lookback
+   *  for peak-pnl computation so we still get some trailing-stop coverage
+   *  on positions older than the closed-order history. */
+  entryTimestampBySymbol: Map<string, number>;
 }): Promise<TradeResult[]> {
-  const { creds, blueprint, positionsByTicker, inFlightTickers, marketIsOpen, openOrdersData } = args;
+  const {
+    creds,
+    blueprint,
+    positionsByTicker,
+    inFlightTickers,
+    marketIsOpen,
+    openOrdersData,
+    entryTimestampBySymbol,
+  } = args;
   const isCrypto = blueprint.id === 'crypto';
   const trades: TradeResult[] = [];
 
   for (const [ticker, held] of positionsByTicker) {
     if (inFlightTickers.has(ticker)) continue;
+    const sym = tradingSymbol(ticker);
     const qty = parseFloat(held.qty) || 0;
     const entry = parseFloat(held.avg_entry_price) || 0;
     if (qty <= 0 || entry <= 0) continue;
@@ -2629,15 +2684,33 @@ async function mechanicalSafetyPass(args: {
       const stopPrice = entry - stopMult * atrVal;
       const pnlPct = (price - entry) / entry;
 
-      // Peak-pnl since entry. We don't store entry timestamp, so we use the
-      // bars whose high is >= entry × 1.001 as a proxy for "bars after we
-      // opened the position" — the position was opened near or below entry,
-      // so its first day's high is at least a hair above. Take max(high) over
-      // those bars + the live price. Falls back to current price when no bar
-      // shows a peak (e.g. position opened today, no daily-bar print yet).
+      // Peak-pnl since entry. Critical correctness: a dip-buy on a stock
+      // that printed a higher price BEFORE entry must NOT count that
+      // pre-entry high — otherwise trailing-stop floor locks above current
+      // price and the position exits the moment mechanical pass runs.
+      //
+      // Primary path: use the entry timestamp from the closed-order map
+      // (most recent filled BUY for this symbol) to scope the scan to
+      // bars at or after the entry day.
+      //
+      // Fallback when entry timestamp is missing (position older than the
+      // closed-order lookback): conservative 30-bar window — short enough
+      // to bound the false-positive on a position that's bled for a year,
+      // long enough to capture realistic peak gains for a months-old hold.
+      const entryTs = entryTimestampBySymbol.get(sym);
+      const fallbackLookback = 30;
+      const startIdx =
+        entryTs != null
+          ? bars.findIndex((b) => {
+              const t = new Date(b.t).getTime();
+              return Number.isFinite(t) && t >= entryTs;
+            })
+          : Math.max(0, bars.length - fallbackLookback);
+      const effectiveStart = startIdx < 0 ? bars.length : startIdx;
       let peakPrice = price;
-      for (const b of bars) {
-        if (b.h >= entry && b.h > peakPrice) peakPrice = b.h;
+      for (let i = effectiveStart; i < bars.length; i++) {
+        const b = bars[i];
+        if (b.h > peakPrice) peakPrice = b.h;
       }
       const peakPnlPct = (peakPrice - entry) / entry;
       const trailFloor = trailingStopFloor(entry, peakPnlPct);
@@ -2653,7 +2726,15 @@ async function mechanicalSafetyPass(args: {
       //   - price has crossed below SMA50 (short-term trend broken)
       //   - position is currently underwater OR peak gain < +20 %
       //     (don't dump winners that gave back; trailing stop handles those)
-      const prevClose = bars[bars.length - 1]?.c ?? entry;
+      //
+      // M3 fix: prevClose must be YESTERDAY's close (bars[-2]), not today's
+      // running daily bar (bars[-1]). During RTH, Alpaca's 1Day-bar pipeline
+      // returns the in-progress day as the last element with running OHLC;
+      // using bars[-1].c made intradayPct ≈ 0 almost always, so the -5 %
+      // fast-deterioration trigger never fired intraday. Falls back to
+      // bars[-1] when only one bar exists (e.g. brand-new ticker).
+      const prevClose =
+        bars.length >= 2 ? bars[bars.length - 2]?.c ?? entry : bars[bars.length - 1]?.c ?? entry;
       const intradayPct = prevClose > 0 ? ((price - prevClose) / prevClose) * 100 : 0;
       const belowSma50 = sma50 != null && sma50 > 0 && price < sma50;
       const isFastDeterioration =
@@ -2898,6 +2979,13 @@ async function runBlueprint(args: {
    *  cancel-stop-on-SELL helper — both inspect order type and stop_price,
    *  which the symbol-only set above doesn't carry. */
   openOrdersData: AlpacaOrder[];
+  /** Entry timestamps (ms since epoch) keyed by Alpaca symbol — most
+   *  recent filled BUY per ticker from closed-order history. Used by
+   *  mechanicalSafetyPass to scope peak-pnl scan to post-entry bars
+   *  (C3 fix: was scanning all 250 daily bars, locking trailing-stop
+   *  floor above current price for any dip-buy on a stock that printed
+   *  a higher price pre-entry). */
+  entryTimestampBySymbol: Map<string, number>;
   killSwitchOn: boolean;
   /** Account down ≥ CIRCUIT_BREAKER_DRAWDOWN from its trailing ~1-month
    *  peak — halts new BUYs + the always-invested mandate (crash protection). */
@@ -2935,6 +3023,7 @@ async function runBlueprint(args: {
     allPositions,
     openOrderSymbols,
     openOrdersData,
+    entryTimestampBySymbol,
     killSwitchOn,
     circuitBreakerActive,
     account,
@@ -3032,6 +3121,7 @@ async function runBlueprint(args: {
     inFlightTickers,
     marketIsOpen: marketClock?.is_open ?? false,
     openOrdersData,
+    entryTimestampBySymbol,
   });
   result.trades.push(...safetyTrades);
   // Drop closed positions from local cache so subsequent Grok decisions see fresh state.
@@ -3434,8 +3524,17 @@ export async function runScanForUser(
       : [],
   );
 
-  const recentOrdersRes = await getOrders(creds, { status: 'all', limit: 20 });
-  const recentOrders = recentOrdersRes.success ? ordersToSummary(recentOrdersRes.data) : [];
+  // Closed-order history — used to derive per-ticker entry timestamps for
+  // mechanicalSafetyPass's post-entry peak-pnl scan (C3 fix). limit=500 ≈
+  // ~8 months of typical activity for this engine, enough for all currently
+  // held positions on the 12-month-horizon mandate; positions older than
+  // the window fall back to a 30-bar lookback heuristic in the pass.
+  // Also drives `recentOrders` (formerly its own limit=20 call) — we use
+  // a slice instead of a second getOrders call.
+  const closedOrdersRes = await getOrders(creds, { status: 'closed', limit: 500 });
+  const closedOrdersData = closedOrdersRes.success ? closedOrdersRes.data : [];
+  const recentOrders = ordersToSummary(closedOrdersData.slice(0, 20));
+  const entryTimestampBySymbol = buildEntryTimestampMap(closedOrdersData);
 
   const clockRes = await getClock(creds);
   const marketClock = clockRes.success ? clockToSummary(clockRes.data) : null;
@@ -3514,6 +3613,7 @@ export async function runScanForUser(
       allPositions: positions,
       openOrderSymbols,
       openOrdersData: openOrdersRes.success ? openOrdersRes.data : [],
+      entryTimestampBySymbol,
       killSwitchOn,
       circuitBreakerActive,
       account,
