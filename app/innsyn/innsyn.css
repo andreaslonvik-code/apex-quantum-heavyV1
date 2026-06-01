@@ -110,6 +110,63 @@
   100% { box-shadow: 0 0 0 0 rgba(0, 200, 214, 0); }
 }
 
+/* Strategy mandate strip — sits between hero stats and parchment note.
+   Quiet ink palette, 3-card grid explaining the long-horizon thesis and
+   why the engine intentionally rides small dips. */
+.aqv2 .innsyn-mandate {
+  padding: 64px 0 48px;
+  background: var(--aq-bg);
+}
+
+.aqv2 .innsyn-mandate-head {
+  font-family: var(--aq-font-serif);
+  font-size: clamp(24px, 2.8vw, 32px);
+  line-height: 1.18;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+  color: var(--aq-text);
+  margin: 14px 0 32px;
+  max-width: 720px;
+}
+
+.aqv2 .innsyn-mandate-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.aqv2 .innsyn-mandate-card {
+  padding: 22px 22px 24px;
+  border: 1px solid var(--aq-border);
+  border-left: 2px solid var(--aq-cyan);
+  border-radius: 4px;
+  background: var(--aq-surface);
+}
+
+.aqv2 .innsyn-mandate-tag {
+  display: block;
+  font-family: var(--aq-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--aq-cyan);
+  margin-bottom: 12px;
+}
+
+.aqv2 .innsyn-mandate-body {
+  font-size: 14.5px;
+  line-height: 1.62;
+  color: var(--aq-text-mid);
+  margin: 0;
+}
+
+@media (max-width: 880px) {
+  .aqv2 .innsyn-mandate-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+}
+
 /* Parchment note band */
 .aqv2 .innsyn-band {
   padding: 64px 0;
