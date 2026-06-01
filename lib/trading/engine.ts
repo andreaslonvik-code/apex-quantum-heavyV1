@@ -1403,6 +1403,9 @@ function buildUserPrompt(args: {
     `Returner et JSON-objekt med formatet:`,
     `{`,
     `  "thesis": "kort sammendrag av valgene dine og hvorfor (maks 400 tegn)",`,
+    `  "decisions": [`,
+    `    { "ticker": "<symbol fra watchlisten>", "action": "BUY"|"SELL"|"HOLD", "notional_usd": 0, "reason": "kort begrunnelse (maks 200 tegn) — referér til catalyst-tittel hvis decision er drevet av en" }`,
+    `  ],`,
     `  "catalysts": [`,
     `    {`,
     `      "title": "konkret hendelse fra siste 24t — Trump-post, makro-print, geopol-eskalering, earnings, sektor-rotasjon (maks 120 tegn)",`,
@@ -1411,11 +1414,12 @@ function buildUserPrompt(args: {
     `      "sources": [ { "url": "https://...", "headline": "valgfri artikkel-overskrift" } ],`,
     `      "tickers": ["MU", "NVDA"]`,
     `    }`,
-    `  ],`,
-    `  "decisions": [`,
-    `    { "ticker": "<symbol fra watchlisten>", "action": "BUY"|"SELL"|"HOLD", "notional_usd": 0, "reason": "kort begrunnelse (maks 200 tegn) — referér til catalyst-tittel hvis decision er drevet av en" }`,
     `  ]`,
     `}`,
+    `// M6: catalysts kommer ETTER decisions i skjemaet med vilje — slik at`,
+    `// du har bestemt deg for tickerne FØR du nevner hvilke events som drev`,
+    `// dem. Dette gjør catalyst-tickers-listen presis (den refererer til`,
+    `// faktiske decisions, ikke til abstrakte navn).`,
     ``,
     `Regler for output (HARDE KRAV):`,
     `- Kun watchlist-tickere er tillatt.`,
@@ -3400,10 +3404,20 @@ async function runBlueprint(args: {
     (t) => t.action === 'BUY' && t.status === 'OK',
   ).length;
 
+  // M10 — tag follower rows in thesis so analytics (and the dashboard)
+  // can distinguish a follower's mirror of the leader's decision stream
+  // from a leader's own Grok call. Without this, follower rows look
+  // identical to leader rows ⇒ "how often did this follower diverge from
+  // leader" reports 0 % divergence even when the engine veto/cap filtered
+  // out some of the leader's decisions on the follower.
+  const thesisForSave = isFollower
+    ? `[follower-mirror ← leader:${signalSourceClerkUserId.slice(0, 12)}…] ${payload.thesis}`
+    : payload.thesis;
+
   await saveDecision({
     clerkUserId,
     blueprintId: blueprint.id,
-    thesis: payload.thesis,
+    thesis: thesisForSave,
     decisions: payload.decisions,
     catalysts: payload.catalysts,
     tradeOutcomes: exec.trades.map((t) => ({

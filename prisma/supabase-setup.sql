@@ -95,6 +95,13 @@ ALTER TABLE grok_decisions
 ALTER TABLE grok_decisions
   ADD COLUMN IF NOT EXISTS catalysts JSONB NOT NULL DEFAULT '[]'::jsonb;
 
+-- num_sources_used (added 2026-06-02, H10 fix) — used by /innsyn instead
+-- of selecting + parsing the entire raw_response blob (~50-150KB per row).
+-- Lets us stop persisting raw_response, which reduces DB growth ~10MB/day
+-- per leader and shrinks /innsyn's read transfer from ~10MB to ~50KB.
+ALTER TABLE grok_decisions
+  ADD COLUMN IF NOT EXISTS num_sources_used INTEGER;
+
 CREATE INDEX IF NOT EXISTS grok_decisions_user_blueprint_idx
   ON grok_decisions (clerk_user_id, blueprint_id, decided_at DESC);
 

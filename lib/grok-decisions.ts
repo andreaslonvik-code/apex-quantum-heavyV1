@@ -81,15 +81,19 @@ export async function getLatestDecision(
   }
 }
 
-/** Latest decision per blueprint for one user — used by the dashboard card. */
+/** Latest decision per blueprint for one user — used by the dashboard card.
+ *  M9 fix — was 3 sequential awaits (~3× the round-trip latency on dashboard
+ *  load). Now fired in parallel via Promise.all. */
 export async function getLatestDecisionsForUser(
   clerkUserId: string,
 ): Promise<Partial<Record<AssetClass, GrokDecisionRow>>> {
+  const ids: AssetClass[] = ['stocks', 'crypto', 'commodities'];
+  const rows = await Promise.all(ids.map((id) => getLatestDecision(clerkUserId, id)));
   const out: Partial<Record<AssetClass, GrokDecisionRow>> = {};
-  for (const id of ['stocks', 'crypto', 'commodities'] as AssetClass[]) {
-    const r = await getLatestDecision(clerkUserId, id);
+  ids.forEach((id, i) => {
+    const r = rows[i];
     if (r) out[id] = r;
-  }
+  });
   return out;
 }
 
@@ -161,6 +165,13 @@ export async function saveDecision(input: SaveInput): Promise<void> {
     // drop the entire decision row — the engine's cadence gate and the
     // dashboard depend on it. Retry without `catalysts` on undefined-column
     // (Postgres SQLSTATE 42703) so the rest of the row persists.
+    // H10 fix — stop persisting raw_response. The only consumer was
+    // /api/transparency/timeline reading `usage.num_sources_used` to show
+    // "X kilder konsultert" on /innsyn. Now we persist that integer as
+    // its own column and write raw_response=null. Saves ~50-150KB per
+    // row (≈ 10MB/day per leader at current cadence) and shrinks the
+    // /innsyn read transfer from ~10MB → ~50KB per request. raw_response
+    // can be re-enabled per-incident by tailing Vercel function logs.
     const baseRow = {
       clerk_user_id: input.clerkUserId,
       blueprint_id: input.blueprintId,
@@ -169,7 +180,8 @@ export async function saveDecision(input: SaveInput): Promise<void> {
       trade_outcomes: input.tradeOutcomes ?? [],
       prompt_tokens: input.usage?.prompt_tokens ?? null,
       output_tokens: input.usage?.completion_tokens ?? null,
-      raw_response: input.rawResponse ?? null,
+      num_sources_used: input.usage?.num_sources_used ?? null,
+      raw_response: null,
       failed: input.failed ?? false,
       error_message: input.errorMessage ?? null,
     };
@@ -180,21 +192,37 @@ export async function saveDecision(input: SaveInput): Promise<void> {
     // Postgres SQLSTATE 42703 = undefined_column. PostgREST's schema-cache
     // layer surfaces a missing column as 'PGRST204' BEFORE the query ever
     // hits Postgres (common right after a migration when the cache hasn't
-    // reloaded). Also fall back if the error text plainly names the
-    // catalysts column ("column 'catalysts'…"/"…schema cache…").
+    // reloaded). Either fires when EITHER `catalysts` OR `num_sources_used`
+    // is missing (both added in 2026-06-01/02 migrations). Strip both
+    // post-migration columns on the retry — never lose the decision row.
     const codeMatch = error.code === '42703' || error.code === 'PGRST204';
     const textMatch =
       !!error.message &&
-      /catalysts/i.test(error.message) &&
+      /(catalysts|num_sources_used)/i.test(error.message) &&
       /(column|schema)/i.test(error.message);
-    const isMissingCatalystsCol = codeMatch || textMatch;
-    if (isMissingCatalystsCol) {
-      const { error: retryErr } = await sb.from('grok_decisions').insert(baseRow);
+    const isMissingNewCol = codeMatch || textMatch;
+    if (isMissingNewCol) {
+      // Build a row without any of the newly-added columns. num_sources_used
+      // is mid-migration on legacy DBs, catalysts is mid-migration on even
+      // older DBs — both stripped here for safety.
+      const legacyRow = {
+        clerk_user_id: input.clerkUserId,
+        blueprint_id: input.blueprintId,
+        thesis: input.thesis || null,
+        decisions: input.decisions,
+        trade_outcomes: input.tradeOutcomes ?? [],
+        prompt_tokens: input.usage?.prompt_tokens ?? null,
+        output_tokens: input.usage?.completion_tokens ?? null,
+        raw_response: null,
+        failed: input.failed ?? false,
+        error_message: input.errorMessage ?? null,
+      };
+      const { error: retryErr } = await sb.from('grok_decisions').insert(legacyRow);
       if (retryErr) {
         console.error('[grok-decisions] insert retry error:', retryErr.message);
       } else {
         console.warn(
-          '[grok-decisions] catalysts column missing — run ALTER TABLE grok_decisions ADD COLUMN catalysts JSONB. Row saved without catalysts.',
+          '[grok-decisions] new column missing — run prisma/supabase-setup.sql ALTER TABLEs (catalysts JSONB, num_sources_used INTEGER). Row saved in legacy shape.',
         );
       }
       return;

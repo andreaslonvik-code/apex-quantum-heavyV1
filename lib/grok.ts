@@ -376,6 +376,41 @@ const CATALYST_CATEGORIES: readonly GrokCatalyst['category'][] = [
   'other',
 ];
 
+/** Allowlist of source hosts whose articles Grok actually consumed via
+ *  Live Search. H9 fix — accepting any `https?://` URL let Grok publish
+ *  hallucinated links (plausible-looking Bloomberg slugs that 404), which
+ *  destroys trust on the public /innsyn page. Hosts here are the ones
+ *  observed in xAI's `web_search` + `x_search` returns; expand as needed.
+ *  Subdomains match via endsWith — so 'reuters.com' allows 'www.reuters.com'. */
+const ALLOWED_CATALYST_HOSTS: readonly string[] = [
+  // Newswires
+  'reuters.com', 'bloomberg.com', 'wsj.com', 'ft.com', 'nytimes.com', 'apnews.com',
+  'cnbc.com', 'marketwatch.com', 'barrons.com', 'bbc.com', 'bbc.co.uk',
+  'theguardian.com', 'economist.com', 'forbes.com', 'businessinsider.com',
+  // Tech / finance
+  'seekingalpha.com', 'investors.com', 'yahoo.com', 'finance.yahoo.com',
+  'fool.com', 'benzinga.com', 'morningstar.com', 'zacks.com', 'thestreet.com',
+  // Social (verified short-form)
+  'x.com', 'twitter.com', 'truthsocial.com',
+  // Official sources
+  'sec.gov', 'fda.gov', 'whitehouse.gov', 'federalreserve.gov', 'treasury.gov',
+  'opec.org', 'iea.org', 'eia.gov', 'bls.gov', 'bea.gov',
+  'darpa.mil', 'energy.gov', 'nist.gov',
+  // Norwegian
+  'e24.no', 'dn.no', 'hegnar.no',
+];
+
+function hostMatchesAllowlist(url: string): boolean {
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return ALLOWED_CATALYST_HOSTS.some(
+      (allowed) => host === allowed || host.endsWith(`.${allowed}`),
+    );
+  } catch {
+    return false;
+  }
+}
+
 function parseCatalysts(raw: unknown): GrokCatalyst[] {
   if (!Array.isArray(raw)) return [];
   const out: GrokCatalyst[] = [];
@@ -403,10 +438,19 @@ function parseCatalysts(raw: unknown): GrokCatalyst[] {
       if (!s || typeof s !== 'object') continue;
       const so = s as Record<string, unknown>;
       const url = typeof so.url === 'string' ? so.url.trim() : '';
-      if (!url || !/^https?:\/\//i.test(url)) continue;
+      // H9 — must be http(s) AND on the allowlist. Skips hallucinated
+      // URLs (plausible-looking Bloomberg slugs that 404) before they
+      // ever reach /innsyn. A catalyst with all sources filtered out
+      // below is dropped at the post-loop length check.
+      if (!url || !/^https?:\/\//i.test(url) || !hostMatchesAllowlist(url)) continue;
       const headline = typeof so.headline === 'string' ? so.headline.trim().slice(0, 200) : undefined;
       sources.push(headline ? { url, headline } : { url });
     }
+    // H9 — drop catalysts with no surviving sources. The whole point of
+    // the catalyst card is to show "here is the article that drove this
+    // decision"; an unsourced card is bot-narrated noise and reduces
+    // trust on the public page.
+    if (sources.length === 0) continue;
     out.push({ title, category, summary, sources, tickers });
     if (out.length >= 8) break;
   }

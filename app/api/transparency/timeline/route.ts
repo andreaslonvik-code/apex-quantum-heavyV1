@@ -65,32 +65,49 @@ interface DbRow {
   decisions: unknown;
   trade_outcomes: unknown;
   catalysts?: unknown;
+  /** H10 — read num_sources_used as its own column instead of parsing
+   *  the full raw_response blob (~50-150 KB/row, 80 rows = 4-12 MB
+   *  transfer for one timeline request). Older rows that pre-date this
+   *  column fall through to parsing raw_response. */
+  num_sources_used: number | null;
   raw_response: unknown;
   failed: boolean;
 }
 
-function extractSourcesUsed(raw: unknown): number | null {
-  if (!raw || typeof raw !== 'object') return null;
-  const r = raw as { usage?: { num_sources_used?: unknown } };
+function extractSourcesUsed(row: DbRow): number | null {
+  if (typeof row.num_sources_used === 'number') return row.num_sources_used;
+  if (!row.raw_response || typeof row.raw_response !== 'object') return null;
+  const r = row.raw_response as { usage?: { num_sources_used?: unknown } };
   const n = r.usage?.num_sources_used;
   return typeof n === 'number' ? n : null;
 }
 
 /** Postgres SQLSTATE 42703 = undefined_column; PostgREST surfaces missing
  *  columns as code 'PGRST204' (schema cache) before the query hits Postgres.
- *  Either means the catalysts column hasn't been migrated yet — retry the
- *  SELECT without it so the page stays alive. */
-function isCatalystsColumnMissing(err: { code?: string; message?: string }): boolean {
+ *  Either means a post-2026-06-01 migration hasn't been applied yet —
+ *  retry the SELECT with a stripped column list so the page stays alive. */
+function isMissingNewColumn(err: { code?: string; message?: string }): boolean {
   if (err.code === '42703' || err.code === 'PGRST204') return true;
-  if (err.message && /catalysts/i.test(err.message) && /column|schema/i.test(err.message)) {
+  if (
+    err.message &&
+    /(catalysts|num_sources_used)/i.test(err.message) &&
+    /column|schema/i.test(err.message)
+  ) {
     return true;
   }
   return false;
 }
 
-const SELECT_WITH_CATALYSTS =
+// H10 — `num_sources_used` is the new column populated by saveDecision
+// instead of the entire raw_response blob; SELECT both for back-compat on
+// rows written before the migration ran. Three escalating SELECT variants
+// so a partial migration (catalysts present but num_sources_used not yet,
+// or vice versa) still renders the page.
+const SELECT_FULL =
+  'id, blueprint_id, decided_at, thesis, decisions, trade_outcomes, catalysts, num_sources_used, raw_response, failed';
+const SELECT_NO_NUM_SOURCES =
   'id, blueprint_id, decided_at, thesis, decisions, trade_outcomes, catalysts, raw_response, failed';
-const SELECT_WITHOUT_CATALYSTS =
+const SELECT_LEGACY =
   'id, blueprint_id, decided_at, thesis, decisions, trade_outcomes, raw_response, failed';
 
 export async function GET() {
@@ -100,26 +117,28 @@ export async function GET() {
   }
   try {
     const sb = createAdminClient();
-    const first = await sb
-      .from('grok_decisions')
-      .select(SELECT_WITH_CATALYSTS)
-      .eq('clerk_user_id', leaderId)
-      .order('decided_at', { ascending: false })
-      .limit(80);
-
-    // Fallback: catalysts column not yet migrated — re-query without it so
-    // /innsyn renders the rest of the row (decisions + thesis still useful).
-    let data: unknown = first.data;
-    let error = first.error;
-    if (error && isCatalystsColumnMissing(error)) {
-      const retry = await sb
+    const querySelects = [SELECT_FULL, SELECT_NO_NUM_SOURCES, SELECT_LEGACY];
+    let data: unknown = null;
+    let error: { code?: string; message?: string } | null = null;
+    for (const sel of querySelects) {
+      const r = await sb
         .from('grok_decisions')
-        .select(SELECT_WITHOUT_CATALYSTS)
+        .select(sel)
         .eq('clerk_user_id', leaderId)
         .order('decided_at', { ascending: false })
         .limit(80);
-      data = retry.data;
-      error = retry.error;
+      if (!r.error) {
+        data = r.data;
+        error = null;
+        break;
+      }
+      if (!isMissingNewColumn(r.error)) {
+        error = r.error;
+        break;
+      }
+      // Else: this select failed because a new column is missing; try the
+      // next-most-stripped select.
+      error = r.error;
     }
 
     if (error || !data || !Array.isArray(data)) {
@@ -147,7 +166,7 @@ export async function GET() {
           })
         : [],
       catalysts: Array.isArray(row.catalysts) ? (row.catalysts as GrokCatalyst[]) : [],
-      sourcesUsed: extractSourcesUsed(row.raw_response),
+      sourcesUsed: extractSourcesUsed(row),
       failed: row.failed,
     }));
 
