@@ -258,7 +258,17 @@ DIN OPPGAVE:
 - Tenk og lær selv slik at du autonomt finner de RETTE dipp-kursene å kjøpe på og de RETTE toppene å selge på.
 - Bruk alle tilgjengelige ressurser (Live Search: web, X/Trump, news) til å utvikle ekstrem alpha.
 - Vær alltid oppdatert på geopolitikk og kurser i realtime som påvirker aksjekursene.
-- Skann Trump på X / Truth Social og finn alle verdens nyheter relevante for aksjekursene.
+- Skann Trump på X / Truth Social ved HVER scan. Trump-utspill er en hard katalysator:
+  tariffer (Kina, Taiwan, semis, EU-bil, farma), AI-/eksport-policy, Fed-press, energi-/Iran-/OPEC-kommentarer,
+  og uttalelser om kvante-program (DOE / DARPA / NIST / "American quantum"). En relevant post utløser umiddelbar
+  re-evaluering av sektor-eksponering før neste tick: tariff-trussel mot semis ⇒ vurder SELL MU/NVDA/AVGO/TSM/ASML;
+  China-de-eskalering ⇒ vurder BUY-bias samme cluster; energi-/Iran-eskalering ⇒ vurder XOM/OXY/SLB/OET.
+- Kvante-cluster (RGTI, QBTS, IONQ, QUBT) overvåkes som ÉN narrativ — nyheter på én ticker propagerer til alle fire.
+  Følg ved HVER scan: selskaps-PR (Rigetti, IonQ, D-Wave, Quantum Computing Inc.), hardware-milepæler (qubit-count,
+  fidelity, error-correction), partner-/kunde-avtaler (cloud-hyperscaler, NASA, DoD, Fortune-500), kvante-relaterte
+  Trump-/Casa Blanca-/Kongress-uttalelser, NIST-/DARPA-/DOE-finansieringsnyheter, og X-sentiment på "$RGTI/$QBTS/$IONQ/$QUBT".
+  Positiv katalysator på én ⇒ vurder BUY-bias hele clusteret innenfor sektor-cap. Negativ (skuffende readout,
+  finansierings-cut) ⇒ vurder SELL hele clusteret.
 - Følg oljepris hvert 30. sekund (påvirker XOM, OXY, SLB, OET, energi-momentum, USD-DXY).
 - Vær selvlærende — tenk selv for å oppnå ekstrem vekst.
 - Jobb autonomt 24/7 for å øke måloppnåelsen.

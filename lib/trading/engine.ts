@@ -1317,7 +1317,8 @@ function buildUserPrompt(args: {
     `ALLTID-INVESTERT MANDAT: bucket SKAL ha minst 1 åpen posisjon i en rising-channel-ticker under markedstid. 0 % deployment er IKKE akseptabelt utenom strukturell bear (SPY < SMA200) eller kill-switch.`,
     ``,
     `Kjør prosedyren fra system-prompten din for porteføljevalg, og bruk Live Search aktivt for:`,
-    `- Trump-poster på X / Truth Social (relevante for sektorer i watchlisten)`,
+    `- ★ TRUMP — siste 24t på X / Truth Social. Hard-katalysator-temaer å fange: tariffer (Kina/Taiwan/EU/semis/farma), AI-/eksport-policy, Fed-press, energi-/Iran-/OPEC-utspill, kvante-/DOE-/DARPA-uttalelser. Map post → sektor → SELL/BUY-bias og reflektér i decisions.`,
+    `- ★ QUANTUM-CLUSTER (RGTI, QBTS, IONQ, QUBT) — selskaps-PR, hardware-milepæler (qubits, fidelity, error-correction), kunde-/partner-avtaler, NIST/DARPA/DOE-finansiering, X-sentiment $RGTI/$QBTS/$IONQ/$QUBT. Behandle cluster som én narrativ: positiv katalysator på én ⇒ BUY-bias hele clusteret (innenfor sektor-cap); negativ ⇒ SELL-bias hele.`,
     `- Oljepris og geopolitiske nyheter (Hormuz, OPEC, Midtøsten)`,
     `- Top 13F-flytninger og earnings-sentiment for tickerne`,
     `- Markedsregime-signaler (S&P, NASDAQ, VIX, krypto-momentum)`,
@@ -3322,11 +3323,26 @@ export async function runScanForUser(
   // match thin orderbook liquidity (we saw orders canceled 23 sec after
   // submission). The engine's inFlightTickers logic prevents duplicate
   // submissions, so fresh limits don't need to be cleared.
+  //
+  // EXCEPTION: GTC sell-side stop / stop_limit orders are the engine's own
+  // protective layer (placed by ensureServerSideStops). They are MEANT to
+  // rest until the stop price triggers. Including them in the stale sweep
+  // creates a cancel-and-replace loop every scan and — worse — every
+  // protective stop counts as an in-flight order for its ticker, blocking
+  // Grok-SELL decisions via the in_flight gate. cancelOpenStopsForTicker
+  // already cleans these up after a successful SELL.
   const STALE_ORDER_MS = 5 * 60 * 1000;
   const openOrdersForCleanupRes = await getOrders(creds, { status: 'open', limit: 200 });
   if (openOrdersForCleanupRes.success) {
     const now = Date.now();
     for (const o of openOrdersForCleanupRes.data) {
+      if (
+        o.side === 'sell' &&
+        (o.type === 'stop' || o.type === 'stop_limit') &&
+        o.time_in_force === 'gtc'
+      ) {
+        continue;
+      }
       // Defensive: Alpaca normally always returns submitted_at, but if it's
       // ever null/undefined or unparseable, NaN comparisons are false → the
       // stale order would never get cancelled and would lock BP forever.
@@ -3364,8 +3380,28 @@ export async function runScanForUser(
   const positions = positionsRes.data;
 
   const openOrdersRes = await getOrders(creds, { status: 'open', limit: 200 });
+  // Exclude the engine's own protective GTC stop / stop_limit SELL orders
+  // when building the in-flight symbol set. They are not "in flight" in a
+  // way that should block fresh decisions — they're resting protection
+  // that ensureServerSideStops places on every held position. Counting
+  // them here makes every protected ticker fail the in_flight gate in
+  // executeDecisions, which silently HOPP-s Grok-SELLs (e.g. an overbought
+  // exit) for the entire lifetime of the stop. openOrdersData (passed to
+  // ensureServerSideStops + cancelOpenStopsForTicker) intentionally keeps
+  // them visible so the protective layer can still de-dupe and clean up.
   const openOrderSymbols = new Set<string>(
-    openOrdersRes.success ? openOrdersRes.data.map((o) => o.symbol) : [],
+    openOrdersRes.success
+      ? openOrdersRes.data
+          .filter(
+            (o) =>
+              !(
+                o.side === 'sell' &&
+                (o.type === 'stop' || o.type === 'stop_limit') &&
+                o.time_in_force === 'gtc'
+              ),
+          )
+          .map((o) => o.symbol)
+      : [],
   );
 
   const recentOrdersRes = await getOrders(creds, { status: 'all', limit: 20 });
