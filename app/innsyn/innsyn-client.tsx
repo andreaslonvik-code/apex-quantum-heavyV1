@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import '../components/marketing-v2/styles.css';
 import './innsyn.css';
 import type { Lang } from '../components/marketing/types';
-import type { GrokDecision } from '@/lib/grok';
+import type { GrokCatalyst, GrokDecision } from '@/lib/grok';
 import type { TradeOutcome } from '@/lib/grok-decisions';
 import { HeaderV2 } from '../components/marketing-v2/header';
 import { FooterV2 } from '../components/marketing-v2/cta-footer';
@@ -16,6 +16,7 @@ interface TimelineRow {
   thesis: string | null;
   decisions: GrokDecision[];
   tradeOutcomes: TradeOutcome[];
+  catalysts: GrokCatalyst[];
   sourcesUsed: number | null;
   failed: boolean;
 }
@@ -26,80 +27,128 @@ interface TimelineResponse {
   asOfIso?: string;
 }
 
+/** A flattened "event" entry derived from one catalyst inside one scan. */
+interface EventEntry {
+  /** Stable key for React. */
+  key: string;
+  catalyst: GrokCatalyst;
+  blueprintId: TimelineRow['blueprintId'];
+  decidedAt: string;
+  /** Decisions in the same scan whose ticker matches the catalyst.tickers
+   *  set — these are the bot's response to the event. */
+  relatedDecisions: Array<{ decision: GrokDecision; outcome: TradeOutcome | null }>;
+  /** Total live-search sources used for the scan that produced this event. */
+  sourcesUsed: number | null;
+}
+
+type CategoryKey = GrokCatalyst['category'];
+
+const CATEGORY_LABEL: Record<Lang, Record<CategoryKey, string>> = {
+  no: {
+    trump: 'Trump',
+    macro: 'Makro',
+    geopolitics: 'Geopolitikk',
+    earnings: 'Earnings',
+    sector: 'Sektor',
+    company: 'Selskap',
+    other: 'Annet',
+  },
+  en: {
+    trump: 'Trump',
+    macro: 'Macro',
+    geopolitics: 'Geopolitics',
+    earnings: 'Earnings',
+    sector: 'Sector',
+    company: 'Company',
+    other: 'Other',
+  },
+};
+
 const COPY: Record<Lang, {
   pageTitle: { pre: string; em: string; post: string };
   eye: string;
   lede: string;
   body: string;
-  statDecisions: string;
+  statEvents: string;
+  statActions: string;
   statSources: string;
   statLastUpdate: string;
   loading: string;
   empty: string;
+  emptyHint: string;
   blueprints: Record<TimelineRow['blueprintId'], string>;
   actions: Record<'BUY' | 'SELL' | 'HOLD', string>;
   status: Record<'OK' | 'SKIP' | 'ERR', string>;
   sourcesSuffix: string;
+  actionLabel: string;
   thesisLabel: string;
-  decisionsLabel: string;
   failedLabel: string;
   liveBadge: string;
   ago: { sec: string; min: string; hour: string; day: string };
-  intro: string;
   noteHead: string;
   noteBody: string;
+  noteEye: string;
+  readArticle: string;
 }> = {
   no: {
-    pageTitle: { pre: 'Hver beslutning. Hver kilde. ', em: 'Live', post: '.' },
+    pageTitle: { pre: 'Hendelsene som driver ', em: 'hver handel', post: '.' },
     eye: '00 · INNSYN',
     lede:
-      'Apex Quantum tar mange titalls beslutninger om dagen. Her kan du følge dem i sanntid — hva motoren tenkte, hvorfor, og hva som faktisk ble utført.',
+      'Når et utsagn fra Trump, en makro-print eller en sektor-rotasjon flytter markedet, leser motoren det og bestemmer hva som skal skje. Her vises hver eksterne hendelse — og hva boten gjorde med den.',
     body:
-      'Strømmen under viser leder-kontoens autentiske handlinger. Ingenting er kuratert. Når motoren venter, ser du det. Når den feiler en ordre, ser du det. Når den selger et lykkebarn, leser du begrunnelsen.',
-    statDecisions: 'beslutninger',
+      'Strømmen under er leder-kontoens autentiske aktivitet. Hendelsene under er sitert av motoren via Live Search; handlingene er det den faktisk gjorde i samme scan. Ingenting er kuratert.',
+    statEvents: 'hendelser',
+    statActions: 'handlinger',
     statSources: 'kilder',
     statLastUpdate: 'sist oppdatert',
-    loading: 'Henter siste beslutninger …',
-    empty: 'Ingen beslutninger funnet enda. Sjekk tilbake om noen minutter.',
+    loading: 'Henter siste hendelser …',
+    empty: 'Ingen merkbar nyhetsdriver i siste scan-vindu.',
+    emptyHint:
+      'Motoren har kjørt rutinemessig vedlikehold, men ikke flagget noen ekstern hendelse som driver. Hendelser dukker opp her så snart en Trump-post, makro-print, geopol-eskalering eller sektor-rotasjon påvirker porteføljen.',
     blueprints: { stocks: 'Aksjer', crypto: 'Krypto', commodities: 'Råvarer' },
     actions: { BUY: 'KJØP', SELL: 'SELG', HOLD: 'HOLD' },
     status: { OK: 'INNSENDT', SKIP: 'HOPPET', ERR: 'AVVIST' },
-    sourcesSuffix: 'kilder konsultert',
-    thesisLabel: 'Tese',
-    decisionsLabel: 'Per ticker',
+    sourcesSuffix: 'kilder i scan',
+    actionLabel: 'Hva boten gjorde',
+    thesisLabel: 'Tese i samme scan',
     failedLabel: 'Beslutning feilet',
     liveBadge: 'LIVE',
     ago: { sec: 's', min: 'min', hour: 't', day: 'd' },
-    intro: 'Hva du ser',
     noteHead: 'Hvorfor vi viser dette',
     noteBody:
-      'AI-trading er bygd på tillit. Den eneste måten å bygge tillit på er å vise prosessen — hver tick, hver kilde, hver beslutning. Resultatene under er ikke kuratert markedsføringsmateriale; det er hvordan motoren faktisk fungerer akkurat nå.',
+      'AI-trading er bygd på tillit. Vi viser hendelsene som drev hver handel — Trump-poster, tariffer, makro-prints, sektor-rotasjoner — og hva motoren gjorde med dem. Ikke kuratert. Bare det som faktisk skjedde, slik det skjedde.',
+    noteEye: 'Hva du ser',
+    readArticle: 'Les',
   },
   en: {
-    pageTitle: { pre: 'Every decision. Every source. ', em: 'Live', post: '.' },
+    pageTitle: { pre: 'The events that drive ', em: 'every trade', post: '.' },
     eye: '00 · TRANSPARENCY',
     lede:
-      'Apex Quantum makes dozens of decisions per day. Watch them in real time — what the engine considered, why, and what actually executed.',
+      'When a Trump statement, macro print or sector rotation moves the market, the engine reads it and decides what happens next. Each external event — and what the bot did with it — is shown below.',
     body:
-      'The stream below is the leader account’s genuine action log. Nothing is curated. When the engine waits, you see it. When an order fails, you see it. When it sells a winner, you read the reason.',
-    statDecisions: 'decisions',
+      'The stream below is the leader account’s genuine activity. The events are cited by the engine via Live Search; the actions are what it actually did in the same scan. Nothing curated.',
+    statEvents: 'events',
+    statActions: 'actions',
     statSources: 'sources',
     statLastUpdate: 'last update',
-    loading: 'Loading latest decisions …',
-    empty: 'No decisions found yet. Check back in a few minutes.',
+    loading: 'Loading latest events …',
+    empty: 'No notable news driver in the recent scans.',
+    emptyHint:
+      'The engine has been running routine maintenance but has not flagged an external event as a driver. Events appear here the moment a Trump post, macro print, geopolitical escalation, or sector rotation moves the portfolio.',
     blueprints: { stocks: 'Equities', crypto: 'Crypto', commodities: 'Commodities' },
     actions: { BUY: 'BUY', SELL: 'SELL', HOLD: 'HOLD' },
     status: { OK: 'SUBMITTED', SKIP: 'SKIPPED', ERR: 'REJECTED' },
-    sourcesSuffix: 'sources consulted',
-    thesisLabel: 'Thesis',
-    decisionsLabel: 'Per ticker',
+    sourcesSuffix: 'sources in scan',
+    actionLabel: 'What the bot did',
+    thesisLabel: 'Thesis in the same scan',
     failedLabel: 'Decision failed',
     liveBadge: 'LIVE',
     ago: { sec: 's', min: 'm', hour: 'h', day: 'd' },
-    intro: 'What you’re seeing',
     noteHead: 'Why we publish this',
     noteBody:
-      'AI trading runs on trust. The only honest way to earn it is to expose the process — every tick, every source, every decision. The stream below is not curated marketing; it is how the engine actually behaves right now.',
+      'AI trading runs on trust. We expose the events that drove each trade — Trump posts, tariffs, macro prints, sector rotations — and what the engine did with them. Not curated. Just what actually happened, as it happened.',
+    noteEye: 'What you’re seeing',
+    readArticle: 'Read',
   },
 };
 
@@ -131,15 +180,42 @@ function formatClock(iso: string, lang: Lang): string {
   }
 }
 
-function outcomeFor(
-  decision: GrokDecision,
-  outcomes: TradeOutcome[],
-): TradeOutcome | null {
-  return (
-    outcomes.find(
-      (o) => o.ticker === decision.ticker && o.action === decision.action,
-    ) ?? null
-  );
+function hostFromUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    return u.hostname.replace(/^www\./, '');
+  } catch {
+    return url;
+  }
+}
+
+function flattenEvents(rows: TimelineRow[]): EventEntry[] {
+  const out: EventEntry[] = [];
+  for (const row of rows) {
+    if (!row.catalysts || row.catalysts.length === 0) continue;
+    for (let i = 0; i < row.catalysts.length; i++) {
+      const c = row.catalysts[i];
+      const tickerSet = new Set(c.tickers.map((t) => t.toUpperCase()));
+      const related: EventEntry['relatedDecisions'] = [];
+      for (const d of row.decisions) {
+        if (!tickerSet.has(d.ticker.toUpperCase())) continue;
+        const outcome =
+          row.tradeOutcomes.find(
+            (o) => o.ticker === d.ticker && o.action === d.action,
+          ) ?? null;
+        related.push({ decision: d, outcome });
+      }
+      out.push({
+        key: `${row.id}-${i}`,
+        catalyst: c,
+        blueprintId: row.blueprintId,
+        decidedAt: row.decidedAt,
+        relatedDecisions: related,
+        sourcesUsed: row.sourcesUsed,
+      });
+    }
+  }
+  return out;
 }
 
 export function InnsynClient({ initialLang }: { initialLang: Lang }) {
@@ -173,22 +249,25 @@ export function InnsynClient({ initialLang }: { initialLang: Lang }) {
       cancelled = true;
       clearInterval(id);
     };
-    // We deliberately want a stable interval; refreshing on `rows` change
-    // would re-fetch on every update.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-render every 15 s so relative timestamps stay fresh without
-  // re-fetching the API.
+  // Re-render every 15 s so relative timestamps stay fresh.
   useEffect(() => {
     const id = setInterval(() => setTick((n) => n + 1), 15_000);
     return () => clearInterval(id);
   }, []);
 
-  const decisionsCount = rows?.length ?? 0;
-  const sourcesCount = rows
-    ? rows.reduce((sum, r) => sum + (r.sourcesUsed ?? 0), 0)
-    : 0;
+  const events = useMemo(() => (rows ? flattenEvents(rows) : []), [rows]);
+
+  const actionsCount = useMemo(() => {
+    if (!rows) return 0;
+    return rows.reduce((sum, r) => sum + r.tradeOutcomes.filter((o) => o.status === 'OK').length, 0);
+  }, [rows]);
+  const sourcesCount = useMemo(
+    () => (rows ? rows.reduce((sum, r) => sum + (r.sourcesUsed ?? 0), 0) : 0),
+    [rows],
+  );
 
   return (
     <div className="aqv2">
@@ -212,8 +291,12 @@ export function InnsynClient({ initialLang }: { initialLang: Lang }) {
 
             <div className="innsyn-stats">
               <div className="innsyn-stat">
-                <span className="innsyn-stat-num">{decisionsCount}</span>
-                <span className="innsyn-stat-lbl">{t.statDecisions}</span>
+                <span className="innsyn-stat-num">{events.length}</span>
+                <span className="innsyn-stat-lbl">{t.statEvents}</span>
+              </div>
+              <div className="innsyn-stat">
+                <span className="innsyn-stat-num">{actionsCount}</span>
+                <span className="innsyn-stat-lbl">{t.statActions}</span>
               </div>
               <div className="innsyn-stat">
                 <span className="innsyn-stat-num">{sourcesCount}</span>
@@ -237,7 +320,7 @@ export function InnsynClient({ initialLang }: { initialLang: Lang }) {
           <div className="container">
             <span className="eyebrow">
               <span className="rule" />
-              {t.intro}
+              {t.noteEye}
             </span>
             <h2 className="innsyn-h2">{t.noteHead}</h2>
             <p className="innsyn-note">{t.noteBody}</p>
@@ -248,89 +331,113 @@ export function InnsynClient({ initialLang }: { initialLang: Lang }) {
           <div className="container">
             {rows === null ? (
               <p className="innsyn-loading">{t.loading}</p>
-            ) : rows.length === 0 ? (
-              <p className="innsyn-loading">{t.empty}</p>
+            ) : events.length === 0 ? (
+              <div className="innsyn-empty">
+                <p className="innsyn-empty-headline">{t.empty}</p>
+                <p className="innsyn-empty-body">{t.emptyHint}</p>
+              </div>
             ) : (
               <ol className="innsyn-list">
-                {rows.map((row) => (
-                  <li key={row.id} className="innsyn-row">
+                {events.map((ev) => (
+                  <li key={ev.key} className="innsyn-row">
                     <div className="innsyn-row-rail" />
+                    <span
+                      className={`innsyn-row-dot innsyn-cat-${ev.catalyst.category}`}
+                      aria-hidden="true"
+                    />
                     <article className="innsyn-card">
                       <header className="innsyn-card-head">
-                        <span className="innsyn-blueprint">
-                          {t.blueprints[row.blueprintId]}
+                        <span
+                          className={`innsyn-cat innsyn-cat-${ev.catalyst.category}`}
+                        >
+                          {CATEGORY_LABEL[lang][ev.catalyst.category]}
                         </span>
-                        <span className="innsyn-time" title={row.decidedAt}>
-                          {formatClock(row.decidedAt, lang)}
+                        <span className="innsyn-blueprint">
+                          · {t.blueprints[ev.blueprintId]}
+                        </span>
+                        <span className="innsyn-time" title={ev.decidedAt}>
+                          {formatClock(ev.decidedAt, lang)}
                           <span className="innsyn-time-rel">
-                            · {formatRelative(row.decidedAt, lang)}
+                            · {formatRelative(ev.decidedAt, lang)}
                           </span>
                         </span>
                       </header>
 
-                      {row.failed ? (
-                        <p className="innsyn-failed">{t.failedLabel}</p>
-                      ) : (
-                        <>
-                          {row.thesis && (
-                            <div className="innsyn-thesis">
-                              <span className="innsyn-label">{t.thesisLabel}</span>
-                              <p>{row.thesis}</p>
-                            </div>
-                          )}
+                      <h3 className="innsyn-event-title">{ev.catalyst.title}</h3>
+                      {ev.catalyst.summary && (
+                        <p className="innsyn-event-summary">
+                          {ev.catalyst.summary}
+                        </p>
+                      )}
 
-                          {row.decisions.length > 0 && (
-                            <div className="innsyn-decisions">
-                              <span className="innsyn-label">
-                                {t.decisionsLabel}
+                      {ev.catalyst.sources.length > 0 && (
+                        <div className="innsyn-sources">
+                          {ev.catalyst.sources.map((s, i) => (
+                            <a
+                              key={`${ev.key}-src-${i}`}
+                              href={s.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="innsyn-source"
+                            >
+                              <span className="innsyn-source-host">
+                                {hostFromUrl(s.url)}
                               </span>
-                              <ul>
-                                {row.decisions.map((d, i) => {
-                                  const outcome = outcomeFor(d, row.tradeOutcomes);
-                                  const status = outcome?.status;
-                                  const statusKey =
-                                    status === 'OK' || status === 'SKIP' || status === 'ERR'
-                                      ? status
-                                      : null;
-                                  return (
-                                    <li
-                                      key={`${row.id}-${d.ticker}-${i}`}
-                                      className="innsyn-dec"
-                                    >
-                                      <span className="innsyn-tk">{d.ticker}</span>
-                                      <span
-                                        className={`innsyn-act innsyn-act-${d.action.toLowerCase()}`}
-                                      >
-                                        {t.actions[d.action]}
-                                      </span>
-                                      {statusKey && (
-                                        <span
-                                          className={`innsyn-pill innsyn-pill-${statusKey.toLowerCase()}`}
-                                        >
-                                          {t.status[statusKey]}
-                                        </span>
-                                      )}
-                                      <span className="innsyn-reason">
-                                        {outcome?.error
-                                          ? `${d.reason} — ${outcome.error.slice(0, 110)}`
-                                          : statusKey === 'SKIP' && outcome?.reason
-                                            ? `${d.reason} · ${outcome.reason.slice(0, 110)}`
-                                            : d.reason}
-                                      </span>
-                                    </li>
-                                  );
-                                })}
-                              </ul>
-                            </div>
-                          )}
+                              <span className="innsyn-source-headline">
+                                {s.headline ?? t.readArticle}
+                              </span>
+                            </a>
+                          ))}
+                        </div>
+                      )}
 
-                          {row.sourcesUsed != null && row.sourcesUsed > 0 && (
-                            <footer className="innsyn-card-foot">
-                              <span className="innsyn-sources-dot" />
-                              {row.sourcesUsed} {t.sourcesSuffix}
-                            </footer>
-                          )}
-                        </>
+                      {ev.relatedDecisions.length > 0 && (
+                        <div className="innsyn-action">
+                          <span className="innsyn-label">{t.actionLabel}</span>
+                          <ul>
+                            {ev.relatedDecisions.map(({ decision, outcome }, i) => {
+                              const status = outcome?.status;
+                              const statusKey =
+                                status === 'OK' || status === 'SKIP' || status === 'ERR'
+                                  ? status
+                                  : null;
+                              return (
+                                <li
+                                  key={`${ev.key}-d-${i}`}
+                                  className="innsyn-dec"
+                                >
+                                  <span className="innsyn-tk">{decision.ticker}</span>
+                                  <span
+                                    className={`innsyn-act innsyn-act-${decision.action.toLowerCase()}`}
+                                  >
+                                    {t.actions[decision.action]}
+                                  </span>
+                                  {statusKey && (
+                                    <span
+                                      className={`innsyn-pill innsyn-pill-${statusKey.toLowerCase()}`}
+                                    >
+                                      {t.status[statusKey]}
+                                    </span>
+                                  )}
+                                  <span className="innsyn-reason">
+                                    {outcome?.error
+                                      ? `${decision.reason} — ${outcome.error.slice(0, 110)}`
+                                      : statusKey === 'SKIP' && outcome?.reason
+                                        ? `${decision.reason} · ${outcome.reason.slice(0, 110)}`
+                                        : decision.reason}
+                                  </span>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        </div>
+                      )}
+
+                      {ev.sourcesUsed != null && ev.sourcesUsed > 0 && (
+                        <footer className="innsyn-card-foot">
+                          <span className="innsyn-sources-dot" />
+                          {ev.sourcesUsed} {t.sourcesSuffix}
+                        </footer>
                       )}
                     </article>
                   </li>

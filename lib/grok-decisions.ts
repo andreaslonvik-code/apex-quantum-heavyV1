@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/utils/supabase/admin';
 import type { AssetClass } from './blueprints';
-import type { GrokDecision, GrokUsage } from './grok';
+import type { GrokCatalyst, GrokDecision, GrokUsage } from './grok';
 
 export interface TradeOutcome {
   ticker: string;
@@ -20,6 +20,7 @@ export interface GrokDecisionRow {
   thesis: string | null;
   decisions: GrokDecision[];
   tradeOutcomes: TradeOutcome[];
+  catalysts: GrokCatalyst[];
   promptTokens: number | null;
   outputTokens: number | null;
   failed: boolean;
@@ -34,6 +35,8 @@ interface DbRow {
   thesis: string | null;
   decisions: unknown;
   trade_outcomes: unknown;
+  /** Nullable on rows written before the catalysts column was added. */
+  catalysts?: unknown;
   prompt_tokens: number | null;
   output_tokens: number | null;
   failed: boolean;
@@ -49,6 +52,7 @@ function rowToDecision(row: DbRow): GrokDecisionRow {
     thesis: row.thesis,
     decisions: Array.isArray(row.decisions) ? (row.decisions as GrokDecision[]) : [],
     tradeOutcomes: Array.isArray(row.trade_outcomes) ? (row.trade_outcomes as TradeOutcome[]) : [],
+    catalysts: Array.isArray(row.catalysts) ? (row.catalysts as GrokCatalyst[]) : [],
     promptTokens: row.prompt_tokens,
     outputTokens: row.output_tokens,
     failed: row.failed,
@@ -141,6 +145,8 @@ interface SaveInput {
   thesis: string;
   decisions: GrokDecision[];
   tradeOutcomes?: TradeOutcome[];
+  /** Optional. Defaults to [] when omitted (e.g. follower path or failed call). */
+  catalysts?: GrokCatalyst[];
   usage?: GrokUsage;
   rawResponse: unknown;
   failed?: boolean;
@@ -150,7 +156,12 @@ interface SaveInput {
 export async function saveDecision(input: SaveInput): Promise<void> {
   try {
     const sb = createAdminClient();
-    const { error } = await sb.from('grok_decisions').insert({
+    // Build the insert payload once. The `catalysts` column is added by a
+    // post-2026-06-01 migration; if it hasn't been applied yet we must NOT
+    // drop the entire decision row — the engine's cadence gate and the
+    // dashboard depend on it. Retry without `catalysts` on undefined-column
+    // (Postgres SQLSTATE 42703) so the rest of the row persists.
+    const baseRow = {
       clerk_user_id: input.clerkUserId,
       blueprint_id: input.blueprintId,
       thesis: input.thesis || null,
@@ -161,8 +172,25 @@ export async function saveDecision(input: SaveInput): Promise<void> {
       raw_response: input.rawResponse ?? null,
       failed: input.failed ?? false,
       error_message: input.errorMessage ?? null,
-    });
-    if (error) console.error('[grok-decisions] insert error:', error.message);
+    };
+    const { error } = await sb
+      .from('grok_decisions')
+      .insert({ ...baseRow, catalysts: input.catalysts ?? [] });
+    if (!error) return;
+    const isMissingCatalystsCol =
+      error.code === '42703' && /catalysts/i.test(error.message ?? '');
+    if (isMissingCatalystsCol) {
+      const { error: retryErr } = await sb.from('grok_decisions').insert(baseRow);
+      if (retryErr) {
+        console.error('[grok-decisions] insert retry error:', retryErr.message);
+      } else {
+        console.warn(
+          '[grok-decisions] catalysts column missing — run ALTER TABLE grok_decisions ADD COLUMN catalysts JSONB. Row saved without catalysts.',
+        );
+      }
+      return;
+    }
+    console.error('[grok-decisions] insert error:', error.message);
   } catch (e) {
     console.error('[grok-decisions] save exception:', e);
   }

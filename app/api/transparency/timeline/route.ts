@@ -10,7 +10,7 @@
 import { NextResponse } from 'next/server';
 import { createAdminClient } from '@/utils/supabase/admin';
 import { resolveLeaderClerkId } from '@/lib/leader';
-import type { GrokDecision } from '@/lib/grok';
+import type { GrokCatalyst, GrokDecision } from '@/lib/grok';
 import type { TradeOutcome } from '@/lib/grok-decisions';
 
 export const dynamic = 'force-dynamic';
@@ -23,6 +23,7 @@ interface PublicDecisionRow {
   thesis: string | null;
   decisions: GrokDecision[];
   tradeOutcomes: TradeOutcome[];
+  catalysts: GrokCatalyst[];
   /** Live-search source count Grok consumed for this call. */
   sourcesUsed: number | null;
   failed: boolean;
@@ -35,6 +36,7 @@ interface DbRow {
   thesis: string | null;
   decisions: unknown;
   trade_outcomes: unknown;
+  catalysts?: unknown;
   raw_response: unknown;
   failed: boolean;
 }
@@ -55,10 +57,10 @@ export async function GET() {
     const sb = createAdminClient();
     const { data, error } = await sb
       .from('grok_decisions')
-      .select('id, blueprint_id, decided_at, thesis, decisions, trade_outcomes, raw_response, failed')
+      .select('id, blueprint_id, decided_at, thesis, decisions, trade_outcomes, catalysts, raw_response, failed')
       .eq('clerk_user_id', leaderId)
       .order('decided_at', { ascending: false })
-      .limit(40);
+      .limit(80);
 
     if (error || !data) {
       return NextResponse.json({ ok: false, rows: [] }, { status: 500 });
@@ -71,6 +73,7 @@ export async function GET() {
       thesis: row.thesis,
       decisions: Array.isArray(row.decisions) ? (row.decisions as GrokDecision[]) : [],
       tradeOutcomes: Array.isArray(row.trade_outcomes) ? (row.trade_outcomes as TradeOutcome[]) : [],
+      catalysts: Array.isArray(row.catalysts) ? (row.catalysts as GrokCatalyst[]) : [],
       sourcesUsed: extractSourcesUsed(row.raw_response),
       failed: row.failed,
     }));

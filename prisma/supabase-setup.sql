@@ -88,6 +88,13 @@ CREATE TABLE IF NOT EXISTS grok_decisions (
 ALTER TABLE grok_decisions
   ADD COLUMN IF NOT EXISTS trade_outcomes JSONB NOT NULL DEFAULT '[]'::jsonb;
 
+-- Catalysts (added 2026-06-01) — structured external events Grok cited as
+-- drivers for the scan. Powers the public /innsyn timeline (event-first
+-- view). Empty array is a valid "no notable catalyst" value, so old rows +
+-- routine ticks render cleanly without a backfill.
+ALTER TABLE grok_decisions
+  ADD COLUMN IF NOT EXISTS catalysts JSONB NOT NULL DEFAULT '[]'::jsonb;
+
 CREATE INDEX IF NOT EXISTS grok_decisions_user_blueprint_idx
   ON grok_decisions (clerk_user_id, blueprint_id, decided_at DESC);
 

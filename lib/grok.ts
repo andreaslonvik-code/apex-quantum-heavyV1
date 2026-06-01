@@ -38,9 +38,35 @@ export interface GrokDecision {
   reason: string;
 }
 
+/** A discrete external event Grok cites as a driver for this scan's
+ *  decisions. Distinct from `thesis` (bot's overall narrative) and
+ *  `decisions[].reason` (per-ticker justification). Used to render the
+ *  public /innsyn timeline as "event → articles → bot action". */
+export interface GrokCatalyst {
+  /** Short headline-style title (≤ 120 chars). */
+  title: string;
+  /** Coarse category — drives icon/colour on /innsyn. */
+  category: 'trump' | 'macro' | 'geopolitics' | 'earnings' | 'sector' | 'company' | 'other';
+  /** One- or two-sentence summary (≤ 280 chars). */
+  summary: string;
+  /** Source URLs from live-search. Up to 4 per event. */
+  sources: GrokCatalystSource[];
+  /** Tickers in our universe this event materially affects. */
+  tickers: string[];
+}
+
+export interface GrokCatalystSource {
+  url: string;
+  /** Optional headline for display when host name alone is too vague. */
+  headline?: string;
+}
+
 export interface GrokDecisionPayload {
   thesis: string;
   decisions: GrokDecision[];
+  /** External events cited by Grok as drivers for this scan. Empty when
+   *  the scan was routine (no notable catalyst). */
+  catalysts: GrokCatalyst[];
 }
 
 export type GrokResult =
@@ -340,6 +366,53 @@ function extractUsage(raw: unknown): GrokUsage | undefined {
   };
 }
 
+const CATALYST_CATEGORIES: readonly GrokCatalyst['category'][] = [
+  'trump',
+  'macro',
+  'geopolitics',
+  'earnings',
+  'sector',
+  'company',
+  'other',
+];
+
+function parseCatalysts(raw: unknown): GrokCatalyst[] {
+  if (!Array.isArray(raw)) return [];
+  const out: GrokCatalyst[] = [];
+  for (const c of raw) {
+    if (!c || typeof c !== 'object') continue;
+    const o = c as Record<string, unknown>;
+    const title = typeof o.title === 'string' ? o.title.trim().slice(0, 200) : '';
+    if (!title) continue;
+    const categoryRaw = typeof o.category === 'string' ? o.category.toLowerCase().trim() : 'other';
+    const category = (CATALYST_CATEGORIES as readonly string[]).includes(categoryRaw)
+      ? (categoryRaw as GrokCatalyst['category'])
+      : 'other';
+    const summary = typeof o.summary === 'string' ? o.summary.trim().slice(0, 400) : '';
+    const tickersRaw = Array.isArray(o.tickers) ? o.tickers : [];
+    const tickers: string[] = [];
+    for (const t of tickersRaw) {
+      if (typeof t === 'string') {
+        const v = t.trim().toUpperCase();
+        if (v && v.length <= 10) tickers.push(v);
+      }
+    }
+    const sourcesRaw = Array.isArray(o.sources) ? o.sources : [];
+    const sources: GrokCatalystSource[] = [];
+    for (const s of sourcesRaw.slice(0, 4)) {
+      if (!s || typeof s !== 'object') continue;
+      const so = s as Record<string, unknown>;
+      const url = typeof so.url === 'string' ? so.url.trim() : '';
+      if (!url || !/^https?:\/\//i.test(url)) continue;
+      const headline = typeof so.headline === 'string' ? so.headline.trim().slice(0, 200) : undefined;
+      sources.push(headline ? { url, headline } : { url });
+    }
+    out.push({ title, category, summary, sources, tickers });
+    if (out.length >= 8) break;
+  }
+  return out;
+}
+
 function validatePayload(
   v: unknown,
 ): { ok: true; payload: GrokDecisionPayload } | { ok: false; error: string } {
@@ -367,5 +440,6 @@ function validatePayload(
       reason,
     });
   }
-  return { ok: true, payload: { thesis, decisions } };
+  const catalysts = parseCatalysts(obj.catalysts);
+  return { ok: true, payload: { thesis, decisions, catalysts } };
 }

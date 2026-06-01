@@ -1396,8 +1396,17 @@ function buildUserPrompt(args: {
     `Returner et JSON-objekt med formatet:`,
     `{`,
     `  "thesis": "kort sammendrag av valgene dine og hvorfor (maks 400 tegn)",`,
+    `  "catalysts": [`,
+    `    {`,
+    `      "title": "konkret hendelse fra siste 24t — Trump-post, makro-print, geopol-eskalering, earnings, sektor-rotasjon (maks 120 tegn)",`,
+    `      "category": "trump"|"macro"|"geopolitics"|"earnings"|"sector"|"company"|"other",`,
+    `      "summary": "1–2 setninger om hva hendelsen er og hvorfor den flytter kursene (maks 280 tegn)",`,
+    `      "sources": [ { "url": "https://...", "headline": "valgfri artikkel-overskrift" } ],`,
+    `      "tickers": ["MU", "NVDA"]`,
+    `    }`,
+    `  ],`,
     `  "decisions": [`,
-    `    { "ticker": "<symbol fra watchlisten>", "action": "BUY"|"SELL"|"HOLD", "notional_usd": 0, "reason": "kort begrunnelse (maks 200 tegn)" }`,
+    `    { "ticker": "<symbol fra watchlisten>", "action": "BUY"|"SELL"|"HOLD", "notional_usd": 0, "reason": "kort begrunnelse (maks 200 tegn) — referér til catalyst-tittel hvis decision er drevet av en" }`,
     `  ]`,
     `}`,
     ``,
@@ -1413,6 +1422,7 @@ function buildUserPrompt(args: {
     `- SELL = lukk hele posisjonen.`,
     `- Ikke putt SELL på tickere som ikke er i posisjons-listen.`,
     `- Ikke putt BUY på tickere som er i in-flight-listen.`,
+    `- catalysts: list 0–3 KONKRETE hendelser fra Live-Search-resultater som faktisk drev decisions denne scanen. Tom array er gyldig (rolig tick, ingen news-driver). IKKE list generiske "RSI uptrend" / "leader status" — det hører hjemme i decisions[].reason. catalysts skal kun inneholde EKSTERNE nyhetshendelser (Trump-post, tariff-trussel, FOMC-uttalelse, krig/geopol, earnings-readout, sektor-rotasjon-headline). Hver catalyst MÅ ha minst én source-URL fra Live Search.`,
     `- Returner KUN gyldig JSON, ingen ekstra tekst.`,
   ].join('\n');
 }
@@ -3208,7 +3218,11 @@ async function runBlueprint(args: {
       result.reason = 'follower_no_leader_decision';
       return { ...result, deployedNotional: 0 };
     }
-    payload = { thesis: last.thesis ?? '', decisions: last.decisions };
+    payload = {
+      thesis: last.thesis ?? '',
+      decisions: last.decisions,
+      catalysts: last.catalysts ?? [],
+    };
     result.grokCalled = false;
     result.thesis = payload.thesis;
   } else {
@@ -3279,6 +3293,7 @@ async function runBlueprint(args: {
     blueprintId: blueprint.id,
     thesis: payload.thesis,
     decisions: payload.decisions,
+    catalysts: payload.catalysts,
     tradeOutcomes: exec.trades.map((t) => ({
       ticker: t.ticker,
       action: t.action,
