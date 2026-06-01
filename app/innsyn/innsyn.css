@@ -1,0 +1,405 @@
+/* ─────────────────────────────────────────────────────────────────────
+   /innsyn — transparency timeline. Scoped to .aqv2.
+   Editorial palette + serif title; vertical rail timeline beneath.
+   ───────────────────────────────────────────────────────────────────── */
+
+.aqv2 .innsyn-hero {
+  position: relative;
+  padding: 96px 0 56px;
+  z-index: 2;
+}
+
+@media (max-width: 768px) {
+  .aqv2 .innsyn-hero { padding: 64px 0 40px; }
+}
+
+.aqv2 .innsyn-title {
+  font-family: var(--aq-font-serif);
+  font-size: clamp(34px, 5.4vw, 64px);
+  line-height: 1.04;
+  letter-spacing: -0.02em;
+  font-weight: 400;
+  margin: 18px 0 24px;
+  color: var(--aq-text);
+}
+
+.aqv2 .innsyn-title em {
+  color: var(--aq-cyan);
+  font-style: italic;
+  font-weight: 300;
+}
+
+.aqv2 .innsyn-lede {
+  font-family: var(--aq-font-serif);
+  font-size: clamp(17px, 1.6vw, 21px);
+  line-height: 1.55;
+  color: var(--aq-text);
+  max-width: 720px;
+  margin: 0 0 14px;
+}
+
+.aqv2 .innsyn-body {
+  font-size: 15.5px;
+  line-height: 1.7;
+  color: var(--aq-text-mid);
+  max-width: 720px;
+  margin: 0 0 40px;
+}
+
+/* Stat strip — 3 numbers + live pill */
+.aqv2 .innsyn-stats {
+  display: flex;
+  align-items: center;
+  gap: 36px;
+  flex-wrap: wrap;
+  padding: 22px 28px;
+  border-top: 1px solid var(--aq-border);
+  border-bottom: 1px solid var(--aq-border);
+  background: var(--aq-surface-2);
+}
+
+.aqv2 .innsyn-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.aqv2 .innsyn-stat-num {
+  font-family: var(--aq-font-mono);
+  font-size: 26px;
+  font-weight: 500;
+  color: var(--aq-text);
+  letter-spacing: -0.01em;
+}
+
+.aqv2 .innsyn-stat-num-soft {
+  color: var(--aq-text-mid);
+}
+
+.aqv2 .innsyn-stat-lbl {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--aq-muted);
+}
+
+.aqv2 .innsyn-live {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--aq-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  color: var(--aq-cyan);
+  text-transform: uppercase;
+}
+
+.aqv2 .innsyn-live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--aq-cyan);
+  box-shadow: 0 0 0 0 rgba(0, 200, 214, 0.45);
+  animation: innsyn-pulse 1.8s ease-out infinite;
+}
+
+@keyframes innsyn-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(0, 200, 214, 0.6); }
+  70%  { box-shadow: 0 0 0 10px rgba(0, 200, 214, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(0, 200, 214, 0); }
+}
+
+/* Parchment note band */
+.aqv2 .innsyn-band {
+  padding: 64px 0;
+}
+
+.aqv2 .innsyn-h2 {
+  font-family: var(--aq-font-serif);
+  font-size: clamp(26px, 3vw, 38px);
+  line-height: 1.15;
+  font-weight: 400;
+  margin: 16px 0 18px;
+  color: var(--aq-ink);
+  max-width: 720px;
+  letter-spacing: -0.01em;
+}
+
+.aqv2 .innsyn-note {
+  font-family: var(--aq-font-serif);
+  font-size: 17px;
+  line-height: 1.65;
+  color: rgba(10, 20, 36, 0.78);
+  max-width: 720px;
+  margin: 0;
+}
+
+/* Timeline */
+.aqv2 .innsyn-timeline {
+  padding: 64px 0 96px;
+  background: var(--aq-bg);
+}
+
+.aqv2 .innsyn-loading {
+  text-align: center;
+  padding: 80px 0;
+  color: var(--aq-muted);
+  font-family: var(--aq-font-mono);
+  font-size: 13px;
+  letter-spacing: 0.06em;
+}
+
+.aqv2 .innsyn-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-width: 880px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.aqv2 .innsyn-row {
+  position: relative;
+  padding-left: 32px;
+  padding-bottom: 28px;
+}
+
+.aqv2 .innsyn-row:last-child {
+  padding-bottom: 0;
+}
+
+/* Vertical timeline rail — runs through each row */
+.aqv2 .innsyn-row-rail {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  bottom: -4px;
+  width: 1px;
+  background: linear-gradient(
+    to bottom,
+    var(--aq-border-warm) 0%,
+    var(--aq-border) 6%,
+    var(--aq-border) 94%,
+    transparent 100%
+  );
+}
+
+.aqv2 .innsyn-row:last-child .innsyn-row-rail {
+  bottom: 50%;
+}
+
+/* Rail dot — anchored to the card head */
+.aqv2 .innsyn-row::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 22px;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--aq-bg);
+  border: 1.5px solid var(--aq-gold-deep);
+  z-index: 2;
+}
+
+.aqv2 .innsyn-card {
+  background: var(--aq-surface);
+  border: 1px solid var(--aq-border);
+  border-radius: 6px;
+  padding: 22px 26px 20px;
+  transition: border-color var(--aq-dur-base) var(--aq-ease);
+}
+
+.aqv2 .innsyn-card:hover {
+  border-color: var(--aq-border-hi);
+}
+
+.aqv2 .innsyn-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--aq-border-soft);
+}
+
+.aqv2 .innsyn-blueprint {
+  font-family: var(--aq-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--aq-gold);
+}
+
+.aqv2 .innsyn-time {
+  font-family: var(--aq-font-mono);
+  font-size: 12px;
+  color: var(--aq-text-mid);
+  white-space: nowrap;
+}
+
+.aqv2 .innsyn-time-rel {
+  color: var(--aq-muted);
+  margin-left: 4px;
+}
+
+.aqv2 .innsyn-label {
+  display: block;
+  font-family: var(--aq-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--aq-muted);
+  margin-bottom: 6px;
+}
+
+.aqv2 .innsyn-thesis {
+  margin-bottom: 18px;
+}
+
+.aqv2 .innsyn-thesis p {
+  font-family: var(--aq-font-serif);
+  font-size: 16px;
+  line-height: 1.55;
+  color: var(--aq-text);
+  margin: 0;
+}
+
+.aqv2 .innsyn-decisions ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+}
+
+.aqv2 .innsyn-dec {
+  display: grid;
+  grid-template-columns: 60px 52px 86px 1fr;
+  gap: 12px;
+  align-items: baseline;
+  font-size: 13px;
+  padding: 7px 0;
+  border-bottom: 1px dashed var(--aq-border-soft);
+}
+
+.aqv2 .innsyn-dec:last-child {
+  border-bottom: none;
+}
+
+.aqv2 .innsyn-tk {
+  font-family: var(--aq-font-mono);
+  font-weight: 600;
+  color: var(--aq-text);
+  letter-spacing: 0.02em;
+}
+
+.aqv2 .innsyn-act {
+  font-family: var(--aq-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  font-weight: 600;
+}
+
+.aqv2 .innsyn-act-buy  { color: var(--aq-up); }
+.aqv2 .innsyn-act-sell { color: var(--aq-down); }
+.aqv2 .innsyn-act-hold { color: var(--aq-muted); }
+
+.aqv2 .innsyn-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-family: var(--aq-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  font-weight: 600;
+  text-align: center;
+}
+
+.aqv2 .innsyn-pill-ok {
+  background: var(--aq-up-tint);
+  color: var(--aq-up-hi);
+  border: 1px solid rgba(16, 168, 106, 0.35);
+}
+
+.aqv2 .innsyn-pill-skip {
+  background: var(--aq-warn-tint);
+  color: var(--aq-warn);
+  border: 1px solid rgba(226, 160, 63, 0.35);
+}
+
+.aqv2 .innsyn-pill-err {
+  background: var(--aq-down-tint);
+  color: var(--aq-down-hi);
+  border: 1px solid rgba(165, 50, 65, 0.40);
+}
+
+.aqv2 .innsyn-reason {
+  color: var(--aq-text-mid);
+  font-size: 12.5px;
+  line-height: 1.5;
+}
+
+.aqv2 .innsyn-card-foot {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--aq-border-soft);
+  font-family: var(--aq-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: var(--aq-cyan);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.aqv2 .innsyn-sources-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--aq-cyan);
+}
+
+.aqv2 .innsyn-failed {
+  font-family: var(--aq-font-mono);
+  font-size: 12px;
+  color: var(--aq-down-hi);
+  margin: 0;
+  letter-spacing: 0.04em;
+}
+
+/* Mobile adjustments */
+@media (max-width: 720px) {
+  .aqv2 .innsyn-stats {
+    gap: 24px;
+    padding: 18px 20px;
+  }
+  .aqv2 .innsyn-live {
+    margin-left: 0;
+    width: 100%;
+    order: 4;
+    padding-top: 8px;
+    border-top: 1px solid var(--aq-border);
+  }
+  .aqv2 .innsyn-card {
+    padding: 18px 18px 16px;
+  }
+  .aqv2 .innsyn-dec {
+    grid-template-columns: 56px 48px 78px;
+    grid-template-rows: auto auto;
+    gap: 6px 10px;
+  }
+  .aqv2 .innsyn-reason {
+    grid-column: 1 / -1;
+    font-size: 12px;
+    padding-top: 2px;
+  }
+  .aqv2 .innsyn-card-head {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+  }
+}

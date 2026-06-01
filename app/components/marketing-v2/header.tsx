@@ -43,6 +43,7 @@ export function HeaderV2({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => 
           <Link href="/plus">Apex Quantum +</Link>
           <Link href="/#products">{lang === 'no' ? 'Produkter' : 'Products'}</Link>
           <Link href="/#principles">{lang === 'no' ? 'Funksjoner' : 'Features'}</Link>
+          <Link href="/innsyn">{lang === 'no' ? 'Innsyn' : 'Transparency'}</Link>
           <Link href="/pris">{lang === 'no' ? 'Pris' : 'Pricing'}</Link>
           <Link href="/om-oss">{lang === 'no' ? 'Om oss' : 'About'}</Link>
         </nav>
@@ -89,6 +90,7 @@ export function HeaderV2({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => 
           <Link href="/plus">Apex Quantum +</Link>
           <Link href="/#products">{lang === 'no' ? 'Produkter' : 'Products'}</Link>
           <Link href="/#principles">{lang === 'no' ? 'Funksjoner' : 'Features'}</Link>
+          <Link href="/innsyn">{lang === 'no' ? 'Innsyn' : 'Transparency'}</Link>
           <Link href="/pris">{lang === 'no' ? 'Pris' : 'Pricing'}</Link>
           <Link href="/om-oss">{lang === 'no' ? 'Om oss' : 'About'}</Link>
         </nav>
