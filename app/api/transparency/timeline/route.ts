@@ -48,6 +48,23 @@ function extractSourcesUsed(raw: unknown): number | null {
   return typeof n === 'number' ? n : null;
 }
 
+/** Postgres SQLSTATE 42703 = undefined_column; PostgREST surfaces missing
+ *  columns as code 'PGRST204' (schema cache) before the query hits Postgres.
+ *  Either means the catalysts column hasn't been migrated yet — retry the
+ *  SELECT without it so the page stays alive. */
+function isCatalystsColumnMissing(err: { code?: string; message?: string }): boolean {
+  if (err.code === '42703' || err.code === 'PGRST204') return true;
+  if (err.message && /catalysts/i.test(err.message) && /column|schema/i.test(err.message)) {
+    return true;
+  }
+  return false;
+}
+
+const SELECT_WITH_CATALYSTS =
+  'id, blueprint_id, decided_at, thesis, decisions, trade_outcomes, catalysts, raw_response, failed';
+const SELECT_WITHOUT_CATALYSTS =
+  'id, blueprint_id, decided_at, thesis, decisions, trade_outcomes, raw_response, failed';
+
 export async function GET() {
   const leaderId = await resolveLeaderClerkId();
   if (!leaderId) {
@@ -55,14 +72,29 @@ export async function GET() {
   }
   try {
     const sb = createAdminClient();
-    const { data, error } = await sb
+    const first = await sb
       .from('grok_decisions')
-      .select('id, blueprint_id, decided_at, thesis, decisions, trade_outcomes, catalysts, raw_response, failed')
+      .select(SELECT_WITH_CATALYSTS)
       .eq('clerk_user_id', leaderId)
       .order('decided_at', { ascending: false })
       .limit(80);
 
-    if (error || !data) {
+    // Fallback: catalysts column not yet migrated — re-query without it so
+    // /innsyn renders the rest of the row (decisions + thesis still useful).
+    let data: unknown = first.data;
+    let error = first.error;
+    if (error && isCatalystsColumnMissing(error)) {
+      const retry = await sb
+        .from('grok_decisions')
+        .select(SELECT_WITHOUT_CATALYSTS)
+        .eq('clerk_user_id', leaderId)
+        .order('decided_at', { ascending: false })
+        .limit(80);
+      data = retry.data;
+      error = retry.error;
+    }
+
+    if (error || !data || !Array.isArray(data)) {
       return NextResponse.json({ ok: false, rows: [] }, { status: 500 });
     }
 

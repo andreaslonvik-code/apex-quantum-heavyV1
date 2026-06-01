@@ -2586,8 +2586,15 @@ async function mechanicalSafetyPass(args: {
   positionsByTicker: Map<string, AlpacaPosition>;
   inFlightTickers: Set<string>;
   marketIsOpen: boolean;
+  /** Mutable open-orders list — used to cancel any resting GTC stop on a
+   *  ticker BEFORE placing the mechanical market SELL, so we don't fire a
+   *  duplicate close against the same position (Alpaca rejects the second,
+   *  but the trade log fills with `ERR no_position`). The post-fix in
+   *  `openOrderSymbols` filtering means `inFlightTickers` no longer blocks
+   *  this path, so the dedup has to happen here. */
+  openOrdersData: AlpacaOrder[];
 }): Promise<TradeResult[]> {
-  const { creds, blueprint, positionsByTicker, inFlightTickers, marketIsOpen } = args;
+  const { creds, blueprint, positionsByTicker, inFlightTickers, marketIsOpen, openOrdersData } = args;
   const isCrypto = blueprint.id === 'crypto';
   const trades: TradeResult[] = [];
 
@@ -2696,6 +2703,13 @@ async function mechanicalSafetyPass(args: {
             marketIsOpen,
           });
       if (!orderReq) continue;
+      // Cancel any resting GTC protective stop on this ticker BEFORE the
+      // market SELL fires. If we don't, both orders try to close the same
+      // position; the second errors with "no position to close" and the
+      // trade log fills with ERR noise. cancelOpenStopsForTicker mutates
+      // openOrdersData so later passes (ensureServerSideStops) don't see
+      // the cancelled stop as still-protective.
+      await cancelOpenStopsForTicker(creds, ticker, openOrdersData);
       const r = await placeOrder(creds, orderReq);
       trades.push({
         blueprintId: blueprint.id,
@@ -3017,6 +3031,7 @@ async function runBlueprint(args: {
     positionsByTicker,
     inFlightTickers,
     marketIsOpen: marketClock?.is_open ?? false,
+    openOrdersData,
   });
   result.trades.push(...safetyTrades);
   // Drop closed positions from local cache so subsequent Grok decisions see fresh state.

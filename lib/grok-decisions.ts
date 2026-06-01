@@ -177,8 +177,17 @@ export async function saveDecision(input: SaveInput): Promise<void> {
       .from('grok_decisions')
       .insert({ ...baseRow, catalysts: input.catalysts ?? [] });
     if (!error) return;
-    const isMissingCatalystsCol =
-      error.code === '42703' && /catalysts/i.test(error.message ?? '');
+    // Postgres SQLSTATE 42703 = undefined_column. PostgREST's schema-cache
+    // layer surfaces a missing column as 'PGRST204' BEFORE the query ever
+    // hits Postgres (common right after a migration when the cache hasn't
+    // reloaded). Also fall back if the error text plainly names the
+    // catalysts column ("column 'catalysts'…"/"…schema cache…").
+    const codeMatch = error.code === '42703' || error.code === 'PGRST204';
+    const textMatch =
+      !!error.message &&
+      /catalysts/i.test(error.message) &&
+      /(column|schema)/i.test(error.message);
+    const isMissingCatalystsCol = codeMatch || textMatch;
     if (isMissingCatalystsCol) {
       const { error: retryErr } = await sb.from('grok_decisions').insert(baseRow);
       if (retryErr) {
