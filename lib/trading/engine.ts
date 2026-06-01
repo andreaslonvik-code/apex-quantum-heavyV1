@@ -21,6 +21,7 @@ import { BLUEPRINT_LIST, type AssetClass, type Blueprint } from '@/lib/blueprint
 import { sectorOf } from '@/lib/blueprints/sectors';
 import { isPriorityCore } from '@/lib/blueprints/stocks';
 import { decide, type GrokDecision, type GrokDecisionPayload } from '@/lib/grok';
+import { tryAcquireScanLock, releaseScanLock } from '@/lib/trading/scan-lock';
 import {
   getLatestDecision,
   getRecentStopOutTickers,
@@ -1542,6 +1543,15 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   // Two-phase execution: SELLs first to free buying power, then BUYs.
   // Without this, a BUY queued right after a SELL hits Alpaca before the
   // freed cash is released → "insufficient buying power" rejection.
+  //
+  // H5 — in-flight gate asymmetry: blocking BOTH actions on any in-flight
+  // ticker held positions through legitimate exits. A stale unfilled limit
+  // BUY would sit for up to 5 min (stale-cleanup TTL) silently HOPP-ing
+  // every Grok-SELL on the same ticker. Now: BUYs are still blocked (no
+  // double-submitting buy intent), but SELLs are allowed through — they
+  // close the position regardless of any pending BUY (which Alpaca
+  // auto-cancels on close). Defense in depth: the side==='long' guard +
+  // dedup-by-ticker-action mean a SELL on top of a BUY is safe.
   const sellDecs: typeof payload.decisions = [];
   const buyDecs: typeof payload.decisions = [];
   for (const dec of payload.decisions) {
@@ -1550,7 +1560,10 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
       trades.push(skipTrade(blueprint.id, ticker, dec.action, 'not_in_watchlist'));
       continue;
     }
-    if (inFlightTickers.has(ticker)) {
+    // Only block BUYs/HOLDs on in-flight. SELL is intentionally allowed
+    // through — the exit is more important than not duplicating a stale
+    // pending BUY (which Alpaca will cancel when the position closes).
+    if (inFlightTickers.has(ticker) && dec.action !== 'SELL') {
       trades.push(skipTrade(blueprint.id, ticker, dec.action, 'in_flight'));
       continue;
     }
@@ -1861,15 +1874,41 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   );
   trades.push(...sellResults);
 
-  // Wait for SELLs to settle and free buying power, but ONLY if at least one
-  // SELL was accepted by Alpaca. Failed SELLs leave positions open and BP
-  // locked — waiting in that case is wasted time, AND the BUYs that follow
-  // will fail anyway since BP wasn't actually freed.
-  // 2.5s is empirical: Alpaca paper releases cash from market sells in ~1s,
-  // but we add slack so the BUY phase doesn't see stale BP snapshots.
+  // H6 — poll account.buying_power until the SELLs we just sent are
+  // reflected, rather than a fixed setTimeout(2500). Alpaca paper releases
+  // BP in ~1 s; live can take 5–10 s on volatile names. A fixed 2.5 s
+  // wait sometimes left BUYs firing before the SELL fills released cash
+  // → "insufficient buying power" rejection → deploy-slot wasted for the
+  // cadence period. Polling caps at 8 s (covers the slow-live tail) and
+  // gives up gracefully — better to attempt the BUYs than to lock the
+  // tick forever on a Alpaca settlement quirk.
   const anySellAccepted = sellResults.some((r) => r.status === 'OK');
   if (anySellAccepted && buyDecs.length > 0) {
-    await new Promise((resolve) => setTimeout(resolve, 2500));
+    const pollStart = Date.now();
+    const pollDeadline = pollStart + 8_000;
+    const pollIntervalMs = 250;
+    // Get the BP at the moment we sent the SELLs (engine arg `buyingPower`).
+    // Wait until BP visibly increases OR deadline.
+    let attempts = 0;
+    while (Date.now() < pollDeadline) {
+      attempts += 1;
+      await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      const acctNow = await getAccount(creds);
+      if (acctNow.success) {
+        const bpNow = parseFloat(acctNow.data.buying_power) || 0;
+        // Even a 1 % BP bump means the fill is in (proceeds reduced by
+        // commission/spread are ≥ 99 % of pre-sell value).
+        if (bpNow > remainingBuyingPower * 1.01) break;
+      }
+      // Hard floor: at minimum wait 1 s even if the BP check is noisy —
+      // matches the old 2.5 s behaviour as a worst-case fallback.
+      if (Date.now() - pollStart < 1_000) continue;
+    }
+    if (attempts >= 32) {
+      console.warn(
+        `[engine] BP-poll deadline reached after ${attempts} attempts — buying power may still be lagging the SELL fill. Proceeding with BUYs.`,
+      );
+    }
   }
 
   // ── Phase 1.5: Autonomous top-up of undersized positions ─────────────
@@ -3166,6 +3205,20 @@ async function runBlueprint(args: {
   //    resets out of every morning.
   if (killSwitchOn || circuitBreakerActive) return { ...result, deployedNotional: 0 };
 
+  // H4 — when MIRROR_MODE_ENABLED is on AND this user is a follower AND
+  // we don't have a fresh leader snapshot (cron failed to fetch leader's
+  // Alpaca state), refuse to fall through to the decision-stream replay
+  // path. That replay reads `last.decisions` from the leader's saved row
+  // and re-runs it against the follower's current state, which means a
+  // 10–20 minute-old decision stream would re-fire on every cron tick
+  // within the freshness window. Returning here skips the tick — the
+  // next tick after leader's fetch recovers will get a fresh snapshot
+  // and execute correctly.
+  if (isFollower && MIRROR_MODE_ENABLED && !leaderSnapshot) {
+    result.reason = 'mirror_snapshot_unavailable';
+    return { ...result, deployedNotional: 0 };
+  }
+
   // 1b. Portfolio Mirror Mode — followers rebalance their portfolio %s to
   // match the leader's per-ticker composition. Replaces the decision-stream
   // mirror for followers when MIRROR_MODE_ENABLED and a fresh leader snapshot
@@ -3459,6 +3512,19 @@ export async function runScanForUser(
     blueprints: [],
   };
 
+  // H3 — per-user concurrency lock. Prevents two parallel runScanForUser
+  // for the same user (Vercel cron retry, manual blueprint-tick collision,
+  // multi-instance burst) from both reading the same empty in-flight set
+  // and deploying capital twice. Falls through unlocked if the lock table
+  // is missing (migration not applied) — better a rare double-scan than
+  // a frozen engine.
+  const lock = await tryAcquireScanLock(clerkUserId);
+  if (!lock.acquired) {
+    out.error = `scan_locked: ${lock.reason ?? 'in_progress'}`;
+    return out;
+  }
+  try {
+
   // Only cancel STALE pending orders (>5 min old). Cancelling everything
   // every tick was killing pre-market limit fills before the order could
   // match thin orderbook liquidity (we saw orders canceled 23 sec after
@@ -3651,6 +3717,12 @@ export async function runScanForUser(
   }
 
   return out;
+  } finally {
+    // Always release — even on early return / thrown error — so a crashed
+    // scan doesn't lock the user out until the 5-min TTL expires. The
+    // in-memory map clear is local; the DB delete handles cross-instance.
+    await releaseScanLock(clerkUserId);
+  }
 }
 
 export type { GrokDecision } from '@/lib/grok';

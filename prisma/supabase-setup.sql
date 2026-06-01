@@ -102,6 +102,19 @@ ALTER TABLE grok_decisions
 ALTER TABLE grok_decisions
   ADD COLUMN IF NOT EXISTS num_sources_used INTEGER;
 
+-- Scan locks (added 2026-06-02, H3 fix) — prevents two concurrent
+-- runScanForUser invocations for the same user from both seeing empty
+-- inFlightTickers and double-deploying. Acquired at the top of the scan,
+-- released in the finally. Per-row TTL (acquired_at + 5 min) so a crashed
+-- lambda doesn't lock the user out forever.
+CREATE TABLE IF NOT EXISTS scan_locks (
+  clerk_user_id TEXT PRIMARY KEY,
+  acquired_at   TIMESTAMPTZ NOT NULL,
+  expires_at    TIMESTAMPTZ NOT NULL
+);
+
+ALTER TABLE scan_locks DISABLE ROW LEVEL SECURITY;
+
 CREATE INDEX IF NOT EXISTS grok_decisions_user_blueprint_idx
   ON grok_decisions (clerk_user_id, blueprint_id, decided_at DESC);
 
