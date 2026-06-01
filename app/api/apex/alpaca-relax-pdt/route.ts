@@ -1,10 +1,11 @@
-import { NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { getRequestCreds } from '@/lib/get-request-creds';
 import {
   getAccountConfigurations,
   updateAccountConfigurations,
   type AlpacaCreds,
 } from '@/lib/alpaca';
+import { checkSameOrigin } from '@/lib/csrf';
 
 export const dynamic = 'force-dynamic';
 
@@ -19,9 +20,15 @@ export const dynamic = 'force-dynamic';
  * can submit fresh orders after a kill-switch SELL on the same day. PDT
  * flag itself stays — that auto-clears after 5 trade-free days.
  *
- * Accepts both GET and POST so you can hit it from the URL bar in a browser.
+ * H1 fix — POST-only (was GET+POST). Accepting GET turned this into a
+ * one-click CSRF target via <img src=…/alpaca-relax-pdt> on any page a
+ * logged-in victim visited. POST + same-origin check now required.
  */
-async function applyRelax() {
+export async function POST(req: NextRequest) {
+  const csrf = checkSameOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: 'cross_origin_blocked' }, { status: 403 });
+  }
   const c = await getRequestCreds();
   if (!c) {
     return NextResponse.json({ error: 'Not connected to Alpaca' }, { status: 401 });
@@ -44,12 +51,4 @@ async function applyRelax() {
     after: r.success ? r.data : null,
     error: r.success ? null : r.error,
   });
-}
-
-export async function GET() {
-  return applyRelax();
-}
-
-export async function POST() {
-  return applyRelax();
 }

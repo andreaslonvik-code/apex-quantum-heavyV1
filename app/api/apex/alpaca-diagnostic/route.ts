@@ -9,6 +9,7 @@ import {
   type AlpacaCreds,
   type AlpacaOrder,
 } from '@/lib/alpaca';
+import { isAdmin } from '@/lib/access';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
@@ -25,6 +26,12 @@ export const maxDuration = 60;
  * Use this when orders are getting rejected to understand WHY.
  */
 export async function GET() {
+  // H7 fix — admin-gate. The diagnostic returns raw Alpaca error bodies
+  // (account numbers, internal IDs, rate-limit headers) that aid attackers
+  // even when the user owns the Alpaca account. Customers don't need this.
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: 'admin_only' }, { status: 403 });
+  }
   const c = await getRequestCreds();
   if (!c) {
     return NextResponse.json({ error: 'Not connected to Alpaca' }, { status: 401 });

@@ -17,12 +17,15 @@ export const maxDuration = 300;
  * See `lib/plus-mirror.ts` for the mapping and trade-offs.
  */
 export async function GET(req: NextRequest) {
+  // C5 fix — hard-require CRON_SECRET; see cron/tick for rationale.
   const expected = process.env.CRON_SECRET;
-  if (expected) {
-    const auth = req.headers.get('authorization');
-    if (auth !== `Bearer ${expected}`) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-    }
+  if (!expected) {
+    console.error('[cron/plus-signals] CRON_SECRET not set — refusing to run');
+    return NextResponse.json({ error: 'server_misconfigured' }, { status: 503 });
+  }
+  const auth = req.headers.get('authorization');
+  if (auth !== `Bearer ${expected}`) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
   const startedAt = Date.now();

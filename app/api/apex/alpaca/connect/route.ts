@@ -14,9 +14,15 @@ import { auth } from '@clerk/nextjs/server';
 import { validateCreds, type AlpacaEnv } from '@/lib/alpaca';
 import { saveUserAlpacaCreds, getUserAlpacaCreds } from '@/lib/user-alpaca';
 import { mask } from '@/lib/crypto';
+import { checkSameOrigin } from '@/lib/csrf';
 
 export async function POST(request: NextRequest) {
   try {
+    // H1 CSRF — connect overwrites stored API creds; same-origin POST only.
+    const csrf = checkSameOrigin(request);
+    if (!csrf.ok) {
+      return NextResponse.json({ error: 'cross_origin_blocked' }, { status: 403 });
+    }
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ error: 'Du må være logget inn.' }, { status: 401 });
@@ -126,39 +132,41 @@ export async function POST(request: NextRequest) {
         { status: 500 }
       );
     }
-    // Postgres / PostgREST errors leak through here. Surface them so the operator
-    // can diagnose. The keys themselves are already encrypted before any DB call,
-    // so error messages don't contain secrets.
+    // H7 fix — Postgres / PostgREST errors used to leak through to clients
+    // via `details: msg` and `error: \`Uventet serverfeil: ${msg}\``. These
+    // can expose ENCRYPTION_KEY / SUPABASE_SERVICE_ROLE_KEY env names,
+    // table names, RLS policy hints — useful reconnaissance for attackers.
+    // Now: log full message server-side, return stable code + generic copy.
     if (
       pgCode === '42P01' ||
       (msg.includes('relation') && msg.includes('does not exist'))
     ) {
+      console.error('[apex/alpaca/connect] missing-table error:', msg);
       return NextResponse.json(
         {
           error:
             'Databasen er ikke initialisert: tabellen `alpaca_accounts` finnes ikke. Kjør `prisma/supabase-setup.sql` i Supabase SQL Editor.',
           code: 'DB_TABLE_MISSING',
-          details: msg,
         },
         { status: 500 }
       );
     }
     if (pgCode === '42501' || msg.includes('row-level security') || msg.includes('permission denied')) {
+      console.error('[apex/alpaca/connect] permission-denied error:', msg);
       return NextResponse.json(
         {
           error:
             'Databasen avviste skriving (RLS eller permissions). Kjør den siste versjonen av `prisma/supabase-setup.sql` som disabler RLS på `alpaca_accounts`.',
           code: 'DB_PERMISSION_DENIED',
-          details: msg,
         },
         { status: 500 }
       );
     }
+    console.error('[apex/alpaca/connect] internal error:', msg);
     return NextResponse.json(
       {
-        error: `Uventet serverfeil: ${msg}`,
+        error: 'Uventet serverfeil. Prøv igjen, eller kontakt support hvis problemet vedvarer.',
         code: 'INTERNAL',
-        details: msg,
       },
       { status: 500 }
     );

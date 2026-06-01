@@ -6,6 +6,7 @@ import {
   saveUserAllocation,
   type UserAllocation,
 } from '@/lib/user-allocation';
+import { checkSameOrigin } from '@/lib/csrf';
 
 export async function GET() {
   const { userId } = await auth();
@@ -17,6 +18,10 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  const csrf = checkSameOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: 'cross_origin_blocked' }, { status: 403 });
+  }
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });

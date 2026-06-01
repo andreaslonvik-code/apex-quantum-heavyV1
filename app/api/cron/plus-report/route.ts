@@ -15,12 +15,15 @@ export const maxDuration = 300;
  * Idempotent per (report_date) — re-runs on the same day replace the row.
  */
 export async function GET(req: NextRequest) {
+  // C5 fix — hard-require CRON_SECRET; see cron/tick for rationale.
   const expected = process.env.CRON_SECRET;
-  if (expected) {
-    const auth = req.headers.get('authorization');
-    if (auth !== `Bearer ${expected}`) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-    }
+  if (!expected) {
+    console.error('[cron/plus-report] CRON_SECRET not set — refusing to run');
+    return NextResponse.json({ error: 'server_misconfigured' }, { status: 503 });
+  }
+  const auth = req.headers.get('authorization');
+  if (auth !== `Bearer ${expected}`) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
   try {
@@ -82,7 +85,17 @@ async function sendMorningBriefEmails(args: {
   const client = await clerkClient();
   let sent = 0;
   let errors = 0;
-  const SECRET = process.env.UNSUBSCRIBE_SECRET ?? process.env.CRON_SECRET ?? 'apex-quantum-default';
+  // C4 fix — refuse to emit unsubscribe tokens when no real secret is set.
+  // A constant fallback would let anyone forge a valid unsubscribe link for
+  // any Clerk user. If both env vars are missing we skip emailing for this
+  // tick; the next cron run after the secret is configured will resume.
+  const SECRET = process.env.UNSUBSCRIBE_SECRET ?? process.env.CRON_SECRET;
+  if (!SECRET) {
+    console.error(
+      '[plus-report] UNSUBSCRIBE_SECRET or CRON_SECRET must be set — refusing to send emails with a forgeable unsubscribe token',
+    );
+    return { sent: 0, errors: 0 };
+  }
 
   // Page through all users. Plus = `plusStatus === 'active'` in privateMetadata
   // (set by the Stripe webhook). Cap at 1000 — beyond that we'd shard the job.

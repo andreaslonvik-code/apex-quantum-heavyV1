@@ -20,7 +20,17 @@ async function handle(req: NextRequest): Promise<NextResponse> {
   if (!u || !t) {
     return NextResponse.json({ error: 'missing_params' }, { status: 400 });
   }
-  const SECRET = process.env.UNSUBSCRIBE_SECRET ?? process.env.CRON_SECRET ?? 'apex-quantum-default';
+  // C4 fix — never fall back to a constant. A constant fallback turns the
+  // unsubscribe-token HMAC into a public oracle (anyone can compute a valid
+  // `t` for any Clerk user-id and flip plus_email_opt_out on them). If
+  // neither env var is set, refuse to verify rather than silently accept.
+  const SECRET = process.env.UNSUBSCRIBE_SECRET ?? process.env.CRON_SECRET;
+  if (!SECRET) {
+    console.error(
+      '[email-unsubscribe] UNSUBSCRIBE_SECRET or CRON_SECRET must be set — refusing to verify token without a real secret',
+    );
+    return NextResponse.json({ error: 'server_misconfigured' }, { status: 503 });
+  }
   const expected = crypto.createHmac('sha256', SECRET).update(u).digest('hex').slice(0, 32);
   // Constant-time compare to dodge timing attacks (paranoid but cheap).
   const a = Buffer.from(t);

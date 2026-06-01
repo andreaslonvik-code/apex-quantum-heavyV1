@@ -15,6 +15,33 @@ interface Message {
   timestamp: Date;
 }
 
+/** Safe inline-markdown renderer: handles **bold** + newlines without
+ *  ever passing user text to dangerouslySetInnerHTML. JSX escaping
+ *  on the string children means typed `<img onerror=...>` renders as
+ *  literal text instead of executing. */
+function renderInlineMarkdown(content: string): React.ReactNode[] {
+  // Split on **bold** markers; even indices = plain text, odd = bold.
+  const parts = content.split(/\*\*(.*?)\*\*/g);
+  const out: React.ReactNode[] = [];
+  parts.forEach((part, partIdx) => {
+    const isBold = partIdx % 2 === 1;
+    // Now split each part on newlines and interleave <br/>.
+    const lines = part.split('\n');
+    lines.forEach((line, lineIdx) => {
+      const key = `${partIdx}-${lineIdx}`;
+      if (isBold) {
+        out.push(<strong key={key} className="text-white">{line}</strong>);
+      } else {
+        out.push(<span key={key}>{line}</span>);
+      }
+      if (lineIdx < lines.length - 1) {
+        out.push(<br key={`${key}-br`} />);
+      }
+    });
+  });
+  return out;
+}
+
 const grokResponses = [
   {
     trigger: "scan",
@@ -318,14 +345,15 @@ Basert pa min analyse av 10,000+ datapunkter, ser jeg ingen umiddelbar edge her.
                       : "bg-zinc-900/50 border border-zinc-800/50"
                   }`}
                 >
-                  <div 
-                    className="text-sm text-zinc-300 prose-custom whitespace-pre-wrap"
-                    dangerouslySetInnerHTML={{ 
-                      __html: message.content
-                        .replace(/\*\*(.*?)\*\*/g, '<strong class="text-white">$1</strong>')
-                        .replace(/\n/g, '<br/>')
-                    }}
-                  />
+                  {/* M4 XSS fix — user-input is inlined into assistant
+                       responses ("ANALYSERER: \"${input}\"") so an
+                       attacker typing <img src=x onerror=…> would have
+                       executed via dangerouslySetInnerHTML. Now we
+                       escape HTML first, then render bold/newlines via
+                       JSX (no innerHTML at all). */}
+                  <div className="text-sm text-zinc-300 prose-custom whitespace-pre-wrap">
+                    {renderInlineMarkdown(message.content)}
+                  </div>
                   <p className="text-[9px] text-zinc-600 mt-2">
                     {message.timestamp.toLocaleTimeString("no-NO")}
                   </p>

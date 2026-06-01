@@ -40,12 +40,19 @@ export const maxDuration = 300;
  * fresh leader decision when they run.
  */
 export async function GET(req: NextRequest) {
+  // C5 fix — hard-require CRON_SECRET. The previous pattern of "auth only
+  // if env is set" turned the endpoint public on any deploy where the env
+  // wasn't propagated (typo, preview, new region). This route leaks every
+  // connected user's clerkUserId + leader status AND burns Grok credits on
+  // every hit, so leaving it unauthenticated is a real exposure.
   const expected = process.env.CRON_SECRET;
-  if (expected) {
-    const auth = req.headers.get('authorization');
-    if (auth !== `Bearer ${expected}`) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
-    }
+  if (!expected) {
+    console.error('[cron/tick] CRON_SECRET not set — refusing to run');
+    return NextResponse.json({ error: 'server_misconfigured' }, { status: 503 });
+  }
+  const auth = req.headers.get('authorization');
+  if (auth !== `Bearer ${expected}`) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
   }
 
   const users = await getAllConnectedUsers();

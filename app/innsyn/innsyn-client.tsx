@@ -5,9 +5,20 @@ import '../components/marketing-v2/styles.css';
 import './innsyn.css';
 import type { Lang } from '../components/marketing/types';
 import type { GrokCatalyst, GrokDecision } from '@/lib/grok';
-import type { TradeOutcome } from '@/lib/grok-decisions';
 import { HeaderV2 } from '../components/marketing-v2/header';
 import { FooterV2 } from '../components/marketing-v2/cta-footer';
+
+/** Public-safe view — mirrors /api/transparency/timeline's PublicTradeOutcome.
+ *  H8: raw `error` strings are NEVER published; only a stable `error_code`. */
+interface PublicTradeOutcome {
+  ticker: string;
+  action: 'BUY' | 'SELL';
+  status: 'OK' | 'ERR' | 'SKIP';
+  notional: number;
+  qty: number;
+  reason: string;
+  error_code?: string;
+}
 
 interface TimelineRow {
   id: number;
@@ -15,7 +26,7 @@ interface TimelineRow {
   decidedAt: string;
   thesis: string | null;
   decisions: GrokDecision[];
-  tradeOutcomes: TradeOutcome[];
+  tradeOutcomes: PublicTradeOutcome[];
   catalysts: GrokCatalyst[];
   sourcesUsed: number | null;
   failed: boolean;
@@ -36,7 +47,7 @@ interface EventEntry {
   decidedAt: string;
   /** Decisions in the same scan whose ticker matches the catalyst.tickers
    *  set — these are the bot's response to the event. */
-  relatedDecisions: Array<{ decision: GrokDecision; outcome: TradeOutcome | null }>;
+  relatedDecisions: Array<{ decision: GrokDecision; outcome: PublicTradeOutcome | null }>;
   /** Total live-search sources used for the scan that produced this event. */
   sourcesUsed: number | null;
 }
@@ -420,8 +431,8 @@ export function InnsynClient({ initialLang }: { initialLang: Lang }) {
                                     </span>
                                   )}
                                   <span className="innsyn-reason">
-                                    {outcome?.error
-                                      ? `${decision.reason} — ${outcome.error.slice(0, 110)}`
+                                    {outcome?.error_code
+                                      ? `${decision.reason} — ${outcome.error_code}`
                                       : statusKey === 'SKIP' && outcome?.reason
                                         ? `${decision.reason} · ${outcome.reason.slice(0, 110)}`
                                         : decision.reason}

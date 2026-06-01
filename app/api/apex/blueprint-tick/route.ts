@@ -1,10 +1,11 @@
-import { NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { getRequestCreds } from '@/lib/get-request-creds';
 import { runScanForUser } from '@/lib/trading/engine';
 import { fetchLeaderSnapshot, type LeaderSnapshot } from '@/lib/trading/portfolio-mirror';
 import { getUserAlpacaCreds } from '@/lib/user-alpaca';
 import { isAdmin } from '@/lib/access';
 import { resolveLeaderClerkId } from '@/lib/leader';
+import { checkSameOrigin } from '@/lib/csrf';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -18,7 +19,11 @@ export const maxDuration = 300;
  *  customers see decisions roll in on the cron cadence but cannot trigger
  *  ad-hoc Grok ticks — protects against curious customers burning credits
  *  by repeatedly clicking. */
-export async function POST() {
+export async function POST(req: NextRequest) {
+  const csrf = checkSameOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: 'cross_origin_blocked' }, { status: 403 });
+  }
   if (!(await isAdmin())) {
     return NextResponse.json({ error: 'admin_only' }, { status: 403 });
   }

@@ -2,6 +2,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getRequestCreds } from '@/lib/get-request-creds';
 import { getDataBase, type AlpacaCreds } from '@/lib/alpaca';
+import { checkSameOrigin } from '@/lib/csrf';
 
 interface TimesFMPrediction {
   ticker: string;
@@ -152,6 +153,10 @@ function calculateHybridScore(
 
 export async function POST(request: NextRequest) {
   try {
+    const csrf = checkSameOrigin(request);
+    if (!csrf.ok) {
+      return NextResponse.json({ error: 'cross_origin_blocked' }, { status: 403 });
+    }
     const userCreds = await getRequestCreds();
     if (!userCreds) {
       return NextResponse.json({ error: 'Ikke tilkoblet Alpaca' }, { status: 401 });
@@ -222,9 +227,10 @@ export async function POST(request: NextRequest) {
       },
     });
   } catch (err) {
+    // H7 fix — don't echo raw error to client; log server-side only.
     console.error('[TIMESFM] Error:', err);
     return NextResponse.json(
-      { error: 'TimesFM prediction failed', details: err instanceof Error ? err.message : String(err) },
+      { error: 'TimesFM prediction failed', code: 'INTERNAL' },
       { status: 500 }
     );
   }

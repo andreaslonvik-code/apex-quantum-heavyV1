@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
 import { decide } from '@/lib/grok';
 import { getLatestDecisionsForUser } from '@/lib/grok-decisions';
+import { isAdmin } from '@/lib/access';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 300;
@@ -18,6 +19,13 @@ export const maxDuration = 300;
 export async function GET() {
   const { userId } = await auth();
   if (!userId) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+  // H2 fix — admin-gate. This endpoint spends real Grok credits per call
+  // (the probe makes a live xAI request) and returns raw_preview which can
+  // leak prompt content / model behaviour. Previously any authenticated
+  // user could script it to burn budget or fingerprint the model.
+  if (!(await isAdmin())) {
+    return NextResponse.json({ error: 'admin_only' }, { status: 403 });
+  }
 
   const apiKeyPresent = Boolean(process.env.XAI_API_KEY);
   const model =
