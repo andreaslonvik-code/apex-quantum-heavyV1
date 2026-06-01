@@ -91,6 +91,12 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     // core). KTOS, AVAV og BWXT er ikke listet på nytt her — de var allerede
     // i watchlisten over.
     'TXT', 'HII', 'LDOS', 'SAIC', 'PSN', 'BAH', 'GD',
+    // Added 2026-06-01 — broadening commodities/AI-infra coverage.
+    // FCX: copper for data-center buildout (commodities cycle, bucketed
+    // with NEM under 'energy' since we don't carry a materials sector).
+    // HUT: crypto-miner pivoted to AI hosting; trades on BTC + AI-infra
+    // narrative, bucketed under tech_ai.
+    'FCX', 'HUT',
   ],
   // Pre-IPO / not-yet-listed names the cockpit is tracking. Engine ignores
   // these — they exist for UI visibility and manual promotion to the live
@@ -203,6 +209,9 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     PSN: 'Parsons Corporation',
     BAH: 'Booz Allen Hamilton',
     GD: 'General Dynamics',
+    // Added 2026-06-01.
+    FCX: 'Freeport-McMoRan',
+    HUT: 'Hut 8',
     // Pending IPO — name is also shown in the pending-IPOs strip in the UI,
     // but we keep the mapping here so a one-line promotion-to-active works.
     SPCX: 'SpaceX',

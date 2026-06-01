@@ -64,6 +64,8 @@ const TICKER_TO_SECTOR: Record<string, Sector> = {
   HUBS: 'tech_ai',   // CRM/marketing SaaS
   BBAI: 'tech_ai',   // AI/government analytics — high-volatility small-cap
   AI: 'tech_ai',     // C3.ai — enterprise AI platform
+  HUT: 'tech_ai',    // crypto-miner pivoted to AI hosting — trades on BTC
+                     // + AI-infra-buildout narrative. Added 2026-06-01.
 
   // Consumer / staples / retail
   MCD: 'consumer',
@@ -101,6 +103,9 @@ const TICKER_TO_SECTOR: Record<string, Sector> = {
   BWXT: 'energy', // small-modular-reactor — clusters with nuclear cohort
   NEM: 'energy', // gold miner — correlates more with commodities than equities,
                  // but on bad days trades like a small-cap, treat as own bucket
+  FCX: 'energy', // copper miner — AI-data-center infra thesis + commodities
+                 // cycle; bucketed here like NEM since we don't carry a
+                 // dedicated materials sector. Added 2026-06-01.
 
   // Financial
   MS: 'financial',
