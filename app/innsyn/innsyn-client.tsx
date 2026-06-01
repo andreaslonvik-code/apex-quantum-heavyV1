@@ -89,9 +89,6 @@ const COPY: Record<Lang, {
   noteBody: string;
   noteEye: string;
   readArticle: string;
-  mandateEye: string;
-  mandateHead: string;
-  mandateItems: Array<{ tag: string; body: string }>;
 }> = {
   no: {
     pageTitle: { pre: 'Hendelsene som driver ', em: 'hver handel', post: '.' },
@@ -122,22 +119,6 @@ const COPY: Record<Lang, {
       'AI-trading er bygd på tillit. Vi viser hendelsene som drev hver handel — Trump-poster, tariffer, makro-prints, sektor-rotasjoner — og hva motoren gjorde med dem. Ikke kuratert. Bare det som faktisk skjedde, slik det skjedde.',
     noteEye: 'Hva du ser',
     readArticle: 'Les',
-    mandateEye: 'Strategi-rammer',
-    mandateHead: 'Hvorfor motoren ofte HOLDer gjennom dipper',
-    mandateItems: [
-      {
-        tag: '12-måneders horisont',
-        body: 'Apex Quantum Max er ikke en day-trader. Vi bygger en 12-måneders portefølje av leaders med AI/semis-tilt, diversifisert på tvers av åtte sektorer. Priority-core får ride for kvartaler — ikke timer.',
-      },
-      {
-        tag: 'Tar små dipper med vilje',
-        body: 'Motoren rider normale pullbacks (-3 til -8 %) som del av strategien. Å selge ved hver liten korreksjon dreper langsiktig avkastning — det er nettopp dette earned-momentum-vernet og evidence-veto-en beskytter mot.',
-      },
-      {
-        tag: 'Cutter raskt på ekte trend-bryt',
-        body: 'Pris under SMA50 + stort intradag-tap, FDA-avslag, dårlig earnings eller news-katastrofe → mekanisk stop fyrer umiddelbart. Disiplinen sitter i hvilke signaler som teller som "ekte" — ikke i å reagere på enhver rød dag.',
-      },
-    ],
   },
   en: {
     pageTitle: { pre: 'The events that drive ', em: 'every trade', post: '.' },
@@ -168,22 +149,6 @@ const COPY: Record<Lang, {
       'AI trading runs on trust. We expose the events that drove each trade — Trump posts, tariffs, macro prints, sector rotations — and what the engine did with them. Not curated. Just what actually happened, as it happened.',
     noteEye: 'What you’re seeing',
     readArticle: 'Read',
-    mandateEye: 'Strategy frame',
-    mandateHead: 'Why the engine often HOLDs through dips',
-    mandateItems: [
-      {
-        tag: '12-month horizon',
-        body: 'Apex Quantum Max is not a day-trader. We build a 12-month portfolio of leaders with an AI/semis tilt, diversified across eight sectors. Priority-core positions ride for quarters — not hours.',
-      },
-      {
-        tag: 'Rides small dips on purpose',
-        body: 'The engine deliberately rides normal pullbacks (-3 to -8 %) as part of the strategy. Selling on every minor correction destroys long-term return — this is exactly what the earned-momentum protection and evidence veto are designed to prevent.',
-      },
-      {
-        tag: 'Cuts fast on real breakdowns',
-        body: 'Price under SMA50 + large intraday loss, FDA rejection, bad earnings or a news catastrophe → mechanical stop fires immediately. The discipline is in which signals count as "real" — not in reacting to every red day.',
-      },
-    ],
   },
 };
 
@@ -347,24 +312,6 @@ export function InnsynClient({ initialLang }: { initialLang: Lang }) {
                 <span className="innsyn-live-dot" />
                 {t.liveBadge}
               </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="innsyn-mandate">
-          <div className="container">
-            <span className="eyebrow cy">
-              <span className="rule" />
-              {t.mandateEye}
-            </span>
-            <h2 className="innsyn-mandate-head">{t.mandateHead}</h2>
-            <div className="innsyn-mandate-grid">
-              {t.mandateItems.map((item) => (
-                <div key={item.tag} className="innsyn-mandate-card">
-                  <span className="innsyn-mandate-tag">{item.tag}</span>
-                  <p className="innsyn-mandate-body">{item.body}</p>
-                </div>
-              ))}
             </div>
           </div>
         </section>
