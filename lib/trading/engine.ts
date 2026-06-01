@@ -3538,11 +3538,17 @@ export async function runScanForUser(
   // protective stop counts as an in-flight order for its ticker, blocking
   // Grok-SELL decisions via the in_flight gate. cancelOpenStopsForTicker
   // already cleans these up after a successful SELL.
+  // S6 perf — fetch open orders ONCE per scan (was twice: one for cleanup
+  // here, another for in-flight/data later at ~3589). Tracks which IDs we
+  // cancel so the surviving list can be reused as openOrdersData without
+  // a second roundtrip. Saves ~80-150 ms per scan + halves Alpaca rate-
+  // limit pressure for this call.
   const STALE_ORDER_MS = 5 * 60 * 1000;
-  const openOrdersForCleanupRes = await getOrders(creds, { status: 'open', limit: 200 });
-  if (openOrdersForCleanupRes.success) {
+  const initialOpenOrdersRes = await getOrders(creds, { status: 'open', limit: 200 });
+  const cancelledOrderIds = new Set<string>();
+  if (initialOpenOrdersRes.success) {
     const now = Date.now();
-    for (const o of openOrdersForCleanupRes.data) {
+    for (const o of initialOpenOrdersRes.data) {
       if (
         o.side === 'sell' &&
         (o.type === 'stop' || o.type === 'stop_limit') &&
@@ -3559,6 +3565,7 @@ export async function runScanForUser(
       if (isStale) {
         // Best-effort cancel of stale orders so they don't lock BP forever.
         await alpacaCancelOrder(creds, o.id);
+        cancelledOrderIds.add(o.id);
       }
     }
   }
@@ -3586,7 +3593,12 @@ export async function runScanForUser(
   }
   const positions = positionsRes.data;
 
-  const openOrdersRes = await getOrders(creds, { status: 'open', limit: 200 });
+  // S6 perf — reuse the single getOrders fetch from the stale-cleanup
+  // section above. Filter out the IDs we just cancelled so the in-flight
+  // view reflects post-cleanup state. Saves a second API roundtrip.
+  const surviving = initialOpenOrdersRes.success
+    ? initialOpenOrdersRes.data.filter((o) => !cancelledOrderIds.has(o.id))
+    : [];
   // Exclude the engine's own protective GTC stop / stop_limit SELL orders
   // when building the in-flight symbol set. They are not "in flight" in a
   // way that should block fresh decisions — they're resting protection
@@ -3597,18 +3609,16 @@ export async function runScanForUser(
   // ensureServerSideStops + cancelOpenStopsForTicker) intentionally keeps
   // them visible so the protective layer can still de-dupe and clean up.
   const openOrderSymbols = new Set<string>(
-    openOrdersRes.success
-      ? openOrdersRes.data
-          .filter(
-            (o) =>
-              !(
-                o.side === 'sell' &&
-                (o.type === 'stop' || o.type === 'stop_limit') &&
-                o.time_in_force === 'gtc'
-              ),
-          )
-          .map((o) => o.symbol)
-      : [],
+    surviving
+      .filter(
+        (o) =>
+          !(
+            o.side === 'sell' &&
+            (o.type === 'stop' || o.type === 'stop_limit') &&
+            o.time_in_force === 'gtc'
+          ),
+      )
+      .map((o) => o.symbol),
   );
 
   // Closed-order history — used to derive per-ticker entry timestamps for
@@ -3699,7 +3709,7 @@ export async function runScanForUser(
       allocationPct: allocPct,
       allPositions: positions,
       openOrderSymbols,
-      openOrdersData: openOrdersRes.success ? openOrdersRes.data : [],
+      openOrdersData: surviving,
       entryTimestampBySymbol,
       killSwitchOn,
       circuitBreakerActive,
