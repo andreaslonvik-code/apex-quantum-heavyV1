@@ -97,6 +97,10 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     // HUT: crypto-miner pivoted to AI hosting; trades on BTC + AI-infra
     // narrative, bucketed under tech_ai.
     'FCX', 'HUT',
+    // Added 2026-06-03 — custom-silicon / AI-networking semi (data-center
+    // ASICs + optical DSP). Wider-watchlist (not priority-core); engine
+    // treats it as a PATH B/C/D/F candidate per blueprint rules.
+    'MRVL',
   ],
   // Pre-IPO / not-yet-listed names the cockpit is tracking. Engine ignores
   // these — they exist for UI visibility and manual promotion to the live
@@ -212,6 +216,8 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     // Added 2026-06-01.
     FCX: 'Freeport-McMoRan',
     HUT: 'Hut 8',
+    // Added 2026-06-03.
+    MRVL: 'Marvell Technology',
     // Pending IPO — name is also shown in the pending-IPOs strip in the UI,
     // but we keep the mapping here so a one-line promotion-to-active works.
     SPCX: 'SpaceX',
