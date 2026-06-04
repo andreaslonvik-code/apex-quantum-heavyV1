@@ -107,14 +107,14 @@ export default function ConnectAlpacaClient() {
                     onClick={() => setEnvironment('paper')}
                     className={`rounded-xl border p-4 text-left transition-colors ${
                       environment === 'paper'
-                        ? 'border-cyan-500/50 bg-cyan-500/10'
+                        ? 'border-neon-cyan/50 bg-neon-cyan/10'
                         : 'border-border bg-card hover:border-border/80'
                     }`}
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <span
                         className={`w-2 h-2 rounded-full ${
-                          environment === 'paper' ? 'bg-cyan-400' : 'bg-muted-foreground/40'
+                          environment === 'paper' ? 'bg-neon-cyan' : 'bg-muted-foreground/40'
                         }`}
                       />
                       <span className="font-medium text-foreground">Paper</span>

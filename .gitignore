@@ -42,3 +42,6 @@ next-env.d.ts
 
 .vercel
 .env*.local
+
+# Local analysis output — order/market history pulled for backtesting (never commit)
+.analysis-data/
