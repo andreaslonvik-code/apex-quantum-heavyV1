@@ -129,7 +129,6 @@ export async function GET() {
       account_number: account?.account_number ?? null,
       status: account?.status ?? null,
       currency: account?.currency ?? null,
-      pattern_day_trader: account?.pattern_day_trader ?? null,
       trading_blocked: account?.trading_blocked ?? null,
       account_blocked: account?.account_blocked ?? null,
       shorting_enabled: account?.shorting_enabled ?? null,
@@ -137,12 +136,21 @@ export async function GET() {
       cash: cash,
       equity: equity,
       portfolio_value: account ? parseFloat(account.portfolio_value) || 0 : 0,
+      // Field of record for sizing — the running intraday buying-power calc
+      // under Alpaca's 2026 intraday-margin framework.
       buying_power: buyingPower,
       non_marginable_buying_power: nonMarginable,
       regt_buying_power: account?.regt_buying_power ?? null,
-      daytrading_buying_power: account?.daytrading_buying_power ?? null,
       effective_buying_power: account?.effective_buying_power ?? null,
       initial_margin: account?.initial_margin ?? null,
+      maintenance_margin: account?.maintenance_margin ?? null,
+      // Deprecated by Alpaca's PDT-retirement (removed 2026-07-06). Echoed
+      // for continuity while the fields linger; not used for any decision.
+      // After removal these resolve to null/false and can be dropped.
+      deprecated_pdt_fields: {
+        pattern_day_trader: account?.pattern_day_trader ?? null,
+        daytrading_buying_power: account?.daytrading_buying_power ?? null,
+      },
     },
     bp_analysis: {
       theoretical_cash_available: cash - positionsValue,

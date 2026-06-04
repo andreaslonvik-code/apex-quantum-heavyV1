@@ -10,15 +10,25 @@ import { checkSameOrigin } from '@/lib/csrf';
 export const dynamic = 'force-dynamic';
 
 /**
- * Relax Alpaca's PDT and Day-Trading-Buying-Power entry checks.
+ * Relax Alpaca's account-configuration entry checks.
  *
- * Alpaca's defaults check PDT/DTBP rules at order ENTRY, which causes legit
- * notional buys to be rejected with "insufficient buying power" once the
- * account has accumulated day trades intraday — even when cash is plenty.
+ * Historical context: Alpaca's old defaults checked PDT/DTBP rules at order
+ * ENTRY, which rejected legit notional buys with "insufficient buying power"
+ * once the account had accumulated day trades intraday — even with plenty of
+ * cash. Moving the gate to fill time ("exit") let the engine re-buy after a
+ * same-day kill-switch SELL.
  *
- * Setting both checks to "exit" moves the gate to fill time so the engine
- * can submit fresh orders after a kill-switch SELL on the same day. PDT
- * flag itself stays — that auto-clears after 5 trade-free days.
+ * 2026 intraday-margin framework: FINRA retired the PDT rule, so `pdt_check`
+ * is now effectively a no-op (the same-day re-buy friction it caused is gone).
+ * `dtbp_check: 'exit'` is still a valid, meaningful setting — it defers the
+ * buying-power gate to fill time, which keeps the post-SELL re-buy path clean
+ * under the new running intraday-BP model. We keep PATCHing both: pdt_check is
+ * harmless going forward, dtbp_check still earns its keep. The new mandatory
+ * pre-trade margin-deficit check is separate and is a guardrail we *want*.
+ *
+ * Note: we intentionally do NOT raise the margin multiplier here — Apex
+ * Quantum Max runs 1x/RegT by design; its risk model (ATR-stop, -3 % daily
+ * kill-switch, sector caps) is not calibrated for 4x intraday leverage.
  *
  * H1 fix — POST-only (was GET+POST). Accepting GET turned this into a
  * one-click CSRF target via <img src=…/alpaca-relax-pdt> on any page a

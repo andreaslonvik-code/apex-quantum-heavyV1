@@ -1167,6 +1167,9 @@ function accountToSnapshot(acct: AlpacaAccount, env: 'paper' | 'live'): AccountS
     equity: parseFloat(acct.equity) || 0,
     buying_power: parseFloat(acct.buying_power) || 0,
     portfolio_value: parseFloat(acct.portfolio_value) || 0,
+    // Informational only — never gates a decision. Deprecated by Alpaca's
+    // PDT-retirement (removed 2026-07-06); `!!` keeps it falsy once the field
+    // stops being returned. Engine sizing relies on `buying_power` above.
     pattern_day_trader: !!acct.pattern_day_trader,
     trading_blocked: !!acct.trading_blocked,
     account_blocked: !!acct.account_blocked,

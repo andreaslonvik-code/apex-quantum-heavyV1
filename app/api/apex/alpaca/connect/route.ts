@@ -11,7 +11,7 @@
  */
 import { NextRequest, NextResponse } from 'next/server';
 import { auth } from '@clerk/nextjs/server';
-import { validateCreds, type AlpacaEnv } from '@/lib/alpaca';
+import { validateCreds, updateAccountConfigurations, type AlpacaEnv } from '@/lib/alpaca';
 import { saveUserAlpacaCreds, getUserAlpacaCreds } from '@/lib/user-alpaca';
 import { mask } from '@/lib/crypto';
 import { checkSameOrigin } from '@/lib/csrf';
@@ -80,6 +80,27 @@ export async function POST(request: NextRequest) {
     console.log(
       `[alpaca-connect] user=${userId} env=${environment} account=${account.account_number} key=${mask(apiKey)}`
     );
+
+    // Best-effort: defer the buying-power gate to fill time so the engine's
+    // re-buy path (e.g. after a same-day kill-switch SELL) is never rejected
+    // at order entry. dtbp_check still earns its keep under Alpaca's 2026
+    // intraday-margin framework; pdt_check is now a harmless no-op (PDT rule
+    // retired). Idempotent. Intentionally NON-blocking — a failed PATCH must
+    // not break a connection that otherwise validated, so we log and move on.
+    // We do NOT touch max_margin_multiplier: Max runs 1x/RegT by design.
+    try {
+      const cfg = await updateAccountConfigurations(
+        { apiKey, apiSecret, env: environment },
+        { pdt_check: 'exit', dtbp_check: 'exit' },
+      );
+      if (!cfg.success) {
+        console.warn(
+          `[alpaca-connect] config-relax skipped for user=${userId}: ${cfg.error}`,
+        );
+      }
+    } catch (cfgErr) {
+      console.warn(`[alpaca-connect] config-relax threw for user=${userId}:`, cfgErr);
+    }
 
     return NextResponse.json({
       success: true,

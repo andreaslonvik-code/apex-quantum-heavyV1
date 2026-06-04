@@ -48,16 +48,27 @@ export interface AlpacaAccount {
   cash: string;
   equity: string;
   last_equity?: string;
+  /** Field of record for sizing. Under Alpaca's intraday-margin framework
+   *  (PDT rule retired 2026) this is the running intraday buying-power calc,
+   *  updated through the day from equity, positions, and intraday PnL. */
   buying_power: string;
   /** ≈ cash. Used by Alpaca for fractional / notional orders. */
   non_marginable_buying_power?: string;
   regt_buying_power?: string;
+  /** @deprecated PDT framework retired. Alpaca mirrors this to `buying_power`
+   *  until full removal on 2026-07-06, then drops it. Do NOT size off this —
+   *  use `buying_power`. Kept optional only so diagnostics can still echo it
+   *  while the field lingers. */
   daytrading_buying_power?: string;
   effective_buying_power?: string;
   initial_margin?: string;
   maintenance_margin?: string;
   portfolio_value: string;
-  pattern_day_trader: boolean;
+  /** @deprecated PDT designation retired. Alpaca returns `false` until full
+   *  removal on 2026-07-06, then drops the field entirely. Optional so a
+   *  missing field deserializes cleanly to `undefined` (→ falsy). Not used to
+   *  gate any trading decision — purely informational. */
+  pattern_day_trader?: boolean;
   trading_blocked: boolean;
   account_blocked: boolean;
   trade_suspended_by_user?: boolean;
