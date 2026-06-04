@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { stripe } from '@/lib/stripe';
+import { checkSameOrigin } from '@/lib/csrf';
 
 export const runtime = 'nodejs';
 
@@ -10,6 +11,11 @@ export const runtime = 'nodejs';
  * consumer law: the cancellation path must be at least as easy as signup.
  */
 export async function POST(req: NextRequest) {
+  // CSRF: same-origin guard before creating a billing-portal session.
+  const csrf = checkSameOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: 'cross_origin_blocked' }, { status: 403 });
+  }
   if (!stripe) {
     return NextResponse.json({ error: 'stripe_not_configured' }, { status: 500 });
   }

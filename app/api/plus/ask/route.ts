@@ -3,11 +3,19 @@ import { auth } from '@clerk/nextjs/server';
 import { askAboutTicker } from '@/lib/grok-plus';
 import { isPlusLang } from '@/lib/i18n/plus-lang';
 import { hasPlusAccess } from '@/lib/access';
+import { checkSameOrigin } from '@/lib/csrf';
 
 export const runtime = 'nodejs';
 export const maxDuration = 300;
 
 export async function POST(req: NextRequest) {
+  // CSRF: this spends Grok credits — block forged cross-origin POSTs that
+  // would burn a logged-in user's budget. Same-origin guard, matching the
+  // other mutating routes (e.g. apex/alpaca/connect).
+  const csrf = checkSameOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ ok: false, error: 'cross_origin_blocked' }, { status: 403 });
+  }
   const { userId } = await auth();
   if (!userId) {
     return NextResponse.json({ ok: false, error: 'unauthorized' }, { status: 401 });

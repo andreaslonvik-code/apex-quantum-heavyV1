@@ -163,6 +163,12 @@ const CIRCUIT_BREAKER_DRAWDOWN = 0.2;
 // safeRemainingBP/N) all still apply — they prevent total over-deployment.
 const MAX_PER_ORDER_NOTIONAL = 500_000;
 
+// Marketable-limit band for RTH BUY entries (see buildStockOrder). 1.0 % is
+// wide enough to fill at the touch in liquid names — so in normal conditions
+// it behaves exactly like a market order — while capping worst-case fill on a
+// freak spike. Only BUYS use it; SELLS stay market for guaranteed exits.
+const ENTRY_SLIPPAGE_CAP = 0.01;
+
 function tradingSymbol(symbol: string): string {
   return symbol.replace('/', '');
 }
@@ -416,6 +422,39 @@ function buildStockOrder(args: {
   const positionIntent = side === 'buy' ? 'buy_to_open' : 'sell_to_close';
 
   if (marketIsOpen) {
+    // ── BUY slippage cap ──────────────────────────────────────────────
+    // Route RTH BUYS through a marketable limit (ask + ENTRY_SLIPPAGE_CAP)
+    // instead of a raw market order. In normal markets this fills at the
+    // touch exactly like a market order; it only fails to fill when price is
+    // gapping more than the cap against us — which we do NOT want to chase
+    // anyway. Caps worst-case entry slippage (measured ~0.5–0.7 %/side on a
+    // $1M+ book) at ENTRY_SLIPPAGE_CAP. Limit orders are whole-share only, so
+    // we floor (same as the extended-hours path). Tiny allocations that floor
+    // to 0 shares fall through to a fractional market buy below — uncapped,
+    // but a trivially small notional so the absolute slippage is negligible.
+    // SELLS deliberately stay MARKET: a guaranteed exit (protective stop /
+    // Grok sell) is worth more than a marginally better price — a limit sell
+    // that doesn't fill strands us in a falling position.
+    if (side === 'buy' && currentPrice > 0) {
+      const limitPrice = Math.round(currentPrice * (1 + ENTRY_SLIPPAGE_CAP) * 100) / 100;
+      const wholeQty =
+        qty !== undefined && qty > 0
+          ? Math.floor(qty)
+          : notional !== undefined && notional > 0
+            ? Math.floor(notional / currentPrice)
+            : 0;
+      if (wholeQty > 0) {
+        return {
+          symbol,
+          qty: wholeQty,
+          side,
+          type: 'limit',
+          limit_price: limitPrice,
+          time_in_force: 'day',
+          position_intent: positionIntent,
+        };
+      }
+    }
     if (notional !== undefined && notional > 0) {
       return {
         symbol,
@@ -727,11 +766,21 @@ async function buildIndicatorSnapshots(
     if (!bySector.has(sec)) bySector.set(sec, []);
     bySector.get(sec)!.push(s);
   }
+  // Sector RS = mean of the sector's TOP-K leaders by RS, not the whole
+  // watchlist. The unweighted full-sector mean was size-biased: tech_ai has
+  // 50+ tickers, auto_ev has 1, so a big sector's average regressed to the
+  // mean and almost never topped the "prioritise top-3 sectors" ranking nor
+  // tripped the PATH G bear-breaker — systematically steering Grok AWAY from
+  // our strongest sector (AI/semis), against the blueprint's own bias. Top-K
+  // makes the signal "how strong are this sector's leaders", comparable across
+  // sector sizes regardless of how many long-tail names we track.
+  const SECTOR_RS_TOPK = 5;
   for (const [, arr] of bySector) {
-    // Average RS across sector peers (skip nulls)
     const rsValues = arr
       .map((s) => s.relative_strength_30d)
-      .filter((v): v is number => v != null);
+      .filter((v): v is number => v != null)
+      .sort((a, b) => b - a)
+      .slice(0, SECTOR_RS_TOPK);
     const avg =
       rsValues.length > 0
         ? rsValues.reduce((a, b) => a + b, 0) / rsValues.length

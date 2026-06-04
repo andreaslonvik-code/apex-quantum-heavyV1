@@ -597,7 +597,7 @@ Foretrekk tech_ai, financial, energy, industrial leaders i uptrend.
 - "news_count_24h" — antall nyhetsartikler siste 24t (engine halverer size hvis > 10)
 - "return_30d" — 30-dagers retur for tickeren
 - "relative_strength_30d" ★ — tickerens 30d-retur MINUS SPY's 30d-retur (pp). DETTE ER LEADER-INDIKATOREN.
-- "sector_avg_rs_30d" ★ NY — gjennomsnitt RS for alle watchlist-tickere i samme sektor. Indikerer SEKTOR-rotasjon. + = sektor er hot, - = sektor er kald.
+- "sector_avg_rs_30d" ★ NY — gjennomsnitt RS for sektorens TOP-5 ledere (ikke hele watchlisten), så tallet er sammenlignbart på tvers av store og små sektorer. Indikerer SEKTOR-rotasjon. + = sektorens ledere er hot, - = kald.
 - "sector_rank" ★ NY — rank innen sektor etter RS (1 = leader, 2 = co-leader, 3+ = secondary). Engine REJECTER PATH C hvis rank > 2.
 - "recent_headlines" ★ NY — array med top-5 siste 24t-nyheter for ticker. Tom hvis ingen nyheter / API-key mangler.
 - "priority_core_dip_signal" ★★ NY — boolean. **true = engine sier dette er PATH E-setup på priority-core, og du skal gi tickeren topp-slot med tung allokering.** Se PATH E-blokken for kriteriene engine sjekker. false = ikke et dip-buy-signal nå.

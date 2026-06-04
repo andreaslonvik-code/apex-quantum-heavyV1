@@ -2,10 +2,16 @@ import { NextRequest, NextResponse } from 'next/server';
 import { auth, currentUser } from '@clerk/nextjs/server';
 import { stripe, PLUS_PRICE_ID } from '@/lib/stripe';
 import { PLUS_FOR_SALE } from '@/lib/product-status';
+import { checkSameOrigin } from '@/lib/csrf';
 
 export const runtime = 'nodejs';
 
 export async function POST(req: NextRequest) {
+  // CSRF: same-origin guard before any Stripe session is created.
+  const csrf = checkSameOrigin(req);
+  if (!csrf.ok) {
+    return NextResponse.json({ error: 'cross_origin_blocked' }, { status: 403 });
+  }
   // New Plus sales are paused until the regulatory licence is in place
   // (see lib/product-status.ts / LEGAL_REVIEW.md). This is the hard gate:
   // it blocks checkout even if a marketing CTA is reached directly. Existing
