@@ -61,8 +61,10 @@ export const STOCKS_BLUEPRINT: Blueprint = {
   id: 'stocks',
   name: 'Apex Quantum v1.9 — Aksjer',
   watchlist: [
-    // PRIORITY CORE — long-term 12-month portfolio leaders. Filter is
-    // loosened (PATH F passthrough) and sector-cap bypassed for these.
+    // PRIORITY CORE — preferred leaders. Filter is loosened (PATH F
+    // passthrough) and sector-cap bypassed for these — BUT since the
+    // 1-month-momentum pivot (2026-06-05) even priority-core must be in an
+    // uptrend sector (sector_avg_rs_30d > 0) to be bought.
     // See PRIORITY CORE TICKERS section in strategy prompt.
     'MU', 'QBTS', 'IONQ', 'QUBT', 'RKLB', 'VRT',
     // Wider universe — eligible candidates beyond the priority core.
@@ -250,12 +252,13 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     dailyKillSwitchPct: -0.03,
     atrPeriod: 14,
     atrStopMult: 1.5,
-    // 12-month horizon mandate: don't auto-sell winners at +15 %. Set to
-    // +100 % as an absolute "we've doubled, lock something in" ceiling.
-    // Trailing stop ladder handles pullback protection well before this
-    // fires — the trailing stop will typically exit a faltering winner
-    // long before a fresh +100 % is on the table.
-    profitTakeThreshold: 1.00,
+    // 1-MONTH MOMENTUM-ROTATION (pivot 2026-06-05, replaces the 12-month
+    // hold mandate). Take profit at +30 % rather than riding to +100 %: on a
+    // one-month horizon a +30 % move is a full thesis played out — lock it in
+    // and rotate to the next uptrend-sector leader. The trailing stop (keep
+    // 0.85) still protects pullbacks below this; the overbought SELL path
+    // (RSI ≥ 65) trims parabolic names even before +30 %.
+    profitTakeThreshold: 0.30,
     timeframe: '1Day',
     barLimit: 250,
   },
@@ -293,11 +296,15 @@ Bruk alle ressurser for å gjøre grundige analyser og presise beslutninger.
 
 ## INVESTERINGSVINDU OG STRATEGI-RAMMER ★★★
 
-**12-måneders horisont.** Apex Quantum er IKKE en day-trader. Vi bygger
-en 12-måneders portefølje av leaders med AI/semis-tilt men diversifisert
-på tvers av sektorer. Lar priority-core ride for kvartaler, ikke timer.
-Profit-take på +15 % er for swing-trades — ikke aktuelt for priority-core
-på langtidshold.
+**1-MÅNEDS MOMENTUM-ROTASJON (pivot 2026-06-05, erstatter 12-mnd-holdet).**
+Apex Quantum er nå en momentum-rotor med ~1 måneds horisont, ikke en
+langtids-holder. To jernregler:
+1. **Alltid i en sektor i UPTREND.** Kjøp KUN navn i sektorer der lederne
+   slår S&P (sector_avg_rs_30d > 0). Når en sektor ruller over, roter ut.
+2. **Ta gevinst, ikke vent på dobling.** Profit-take er +30 %. Trim
+   parabolske/overextended navn (RSI ≥ 65) FØR de snur — ikke hold dem ned
+   gjennom reverseringen. Et +30 %-trekk på én måned er en ferdig spilt
+   tese: lås den og roter til neste uptrend-leder.
 
 **Priority-core er primær eksponering, fordelt på 8 sektorer.** Pool på
 29 navn: 10 i tech_ai (MU, NVDA, AVGO, TSM, ASML, AMAT, PLTR, QBTS, IONQ,
@@ -610,9 +617,11 @@ Når du foreslår BUY på en ticker, sjekk recent_headlines:
 - Tom array eller bare nøytrale headlines: ignorer, bruk TA alene
 
 ### SEKTOR-ROTASJON (bruk sector_avg_rs_30d)
-Sektorer med høyest sector_avg_rs_30d er i medvind. Prioriter picks fra top-3 sektorer.
-- Sektorer med sector_avg_rs > +3 pp: aggressivt søk etter leaders her
-- Sektorer med sector_avg_rs < -3 pp: unngå (selv om individuelle tickere ser OK ut)
+HARDT MANDAT (1-mnd-pivot): handle KUN i sektorer i uptrend.
+- sector_avg_rs_30d > 0: kvalifisert — søk leaders her. Høyest RS = prioritert.
+- sector_avg_rs_30d ≤ 0: FORBUDT å kjøpe (engine avviser uansett — gate i
+  isAnticipatorySignal). Roter ut posisjoner hvis sektoren faller under 0.
+- Heller cash enn å tvinge en pick i en sektor som ikke leder.
 
 ### PYRAMID-UP REGEL ★ NY
 Hvis en eksisterende posisjon viser:

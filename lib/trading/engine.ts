@@ -865,6 +865,20 @@ function isAnticipatorySignal(snap: IndicatorSnapshot): AnticipatorySignal {
     };
   }
 
+  // ── Sector-uptrend mandate (1-month-momentum pivot 2026-06-05) ─────────
+  // Hard gate for ALL buys, priority-core included: only enter a name whose
+  // SECTOR is in an uptrend (top-5-leader sector_avg_rs_30d > 0, i.e. the
+  // sector's leaders are beating SPY over 30d). This replaces the old "only
+  // block when sector_avg_rs < -10" tolerance — we now refuse to add risk in
+  // any sector that isn't outright leading. Null = missing data → fail-open
+  // (don't freeze trading on a data gap; the price>SMA200 guard still binds).
+  if (snap.sector_avg_rs_30d != null && snap.sector_avg_rs_30d <= 0) {
+    return {
+      ok: false,
+      reasons: [`sector_not_uptrend (sector_rs ${snap.sector_avg_rs_30d.toFixed(1)}pp ≤ 0)`],
+    };
+  }
+
   const isDeepOversold = snap.rsi_14 != null && snap.rsi_14 < 35;
   const isModerateOversold = snap.rsi_14 != null && snap.rsi_14 < 45;
   const nearSupport =
@@ -1670,7 +1684,8 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   //   - price < SMA50 (short-term trend broken)
   //   - intraday change_24h_pct ≤ -3 % (loss building today)
   //   - position pnl ≤ -5 % (already underwater)
-  //   - RSI > 80 (blow-off top — exit before reversal is sensible)
+  //   - RSI ≥ rsiOverbought (65) — overbought/parabolic, take profit before
+  //     the reversal (1-month-momentum pivot 2026-06-05; was RSI>80)
   // Missing snapshot → bypass veto (fail-open: we'd rather honor Grok's
   // call when we lack data than freeze the position).
   //
@@ -1702,9 +1717,15 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     const intradayLoss =
       snap.change_24h_pct != null && snap.change_24h_pct <= -3;
     const underwater = pnlPct <= -0.05;
-    const blowoffTop = snap.rsi_14 != null && snap.rsi_14 > 80;
+    // 1-month-momentum pivot (2026-06-05): take profit on overbought/parabolic
+    // names. Lowered from RSI>80 (blow-off only) to the blueprint's overbought
+    // line (65) so Grok's risk-off SELLs on extended winners actually execute
+    // instead of being vetoed and riding the reversal down — exactly the
+    // ABSI (RSI 77) / MU (RSI 68) parabolic-top case that bled the book.
+    const overbought =
+      snap.rsi_14 != null && snap.rsi_14 >= blueprint.params.rsiOverbought;
     const hasEvidence =
-      rsFalling || belowSma50 || intradayLoss || underwater || blowoffTop;
+      rsFalling || belowSma50 || intradayLoss || underwater || overbought;
     // Earned-momentum-tier: a held winner (P&L ≥ +8 %) that still leads
     // (RS ≥ +5 pp) and holds its short-term trend (price > SMA50). These
     // get "ride the winner" protection — the upgrade-rotation may NOT sell
