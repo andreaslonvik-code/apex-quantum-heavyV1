@@ -28,8 +28,14 @@ export interface BlueprintParams {
   atrPeriod: number;
   /** Stop distance = ATR × this. */
   atrStopMult: number;
-  /** Take-profit at this unrealised P/L fraction. 0.15 = +15 %. */
-  profitTakeThreshold: number;
+  /**
+   * Fixed mechanical take-profit at this unrealised P/L fraction (0.15 = +15 %).
+   * Set to `null` to DISABLE the fixed ceiling entirely and let winners ride
+   * the trailing stop instead — used by the stocks blueprint's weekly
+   * let-winners-run doctrine (2026-06-08), where a hard +30 % cap would dump
+   * strong momentum names that are still compounding week over week.
+   */
+  profitTakeThreshold: number | null;
   /** Bar timeframe used for indicator math + entry/exit decisions. */
   timeframe: '15Min' | '1Hour' | '1Day';
   /** Number of bars to request for indicator history. */

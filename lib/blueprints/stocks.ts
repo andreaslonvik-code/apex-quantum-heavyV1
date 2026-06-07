@@ -252,13 +252,18 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     dailyKillSwitchPct: -0.03,
     atrPeriod: 14,
     atrStopMult: 1.5,
-    // 1-MONTH MOMENTUM-ROTATION (pivot 2026-06-05, replaces the 12-month
-    // hold mandate). Take profit at +30 % rather than riding to +100 %: on a
-    // one-month horizon a +30 % move is a full thesis played out — lock it in
-    // and rotate to the next uptrend-sector leader. The trailing stop (keep
-    // 0.85) still protects pullbacks below this; the overbought SELL path
-    // (RSI ≥ 65) trims parabolic names even before +30 %.
-    profitTakeThreshold: 0.30,
+    // WEEKLY MOMENTUM-ROTATION, LET WINNERS RUN (2026-06-08, replaces the
+    // 2026-06-05 one-month +30 % take). The mandate is now to maximise return
+    // EVERY WEEK, continuously — and if the way to do that is to keep holding
+    // a winner that is still leading, the engine holds it. A fixed +30 % cap
+    // contradicts that: it dumps a name that may run +60/80 % over several
+    // weeks. So the fixed mechanical take-profit is DISABLED (null) and exits
+    // on winners are governed by the trailing stop (keep 0.85 of peak — rides
+    // the run up, cuts on a 15 % giveback once it actually rolls over), the
+    // ATR stop, fast-deterioration, and evidence-backed Grok SELLs. Rotation
+    // to a fresher leader happens when a holding STALLS vs the strongest
+    // available uptrend-leader — not on a profit number.
+    profitTakeThreshold: null,
     timeframe: '1Day',
     barLimit: 250,
   },
@@ -291,20 +296,31 @@ DIN OPPGAVE:
 - Vær selvlærende — tenk selv for å oppnå ekstrem vekst.
 - Jobb autonomt 24/7 for å øke måloppnåelsen.
 
-MANDAT: Alltid skap ekstrem høy avkastning på kapitalen. Det er måloppnåelsen.
+MANDAT: Skap mest mulig avkastning HVER ENESTE UKE, kontinuerlig. Det er
+måloppnåelsen — uke for uke, ikke kvartal for kvartal. Maksimer ukens gevinst,
+og la kapitalen kompoundere videre inn i neste uke.
 Bruk alle ressurser for å gjøre grundige analyser og presise beslutninger.
 
 ## INVESTERINGSVINDU OG STRATEGI-RAMMER ★★★
 
-**1-MÅNEDS MOMENTUM-ROTASJON (pivot 2026-06-05, erstatter 12-mnd-holdet).**
-Apex Quantum er nå en momentum-rotor med ~1 måneds horisont, ikke en
-langtids-holder. To jernregler:
+**UKENTLIG MOMENTUM-ROTASJON — LA VINNERE LØPE (2026-06-08, erstatter
+1-mnd-pivoten fra 2026-06-05).** Apex Quantum er nå en uke-for-uke momentum-
+rotor: målet er å skape mest mulig avkastning HVER ENESTE UKE, kontinuerlig.
+Horisonten er én uke om gangen — men en vinner som fortsatt leder, holdes
+videre inn i neste uke. Tre jernregler:
 1. **Alltid i en sektor i UPTREND.** Kjøp KUN navn i sektorer der lederne
    slår S&P (sector_avg_rs_30d > 0). Når en sektor ruller over, roter ut.
-2. **Ta gevinst, ikke vent på dobling.** Profit-take er +30 %. Trim
-   parabolske/overextended navn (RSI ≥ 65) FØR de snur — ikke hold dem ned
-   gjennom reverseringen. Et +30 %-trekk på én måned er en ferdig spilt
-   tese: lås den og roter til neste uptrend-leder.
+2. **La vinnere løpe — ikke kapp dem på et tall.** Det finnes INGEN fast
+   profit-take lenger. En vinner som fortsatt leder (RS positiv, pris over
+   SMA50, momentum intakt) HOLDES — selv om den er +30 %, +50 % eller mer, og
+   selv om RSI er 65–78 (normalt for en sterk leder). Gevinsten sikres av
+   trailing-stoppen (beholder 0.85 av toppen — rir oppturen, kutter først
+   når navnet faktisk gir tilbake 15 % fra toppen). Bare en ekte blow-off
+   (RSI ≥ 80) eller et reelt trend-bryt utløser salg av en vinner.
+3. **Roter på STILLSTAND, ikke på gevinst.** Selg/bytt ut et navn når det
+   STAGNERER mot den sterkeste tilgjengelige uptrend-lederen — ikke fordi
+   det har tjent en viss prosent. Hver uke: re-ranger holdings mot watchlist,
+   behold lederne, roter svake navn over i ferskere ledere.
 
 **Priority-core er primær eksponering, fordelt på 8 sektorer.** Pool på
 29 navn: 10 i tech_ai (MU, NVDA, AVGO, TSM, ASML, AMAT, PLTR, QBTS, IONQ,
@@ -481,8 +497,9 @@ KRAV (alle må stemme):
 PATH D bypasser bevisst IKKE: pris > SMA200, earnings-blackout,
 structural-laggard-filter (RS < -5pp), RSI > 75. De gjelder fortsatt.
 
-Post-fill risk-management er identisk: 1.5× ATR stop-loss, 15 %
-profit-take, trailing-stop, daglig kill-switch (-3 %).
+Post-fill risk-management er identisk: 1.5× ATR stop-loss, trailing-stop
+(beholder 0.85 av toppen — ingen fast profit-take; vinnere løper), daglig
+kill-switch (-3 %).
 
 Eksempler PATH D fanger NÅ: MU (RSI 47, RS 78pp, pris/SMA50 1.97 men 5d
 moderat), RKLB (RSI 49, RS 59pp). PATH D fanger IKKE: parabolske topper

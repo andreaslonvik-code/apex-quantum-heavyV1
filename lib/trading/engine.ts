@@ -1684,8 +1684,10 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   //   - price < SMA50 (short-term trend broken)
   //   - intraday change_24h_pct ≤ -3 % (loss building today)
   //   - position pnl ≤ -5 % (already underwater)
-  //   - RSI ≥ rsiOverbought (65) — overbought/parabolic, take profit before
-  //     the reversal (1-month-momentum pivot 2026-06-05; was RSI>80)
+  //   - RSI ≥ 80 (blow-off only) — true parabolic exhaustion. The weekly
+  //     let-winners-run doctrine (2026-06-08) reverted this from the
+  //     one-month pivot's RSI≥65 so healthy runners (65–78) are HELD, with
+  //     the trailing stop catching the eventual reversal instead.
   // Missing snapshot → bypass veto (fail-open: we'd rather honor Grok's
   // call when we lack data than freeze the position).
   //
@@ -1717,13 +1719,18 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
     const intradayLoss =
       snap.change_24h_pct != null && snap.change_24h_pct <= -3;
     const underwater = pnlPct <= -0.05;
-    // 1-month-momentum pivot (2026-06-05): take profit on overbought/parabolic
-    // names. Lowered from RSI>80 (blow-off only) to the blueprint's overbought
-    // line (65) so Grok's risk-off SELLs on extended winners actually execute
-    // instead of being vetoed and riding the reversal down — exactly the
-    // ABSI (RSI 77) / MU (RSI 68) parabolic-top case that bled the book.
-    const overbought =
-      snap.rsi_14 != null && snap.rsi_14 >= blueprint.params.rsiOverbought;
+    // Weekly let-winners-run doctrine (2026-06-08): only a genuine BLOW-OFF
+    // top (RSI ≥ 80) counts as sell-evidence here — NOT the entry-discipline
+    // overbought line (rsiOverbought, 65). Under the weekly-maximization
+    // mandate a strong momentum name routinely runs at RSI 65–78 for days;
+    // treating 65 as a sell trigger (the 2026-06-05 one-month pivot) dumped
+    // winners that were still compounding week over week. The trailing stop
+    // (keep 0.85 of peak, 15 % giveback) now governs the reversal instead —
+    // it rides the winner UP and cuts it tightly once it actually rolls over,
+    // which covers the old ABSI/MU "rode it down" case without pre-empting
+    // the run. Blow-off ≥ 80 is still honoured for true parabolic exhaustion.
+    const BLOWOFF_RSI = 80;
+    const overbought = snap.rsi_14 != null && snap.rsi_14 >= BLOWOFF_RSI;
     const hasEvidence =
       rsFalling || belowSma50 || intradayLoss || underwater || overbought;
     // Earned-momentum-tier: a held winner (P&L ≥ +8 %) that still leads
@@ -2868,7 +2875,7 @@ async function mechanicalSafetyPass(args: {
       let reason: string | null = null;
       if (price <= stopPrice) reason = 'MECHANICAL_ATR_STOP';
       else if (isFastDeterioration) reason = 'MECHANICAL_FAST_DETERIORATION';
-      else if (pnlPct >= blueprint.params.profitTakeThreshold) reason = 'MECHANICAL_PROFIT_TAKE';
+      else if (blueprint.params.profitTakeThreshold != null && pnlPct >= blueprint.params.profitTakeThreshold) reason = 'MECHANICAL_PROFIT_TAKE';
       else if (trailFloor != null && price < trailFloor) reason = 'MECHANICAL_TRAILING_STOP';
 
       if (!reason) continue;
