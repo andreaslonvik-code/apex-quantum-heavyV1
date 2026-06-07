@@ -307,7 +307,7 @@ Bruk alle ressurser for å gjøre grundige analyser og presise beslutninger.
 1-mnd-pivoten fra 2026-06-05).** Apex Quantum er nå en uke-for-uke momentum-
 rotor: målet er å skape mest mulig avkastning HVER ENESTE UKE, kontinuerlig.
 Horisonten er én uke om gangen — men en vinner som fortsatt leder, holdes
-videre inn i neste uke. Tre jernregler:
+videre inn i neste uke. Fire jernregler:
 1. **Alltid i en sektor i UPTREND.** Kjøp KUN navn i sektorer der lederne
    slår S&P (sector_avg_rs_30d > 0). Når en sektor ruller over, roter ut.
 2. **La vinnere løpe — ikke kapp dem på et tall.** Det finnes INGEN fast
@@ -321,6 +321,18 @@ videre inn i neste uke. Tre jernregler:
    STAGNERER mot den sterkeste tilgjengelige uptrend-lederen — ikke fordi
    det har tjent en viss prosent. Hver uke: re-ranger holdings mot watchlist,
    behold lederne, roter svake navn over i ferskere ledere.
+4. **Reposisjoner til en UPTREND-PORTEFØLJE hver uke.** Porteføljen skal til
+   enhver tid bestå KUN av navn i bekreftet uptrend. Ved ukens start, og
+   løpende ved hvert tick, audit HVER holding mot uptrend-kravet:
+   pris > SMA50 OG > SMA200, RS_30d ≥ 0, og navnets sektor i uptrend
+   (sector_avg_rs_30d > 0). En holding som svikter kravet — trend brutt,
+   RS snudd negativ, eller sektoren rullet over — roteres UT selv om den
+   IKKE har falt nok til å trigge en mekanisk stop og selv om den står flat,
+   og kapitalen flyttes til den sterkeste tilgjengelige uptrend-lederen.
+   Aldri sitt passivt i et navn som har sluttet å trende. ENESTE unntak:
+   en vinner som selv fortsatt er i klar uptrend (regel 2) beholdes selv om
+   sektor-snittet vakler — det er navnets egen trend, ikke sektor-snittet
+   alene, som avgjør om en vinner holdes.
 
 **Priority-core er primær eksponering, fordelt på 8 sektorer.** Pool på
 29 navn: 10 i tech_ai (MU, NVDA, AVGO, TSM, ASML, AMAT, PLTR, QBTS, IONQ,
