@@ -32,8 +32,13 @@ const TF_MAP: Record<Tf, TfCfg> = {
   '1H':  { period: '1D',  timeframe: '5Min',  benchTf: '5Min',  benchLimit: 13,   sliceLast: 12,   tickFormat: 'time'  },
   '24H': { period: '1D',  timeframe: '5Min',  benchTf: '5Min',  benchLimit: 80,                    tickFormat: 'time'  },
   '7D':  { period: '1W',  timeframe: '15Min', benchTf: '15Min', benchLimit: 130,                   tickFormat: 'date'  },
-  '30D': { period: '1M',  timeframe: '1H',    benchTf: '1Hour', benchLimit: 200,                   tickFormat: 'date'  },
-  'MTD': { period: '1M',  timeframe: '1H',    benchTf: '1Hour', benchLimit: 200,  sliceMode: 'MTD', tickFormat: 'date'  },
+  // 30D/MTD use DAILY portfolio-history resolution. Alpaca rejects intraday
+  // timeframes (1H and below) over a 1-month period and returns an empty
+  // series — which collapsed the chart to a flat +0 % headline plus a fake
+  // placeholder curve. Daily is the correct granularity for a 1-month window
+  // anyway (≈22 points), and matches what YTD/ALL already do successfully.
+  '30D': { period: '1M',  timeframe: '1D',    benchTf: '1Hour', benchLimit: 200,                   tickFormat: 'date'  },
+  'MTD': { period: '1M',  timeframe: '1D',    benchTf: '1Hour', benchLimit: 200,  sliceMode: 'MTD', tickFormat: 'date'  },
   'YTD': { period: '1A',  timeframe: '1D',    benchTf: '1Day',  benchLimit: 260,  sliceMode: 'YTD', tickFormat: 'month' },
   'ALL': { period: 'all', timeframe: '1D',    benchTf: '1Day',  benchLimit: 1000,                   tickFormat: 'month' },
 };
@@ -283,6 +288,17 @@ export async function GET(req: NextRequest) {
     let eq: number[] = [];
     if (historyRes.success) {
       ({ ts, eq } = buildEquitySeries(historyRes.data, cfg));
+    }
+    // Defensive self-heal: if the configured (period, timeframe) combo comes
+    // back empty — e.g. an intraday timeframe Alpaca rejects for this period,
+    // or a sparse young account — retry once at daily resolution before we
+    // fall back to the flat single-point placeholder below. Daily history is
+    // available for any account span, so this guarantees a real curve renders.
+    if (eq.length === 0 && cfg.timeframe !== '1D') {
+      const retry = await getPortfolioHistory(creds, { period: cfg.period, timeframe: '1D' });
+      if (retry.success) {
+        ({ ts, eq } = buildEquitySeries(retry.data, cfg));
+      }
     }
     const nowSec = Math.floor(Date.now() / 1000);
     if (eq.length === 0) {
