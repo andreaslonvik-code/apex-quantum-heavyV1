@@ -1932,14 +1932,19 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
       if (!orderReq) {
         return skipTrade(blueprint.id, ticker, 'SELL', 'no_price_for_extended_hours');
       }
+      // Cancel the resting server-side protective stop BEFORE the SELL.
+      // The stop reserves the position's shares, so Alpaca reports
+      // qty_available < qty and a full-position close rejects with
+      // "insufficient qty available for order (requested: <held>,
+      // available: <unreserved remainder>)" — exactly the ABSI/MU RSI>80
+      // SELL-rejected case. Cancelling first frees the shares so the close
+      // fills. The old cancel-AFTER ordering could never run here, because
+      // the SELL it depended on was the very order being blocked. This
+      // mirrors the mechanical pass, which already cancels-before. The
+      // position is briefly unprotected during the close; if the SELL does
+      // not fill, the next tick's ensureServerSideStops re-arms the stop.
+      await cancelOpenStopsForTicker(creds, ticker, openOrdersData);
       const r = await placeOrder(creds, orderReq);
-      // Cancel any server-side stop order tied to this ticker. Without
-      // this, after the SELL fills the orphan stop would either fail
-      // (no position to close) or — worse, in a partial-fill scenario —
-      // sell shares we still want to hold.
-      if (r.success) {
-        await cancelOpenStopsForTicker(creds, ticker, openOrdersData);
-      }
       return {
         blueprintId: blueprint.id,
         ticker,
@@ -2574,10 +2579,11 @@ async function executeMirrorPlan(args: ExecuteMirrorArgs): Promise<ExecuteMirror
         });
       }
       if (!orderReq) return skipTrade(blueprint.id, o.ticker, 'SELL', 'no_price_for_extended_hours');
+      // Cancel the resting protective stop BEFORE the SELL so its share
+      // reservation can't block a full-position close (qty_available < qty).
+      // Same fix as the Grok-decision path and the mechanical pass.
+      await cancelOpenStopsForTicker(creds, o.ticker, openOrdersData);
       const r = await placeOrder(creds, orderReq);
-      if (r.success) {
-        await cancelOpenStopsForTicker(creds, o.ticker, openOrdersData);
-      }
       const notional = qty * currentPrice;
       return {
         blueprintId: blueprint.id,
