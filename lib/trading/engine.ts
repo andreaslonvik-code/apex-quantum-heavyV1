@@ -730,6 +730,41 @@ async function buildIndicatorSnapshots(
   return snaps;
 }
 
+// Per-tick snapshot cache. buildIndicatorSnapshots output depends only on
+// market data (Alpaca bars/price/news) + the blueprint watchlist + the
+// market-wide spyReturn30d — NOTHING user-specific — so it is identical across
+// all users for a given (blueprint, tick). The cron runs the leader first and
+// then every follower; without caching, each follower's entry-gate would
+// rebuild the same ~46-ticker set (hundreds of serial fetches × N followers),
+// risking the 300s cron budget. We cache the in-flight promise keyed by
+// blueprint so concurrent followers share one build, and expire well under the
+// minimum Grok cadence (5 min empty-bucket) so the leader always rebuilds fresh
+// on its own decision ticks.
+const snapshotCache = new Map<
+  string,
+  { promise: Promise<IndicatorSnapshot[]>; expiresAt: number }
+>();
+const SNAPSHOT_CACHE_TTL_MS = 2 * 60 * 1000;
+
+function buildIndicatorSnapshotsCached(
+  creds: AlpacaCreds,
+  blueprint: Blueprint,
+  spyReturn30d: number | null = null,
+): Promise<IndicatorSnapshot[]> {
+  const key = blueprint.id;
+  const now = Date.now();
+  const hit = snapshotCache.get(key);
+  if (hit && hit.expiresAt > now) return hit.promise;
+  const promise = buildIndicatorSnapshots(creds, blueprint, spyReturn30d);
+  snapshotCache.set(key, { promise, expiresAt: now + SNAPSHOT_CACHE_TTL_MS });
+  // On failure, drop the entry so the next caller retries instead of caching a
+  // rejected promise for the whole TTL.
+  promise.catch(() => {
+    if (snapshotCache.get(key)?.promise === promise) snapshotCache.delete(key);
+  });
+  return promise;
+}
+
 function round(n: number, decimals: number): number {
   const f = 10 ** decimals;
   return Math.round(n * f) / f;
@@ -2177,7 +2212,7 @@ async function executeMirrorPlan(args: ExecuteMirrorArgs): Promise<ExecuteMirror
   // snapshots are market-data only, so xAI cost is unchanged.
   let buysToPlace = buys;
   if (MIRROR_ENTRY_GATE_ENABLED && buys.length > 0) {
-    const snaps = await buildIndicatorSnapshots(creds, blueprint, spyReturn30d);
+    const snaps = await buildIndicatorSnapshotsCached(creds, blueprint, spyReturn30d);
     const snapByTicker = new Map<string, IndicatorSnapshot>(
       snaps.map((s) => [s.ticker, s]),
     );
@@ -3018,7 +3053,7 @@ async function runBlueprint(args: {
   }
 
   // 3. Build context + call Grok.
-  const candidates = await buildIndicatorSnapshots(creds, blueprint, spyReturn30d);
+  const candidates = await buildIndicatorSnapshotsCached(creds, blueprint, spyReturn30d);
   if (candidates.length === 0) {
     await saveDecision({
       clerkUserId,
