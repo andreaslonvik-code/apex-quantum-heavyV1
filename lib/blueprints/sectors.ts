@@ -130,8 +130,8 @@ const TICKER_TO_SECTOR: Record<string, Sector> = {
   AVAV: 'industrial',
   ASTS: 'industrial',
   SYM: 'industrial',
-  // Pending — SpaceX. Bucketed here so that sector-cap logic applies the
-  // moment we promote it from pendingWatchlist to watchlist.
+  // SpaceX — promoted to the live watchlist 2026-06-16 (SPCX on Nasdaq).
+  // Bucketed industrial so sector-cap logic counts it with the other primes.
   SPCX: 'industrial',
   // Defense primes added 2026-05-24. Alle 7 trader på defense-tape —
   // sector-cap forhindrer korrekt at engine stabler tre defense-navn

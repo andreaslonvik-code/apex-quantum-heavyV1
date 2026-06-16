@@ -103,21 +103,20 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     // ASICs + optical DSP). Wider-watchlist (not priority-core); engine
     // treats it as a PATH B/C/D/F candidate per blueprint rules.
     'MRVL',
+    // Promoted from pendingWatchlist 2026-06-16 — SpaceX IPO'd (SPCX on
+    // Nasdaq), verified tradable on Alpaca. Wider-watchlist (not priority-
+    // core). NOTE: as a fresh listing it has < 200 daily bars, so the
+    // engine's price>SMA200 entry gate will reject it (sma200_unavailable)
+    // until it builds ~200 trading days of history — it is tracked/considered
+    // now but won't be BOUGHT until it has a real trend. This is by design.
+    'SPCX',
   ],
   // Pre-IPO / not-yet-listed names the cockpit is tracking. Engine ignores
   // these — they exist for UI visibility and manual promotion to the live
   // `watchlist` once the symbol is verified tradable on Alpaca.
   // Promotion procedure: move the ticker into `watchlist` above, drop the
   // entry from here, and verify `tradable: true` via /v2/assets/{symbol}.
-  pendingWatchlist: [
-    {
-      ticker: 'SPCX',
-      name: 'SpaceX',
-      sector: 'industrial',
-      expectedListing: '2026-06-12',
-      notes: 'Roadshow rapportert ~4. juni 2026. Ticker SPCX på Nasdaq, kilde: user-forwarded news brief. Verifiser mot S-1 prospekt før promotering — IPOer slipper datoer og endrer ticker.',
-    },
-  ],
+  pendingWatchlist: [],
   // Human-readable company names — rendered as the sub-line under each
   // ticker in the dashboard tables. Without this the UI fell back to
   // showing the ticker twice (e.g. "AAPL" over "AAPL").
