@@ -130,7 +130,9 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const [positions, setPositions] = useState<AlpacaPositionPayload[]>([]);
   const [orders, setOrders] = useState<RecentOrder[]>([]);
   const [dismissedOrders, setDismissedOrders] = useState<Set<string>>(new Set());
-  const [botRunning, setBotRunning] = useState(true);
+  // The bot runs continuously server-side (cron). There is no client-side
+  // pause — the only real stop control is disconnecting the account.
+  const botRunning = true;
   const [wdOpen, setWdOpen] = useState(false);
   const [wdStatus, setWdStatus] = useState<WithdrawStatus>('idle');
   const [wdError, setWdError] = useState<string | undefined>();
@@ -454,11 +456,6 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
     router.push('/');
   };
 
-  const handleStopAll = () => {
-    setBotRunning(false);
-    toast.error(lang === 'no' ? 'Stopp aktivert — ingen nye ordre' : 'Halt active — no new orders');
-  };
-
   const handleDismissOrder = (ticker: string, time: string) => {
     setDismissedOrders((prev) => new Set([...prev, `${ticker}:${time}`]));
   };
@@ -521,7 +518,6 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
         fxRate={fxRate}
         setDisplayCurrency={setDisplayCurrency}
         onDisconnect={handleDisconnect}
-        onStopAll={handleStopAll}
       />
       <BenchmarkBar lang={lang} data={performance?.benchmarkBar ?? null} />
       <main className="canvas">

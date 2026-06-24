@@ -18,10 +18,11 @@ interface Props {
   fxRate: number | null;
   /** Toggle the display currency. */
   setDisplayCurrency: (c: Currency) => void;
-  /** Disconnects the Alpaca account (does NOT sign the user out of Clerk). */
+  /** Disconnects the Alpaca account (does NOT sign the user out of Clerk).
+   *  This is the ONLY real stop control — removing the connection takes the
+   *  account out of the trading loop. (The old "halt" button was cosmetic:
+   *  it never reached the server, so it was removed.) */
   onDisconnect: () => void;
-  /** Halts all trading (kill switch). */
-  onStopAll: () => void;
 }
 
 /** Show the first 4 and last 3 chars of the account number, dot-out the rest. */
@@ -41,7 +42,6 @@ export function Topbar({
   fxRate,
   setDisplayCurrency,
   onDisconnect,
-  onStopAll,
 }: Props) {
   const t = I18N[lang];
   return (
@@ -79,9 +79,6 @@ export function Topbar({
           <span className="bot-pill-dot" />
           {botRunning ? t.botRunning : t.botPaused}
         </span>
-        <button type="button" className="stop-all-btn" onClick={onStopAll}>
-          {t.stopAll}
-        </button>
         <div
           className="lang-tog ccy-tog"
           title={lang === 'no'
