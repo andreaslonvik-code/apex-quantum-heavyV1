@@ -1186,7 +1186,10 @@ async function executeDecisions(args: ExecuteArgs): Promise<ExecuteResult> {
   // priority-core and non-priority-core; the 4-vs-2 split still encodes AI
   // bias. Worst-case bucket: 4 tech_ai + 2 from one other sector = 6/6.
   const SECTOR_CAP_DEFAULT = 2;
-  const SECTOR_CAP_OVERRIDES: Record<string, number> = { tech_ai: 4 };
+  // TEST 2026-06-25: health raised 2→3 so the 3 biotech test priority-core
+  // names (ABSI, ABCL, HELP) can all be held. Paired with maxPositions 6→8
+  // and the 8-name test priority-core in stocks.ts. Revert with that commit.
+  const SECTOR_CAP_OVERRIDES: Record<string, number> = { tech_ai: 4, health: 3 };
   const sectorCapFor = (sec: string | null): number =>
     sec ? SECTOR_CAP_OVERRIDES[sec] ?? SECTOR_CAP_DEFAULT : SECTOR_CAP_DEFAULT;
   const sectorCounts = new Map<string, number>();

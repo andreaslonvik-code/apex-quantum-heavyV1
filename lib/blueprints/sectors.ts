@@ -40,6 +40,9 @@ const TICKER_TO_SECTOR: Record<string, Sector> = {
   LRCX: 'tech_ai',  // semi-cap-equip — same cycle as AMAT
   AMAT: 'tech_ai',
   CRDO: 'tech_ai',  // AI-interconnect SerDes — semis cluster
+  MRVL: 'tech_ai',  // custom-silicon / AI-networking — was MISSING a sector
+                    // mapping (sectorOf returned null → no cap weighting).
+                    // Added 2026-06-25 with promotion to test priority-core.
   COHR: 'tech_ai',  // photonics/lasers for AI infra
   LITE: 'tech_ai',  // priority-core — photonics/optics for AI data centers
   WDC: 'tech_ai',   // storage — moves with semis on AI capex cycles
@@ -78,6 +81,8 @@ const TICKER_TO_SECTOR: Record<string, Sector> = {
 
   // Health / pharma
   ABSI: 'health', // priority-core — AI-drug-discovery biotech (small-cap)
+  ABCL: 'health', // AbCellera — antibody-discovery biotech. Added 2026-06-25
+                  // for the 8-name test priority-core.
   MRK: 'health',
   PFE: 'health',
   TMO: 'health',

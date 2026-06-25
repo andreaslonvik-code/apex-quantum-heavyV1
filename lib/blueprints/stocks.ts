@@ -23,30 +23,34 @@ import type { Blueprint } from './types';
  *
  * Change requires explicit user sign-off.
  */
+// ─────────────────────────────────────────────────────────────────────────
+// TEST PRIORITY-CORE — 8-name high-conviction portfolio (set 2026-06-25 on
+// explicit user sign-off). This REPLACES the prior diversified 29-name core
+// for a deliberately concentrated growth test. The 8 names span 3 sectors:
+//   tech_ai (4):  MU, QBTS, IONQ, MRVL   — semis/memory + quantum + AI-networking
+//   health  (3):  ABSI, ABCL, HELP        — AI-drug-discovery + antibody + Cybin
+//   industrial(1):ASTS                     — satellite direct-to-cell
+// Paired with: maxPositions 6→8 (params) and health sector-cap 2→3 (engine.ts
+// SECTOR_CAP_OVERRIDES) so all 8 can be held simultaneously (4+3+1).
+// HARD risk guards stay UNTOUCHED: daily kill-switch -3%, circuit-breaker
+// -20% from peak, price>SMA200 gate, sector-RS>0 gate, earnings blackout,
+// trailing stop 0.85. Reversal: `git revert` this commit → back to the safe
+// 29-name diversified core.
+// NB: this is the kursmål-free version — entries are driven by momentum +
+// entry-gates, NOT by the external price-target forecast table.
+// ─────────────────────────────────────────────────────────────────────────
 export const PRIORITY_CORE_BY_SECTOR: Readonly<Record<Sector, readonly string[]>> = {
-  // 10 AI / semis / quantum — full AI value chain
-  //   Compute:    NVDA, AVGO
-  //   Memory:     MU
-  //   Foundry:    TSM
-  //   Equipment:  ASML, AMAT
-  //   Software:   PLTR
-  //   Quantum:    QBTS, IONQ, QUBT
-  tech_ai: ['MU', 'NVDA', 'AVGO', 'TSM', 'ASML', 'AMAT', 'PLTR', 'QBTS', 'IONQ', 'QUBT'],
-  // 3 defensive consumer staples — recession-resistant cash flows
-  consumer: ['WMT', 'PG', 'MCD'],
-  // 3 health — managed-care defensive, rare-disease moat, AI-drug-discovery
-  health: ['UNH', 'VRTX', 'ABSI'],
-  // 3 energy — AI-power thesis (nuclear renaissance)
-  energy: ['CEG', 'TLN', 'OKLO'],
-  // 3 financial — payments duopoly, capital markets, large-bank
-  financial: ['V', 'MS', 'WFC'],
-  // 3 industrial — AI-power infra, space leader, defense-momentum
-  industrial: ['VRT', 'RKLB', 'KTOS'],
-  // 1 auto_ev — only TSLA in current watchlist; add RIVN/LCID/GM later if
-  // we want full 3-per-sector parity.
-  auto_ev: ['TSLA'],
-  // 3 telecom/media — streaming, gig leader, telco dividend
-  telecom_media: ['NFLX', 'UBER', 'VZ'],
+  // 4 AI / semis / quantum
+  tech_ai: ['MU', 'QBTS', 'IONQ', 'MRVL'],
+  consumer: [],
+  // 3 biotech — Absci (AI-drug-discovery), AbCellera (antibody), Cybin (HELP)
+  health: ['ABSI', 'ABCL', 'HELP'],
+  energy: [],
+  financial: [],
+  // 1 industrial — AST SpaceMobile (satellite-to-phone)
+  industrial: ['ASTS'],
+  auto_ev: [],
+  telecom_media: [],
 };
 
 export const PRIORITY_CORE_TICKERS: ReadonlySet<string> = new Set(
@@ -103,6 +107,10 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     // ASICs + optical DSP). Wider-watchlist (not priority-core); engine
     // treats it as a PATH B/C/D/F candidate per blueprint rules.
     'MRVL',
+    // Added 2026-06-25 — AbCellera, antibody-discovery biotech. Part of the
+    // 8-name TEST priority-core (see PRIORITY_CORE_BY_SECTOR). Engine treats
+    // it as a PATH E/F/G candidate per the priority-core rules.
+    'ABCL',
     // Promoted from pendingWatchlist 2026-06-16 — SpaceX IPO'd (SPCX on
     // Nasdaq), verified tradable on Alpaca. Wider-watchlist (not priority-
     // core). NOTE: as a fresh listing it has < 200 daily bars, so the
@@ -219,6 +227,7 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     HUT: 'Hut 8',
     // Added 2026-06-03.
     MRVL: 'Marvell Technology',
+    ABCL: 'AbCellera Biologics',
     // Pending IPO — name is also shown in the pending-IPOs strip in the UI,
     // but we keep the mapping here so a one-line promotion-to-active works.
     SPCX: 'SpaceX',
@@ -227,12 +236,13 @@ export const STOCKS_BLUEPRINT: Blueprint = {
     rsiOversold: 35,
     rsiOverbought: 65,
     riskPctPerTrade: 0.025, // Kelly 0.25–0.5
-    // Expanded 2026-05-12 from 3 → 6. Priority-core is now diversified
-    // across 8 sectors (10 in tech_ai, 3 in each other), so bucket no
-    // longer mirrors priority-core 1:1 — sector-cap (4 tech_ai, 2 elsewhere)
-    // shapes the final 6 holdings. Worst-case: 4 tech_ai + 2 from one
-    // other sector. Grok prompts for 5–6 picks per scan.
-    maxPositions: 6,
+    // History: 3 (initial) → 6 (2026-05-12) → 8 (2026-06-25 TEST).
+    // TEST 2026-06-25: raised 6→8 so all 8 test priority-core names can be
+    // held at once (tech_ai 4 + health 3 + industrial 1). Sector-cap
+    // (4 tech_ai, 3 health, 2 elsewhere — see engine.ts) shapes holdings.
+    // Revert to 6 with the rest of the test commit to restore the safe
+    // diversified 29-name config.
+    maxPositions: 8,
     // Top-conviction pick can still take up to 50 % of bucket. With 6
     // slots that means the rest split the other 50 %, ~10 % each on
     // average. Dynamic allocation guidance lives in the strategy text.
@@ -333,15 +343,16 @@ videre inn i neste uke. Fire jernregler:
    sektor-snittet vakler — det er navnets egen trend, ikke sektor-snittet
    alene, som avgjør om en vinner holdes.
 
-**Priority-core er primær eksponering, fordelt på 8 sektorer.** Pool på
-29 navn: 10 i tech_ai (MU, NVDA, AVGO, TSM, ASML, AMAT, PLTR, QBTS, IONQ,
-QUBT) + 3 i hver av consumer (WMT, PG, MCD), health (UNH, VRTX, ABSI),
-energy (CEG, TLN, OKLO), financial (V, MS, WFC), industrial (VRT, RKLB,
-KTOS), telecom_media (NFLX, UBER, VZ), og 1 i auto_ev (TSLA).
+**Priority-core er primær eksponering — TEST-portefølje på 8 navn (satt
+2026-06-25).** Konsentrert vekst-test som erstatter den tidligere 29-navns
+diversifiserte poolen. De 8: tech_ai (4) MU, QBTS, IONQ, MRVL; health (3)
+ABSI, ABCL, HELP (Cybin); industrial (1) ASTS. Målet er å holde ALLE 8
+samtidig når de kvalifiserer.
 
-Bucket holder maks 6 posisjoner. Sektor-cap binder ALLE picks inkludert
-priority-core: maks 4 i tech_ai, maks 2 i hver annen sektor. Worst-case
-fordeling: 4 tech_ai + 2 fra én annen sektor = 6. Engine sorterer top-up
+Bucket holder maks 8 posisjoner (hevet fra 6 for denne testen). Sektor-cap
+binder ALLE picks inkludert priority-core: maks 4 i tech_ai, maks 3 i health,
+maks 2 i hver annen sektor. Tiltenkt fordeling: 4 tech_ai + 3 health + 1
+industrial = 8. Engine sorterer top-up
 og BUY etter [priority-core, RS] — høyest RS innen priority-core får
 første dibs på top-up-budsjettet, så svake sektorer (RS < -10pp) blir
 automatisk underveietet selv om priority-core-flagget står.
@@ -444,7 +455,7 @@ Hvis PATH C er tilgjengelig på en ticker: bruk PATH C, ikke PATH B.
 ### PATH E — PRIORITY-CORE DIP-BUY ★★ HØYESTE PRIORITET
 Dette er den DYREESTE signal-typen vi har og skal **alltid** tas hardt.
 Engine flagger "priority_core_dip_signal=true" på candidate-snapshot når en
-av priority-core-tickerne (29 navn på tvers av 8 sektorer — se PRIORITY CORE TICKERS-blokken under) er i et sunt
+av priority-core-tickerne (8 navn — se PRIORITY CORE TICKERS-blokken under) er i et sunt
 pullback inne i en bekreftet uptrend:
 - Pris > SMA200 (strukturell uptrend intakt)
 - Pris/SMA50 ≥ 0.97 (ikke brutt kortsiktig støtte)
@@ -525,18 +536,15 @@ Prioriterings-rekkefølge oppdatert: **PATH E > PATH C > PATH D > PATH B > PATH 
 - relative_strength_30d < -5 pp: ALDRI KJØP (strukturell laggard, filter avviser).
 - days_to_earnings ≤ 3: ALDRI KJØP (binær gambling).
 
-### PRIORITY CORE TICKERS ★ (user-curated, 29 navn på tvers av 8 sektorer)
-Brukeren har eksplisitt utpekt disse 29 navnene som strategien skal
-favorisere når de møter en av entry-pathene:
+### PRIORITY CORE TICKERS ★ (TEST-portefølje, 8 navn på tvers av 3 sektorer)
+Brukeren har eksplisitt utpekt disse 8 navnene (2026-06-25) som strategien
+skal favorisere når de møter en av entry-pathene. Dette er en bevisst
+konsentrert vekst-test som erstatter den tidligere 29-navns diversifiserte
+poolen:
 
-  **tech_ai (10):** MU, NVDA, AVGO, TSM, ASML, AMAT, PLTR, QBTS, IONQ, QUBT
-  **consumer (3):** WMT, PG, MCD
-  **health (3):** UNH, VRTX, ABSI
-  **energy (3):** CEG, TLN, OKLO
-  **financial (3):** V, MS, WFC
-  **industrial (3):** VRT, RKLB, KTOS
-  **auto_ev (1):** TSLA
-  **telecom_media (3):** NFLX, UBER, VZ
+  **tech_ai (4):** MU, QBTS, IONQ, MRVL
+  **health (3):** ABSI, ABCL, HELP (Cybin)
+  **industrial (1):** ASTS
 
 Når en av dem kvalifiserer på PATH C/D/E/F/G, skal den prioriteres foran
 andre kandidater med tilsvarende eller lavere RS. Konkret regel ved tied/
@@ -544,27 +552,28 @@ nær-tied scoring (≤ 3 score-poeng spread): priority-core vinner sloten.
 
 Dette OVERSTYRER IKKE harde filter — priority-core må fortsatt passere
 SMA200, earnings-blackout, RSI < 75, structural-laggard-check, OG sektor-
-RS > -10pp (PATH G sektor-bear-circuit-breaker, NY). Hvis hele sektoren
+RS > -10pp (PATH G sektor-bear-circuit-breaker). Hvis hele sektoren
 til en priority-core trailer SPY med mer enn 10pp over 30d, sviktes
 PATH G — selv priority-core kan ikke kjøpes inn i en kollapsende sektor.
+Kursmål/prognoser styrer IKKE entry — kun momentum + entry-gates.
 
-Logikk: vi vil ikke at engine konsentrer hele bucketen i ett tema som
-kan bryte sammen samtidig (f.eks. AI/quantum-narrativ). Diversifisert
-priority-core med sektor-RS-guard gir oss konsentrasjon der det er
-medvind og automatisk avlastning der det er motvind.
+Logikk: dette er en høy-konviksjons konsentrert test for ekstrem vekst.
+Sektor-cap (4 tech_ai, 3 health, 1 industrial = 8) lar oss holde alle 8
+samtidig, mens harde filtre + daglig kill-switch (-3 %) + circuit-breaker
+(-20 % fra topp) + trailing stop fortsatt begrenser nedsiden.
 
-### PRIORITERINGSREGEL FOR LEADERS — 5-6 PICKS, PRIORITY-CORE TUNGT
+### PRIORITERINGSREGEL FOR LEADERS — INNTIL 8 PICKS, PRIORITY-CORE TUNGT
 
-★★★ KJERNEPRINSIPP: **De 6 valgte SKAL være de med BEST FORVENTET REKYL.**
-Priority-core er en POOL på 29 — ikke en handle-liste. Du skal selektere
-de 6 som har høyest sannsynlighet for kraftig opp-bevegelse de neste
-dagene/ukene. Det er IKKE de første 6 alfabetisk, IKKE de 6 du valgte
-sist scan, og IKKE bare de med høyest RS — det er de 6 som kombinerer
+★★★ KJERNEPRINSIPP: **De valgte SKAL være de med BEST FORVENTET REKYL.**
+Priority-core er en POOL på 8 — ikke en blind handle-liste. Du skal selektere
+de som har høyest sannsynlighet for kraftig opp-bevegelse de neste
+dagene/ukene. Det er IKKE de første alfabetisk, IKKE de du valgte
+sist scan, og IKKE bare de med høyest RS — det er de som kombinerer
 beste setup på tvers av disse rekyl-indikatorene:
 
 1. **priority_core_dip_signal=true** — engine sier ticker er i et sunt
    pullback i strukturell uptrend. Dette er det sterkeste rekyl-signalet
-   vi har. Hvis 4-6 priority-core har dip_signal=true samtidig — fyll
+   vi har. Hvis flere priority-core har dip_signal=true samtidig — fyll
    ALLE slottene med dem (innen sektor-cap).
 2. **Bullish RSI-divergens** — pris faller, men RSI stiger = selgere
    går tom, rekyl nær forestående.
@@ -589,9 +598,9 @@ Hvis færre enn 6 priority-core viser rekyl-setup, fyll resten med:
 - Andre priority-core som er HOLDes (vi vil ikke selge for tidlig)
 - Sekundær-leaders (SMCI, META, MSFT, CRDO, COHR) som viser rekyl-setup
 
-Bucket har 6 slots. Respekt sektor-cap (maks 4 tech_ai, maks 2 per annen
-sektor) og PATH G sektor-bear-blokk (sektor-RS < -10pp = ingen BUY i
-den sektoren, selv på priority-core).
+Bucket har 8 slots. Respekt sektor-cap (maks 4 tech_ai, maks 3 health,
+maks 2 per annen sektor) og PATH G sektor-bear-blokk (sektor-RS < -10pp =
+ingen BUY i den sektoren, selv på priority-core).
 
 Hierarki for slot-fylling:
 1. **PATH E (priority_core_dip_signal=true) — TOPP-SLOT(ER), 25-35 % alloc**
@@ -721,17 +730,19 @@ news-akselerasjon) — vent på bekreftelse. Disse faktorene skaper ALDRI
 en BUY på en ticker som feiler de harde filtrene.
 
 ## 4. HIGH-CONVICTION FILTER
-- Velg 5–6 tickers per scan (utvidet fra 3 — 2026-05-12).
-- Maks 6 posisjoner samtidig (STRENG REGEL).
+- Velg inntil 8 tickers per scan (TEST-portefølje — 2026-06-25).
+- Maks 8 posisjoner samtidig (STRENG REGEL).
 - Diversifisering: sektor-cap binder ALLE picks (priority-core inkludert).
-  Maks 4 i tech_ai, maks 2 per annen sektor.
-- Dynamisk allokering for 5-6 picks:
-  - 25–30 % til #1 (høyest score, typisk PATH E priority-core)
-  - 18–22 % til #2
-  - 15–18 % til #3
-  - 12–15 % til #4
-  - 8–12 % til #5
-  - 6–10 % til #6 (hvis 6 picks)
+  Maks 4 i tech_ai, maks 3 health, maks 2 per annen sektor.
+- Dynamisk allokering for inntil 8 picks (vekt etter score, summer til ~100 %):
+  - 18–24 % til #1 (høyest score, typisk PATH E priority-core)
+  - 14–18 % til #2
+  - 12–15 % til #3
+  - 10–13 % til #4
+  - 9–12 % til #5
+  - 8–11 % til #6
+  - 7–10 % til #7
+  - 6–9 % til #8 (hvis 8 picks)
 
 ## 5. REALLOKERING & EXECUTION
 - Hvis ny ticker har > 10 poeng høyere score enn laveste i porteføljen → SELG laveste og KJØP nye.
