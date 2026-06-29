@@ -5,6 +5,10 @@ export const MAX_ALLOWLIST_EMAILS: readonly string[] = [
   'andreas.lonvik@gmail.com',
   'andreas.lonvik@icloud.com',
   'p.lonvik@gmail.com',
+  // Beta users added 2026-06-29 — granted both Plus + Max (regular users,
+  // not admins; see ADMIN_EMAILS below).
+  'hakkebo@icloud.com', // Jan Hakkebo
+  'eivindrodal@gmail.com', // Eivind Rodal
 ];
 
 /**
