@@ -1,4 +1,5 @@
 import { detectMarketingLang } from '@/lib/i18n/detect-lang';
+import { getLeaderMarketingStats } from '@/lib/marketing-stats';
 import { InnsynClient } from './innsyn-client';
 
 /**
@@ -17,6 +18,9 @@ export const metadata = {
 };
 
 export default async function InnsynPage() {
-  const lang = await detectMarketingLang();
-  return <InnsynClient initialLang={lang} />;
+  const [lang, stats] = await Promise.all([
+    detectMarketingLang(),
+    getLeaderMarketingStats(),
+  ]);
+  return <InnsynClient initialLang={lang} stats={stats} />;
 }

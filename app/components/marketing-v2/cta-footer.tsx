@@ -3,6 +3,7 @@
 import Image from 'next/image';
 import Link from 'next/link';
 import type { Lang } from '../marketing/types';
+import { LEGAL_LINES, FOOTER_BASELINE } from '@/lib/legal-copy';
 import { ArrowRight } from './icons';
 
 const CTA_COPY: Record<Lang, {
@@ -13,41 +14,41 @@ const CTA_COPY: Record<Lang, {
   sub: string;
   cta1: string;
   cta2: string;
-  foot: [string, string, string];
+  riskLink: string;
+  maxLink: string;
 }> = {
   no: {
     eye: 'KOM I GANG',
-    titlePre: 'Begynn med ',
-    titleEm:  'Apex Quantum +',
+    titlePre: 'Tallene taler. ',
+    titleEm:  'Dag for dag',
     titlePost: '.',
-    sub: 'Daglige AI-signaler med begrunnelse, ukentlige rapporter og strukturert læring — for 199 kr/mnd. Den fullautomatiske Max-motoren kommer i 2026.',
-    cta1: 'Start nå',
-    cta2: 'Varsle meg om Max',
-    foot: ['Fra 199 kr/mnd', 'Ingen binding', 'Apex Quantum Max — under utvikling'],
+    sub: 'Fra 199 kr/mnd. Ingen binding. Alle resultater dokumentert.',
+    cta1: 'Kom i gang',
+    cta2: 'Se resultatene →',
+    riskLink: 'Les risikofaktorene først →',
+    maxLink: 'Apex Quantum Max — til ventelisten →',
   },
   en: {
     eye: 'GET STARTED',
-    titlePre: 'Begin with ',
-    titleEm:  'Apex Quantum +',
+    titlePre: 'The numbers speak. ',
+    titleEm:  'Day by day',
     titlePost: '.',
-    sub: 'Daily AI signals with reasoning, weekly reports and structured learning — for $19/month. The fully autonomous Max engine launches in 2026.',
-    cta1: 'Start now',
-    cta2: 'Notify me about Max',
-    foot: ['From $19/month', 'No commitment', 'Apex Quantum Max — in development'],
+    sub: 'From $19/month. No commitment. Every result documented.',
+    cta1: 'Get started',
+    cta2: 'See the results →',
+    riskLink: 'Read the risk factors first →',
+    maxLink: 'Apex Quantum Max — join the waitlist →',
   },
 };
 
 type FooterCol = readonly [heading: string, items: ReadonlyArray<readonly [label: string, href: string]>];
 
 const FOOTER_COPY: Record<Lang, {
-  disc: string;
   cols: ReadonlyArray<FooterCol>;
-  systemOk: string;
-  rights: string;
+  statusLink: string;
   orgLabel: string;
 }> = {
   no: {
-    disc: 'Apex Quantum er en AI-drevet analyseplattform. Handel innebærer risiko. Tidligere resultater er ingen garanti for fremtidige resultater.',
     cols: [
       ['Produkt', [
         ['Apex Quantum +', '/plus'],
@@ -59,6 +60,7 @@ const FOOTER_COPY: Record<Lang, {
         ['Om oss', '/om-oss'],
         ['Blogg', '/blogg'],
         ['Kontakt', '/kontakt'],
+        ['Innsyn', '/innsyn'],
         ['Status', '/status'],
       ]],
       ['Juridisk', [
@@ -68,12 +70,10 @@ const FOOTER_COPY: Record<Lang, {
         ['Cookies', '/cookies'],
       ]],
     ],
-    systemOk: 'System OK',
-    rights: 'Alle rettigheter forbeholdt',
+    statusLink: 'Systemstatus →',
     orgLabel: 'Org.nr',
   },
   en: {
-    disc: 'Apex Quantum is an AI-powered analysis platform. Trading involves risk. Past performance is not a guarantee of future results.',
     cols: [
       ['Product', [
         ['Apex Quantum +', '/plus'],
@@ -85,6 +85,7 @@ const FOOTER_COPY: Record<Lang, {
         ['About', '/om-oss'],
         ['Blog', '/blogg'],
         ['Contact', '/kontakt'],
+        ['Transparency', '/innsyn'],
         ['Status', '/status'],
       ]],
       ['Legal', [
@@ -94,8 +95,7 @@ const FOOTER_COPY: Record<Lang, {
         ['Cookies', '/cookies'],
       ]],
     ],
-    systemOk: 'System OK',
-    rights: 'All rights reserved',
+    statusLink: 'System status →',
     orgLabel: 'Org. no',
   },
 };
@@ -103,7 +103,7 @@ const FOOTER_COPY: Record<Lang, {
 export function CTAV2({ lang }: { lang: Lang }) {
   const t = CTA_COPY[lang];
   return (
-    <section id="cta" className="cta">
+    <section id="cta" className="cta" data-reveal>
       <div className="container">
         <div className="cta-inner">
           <span className="eyebrow"><span className="rule" />{t.eye}</span>
@@ -111,14 +111,12 @@ export function CTAV2({ lang }: { lang: Lang }) {
           <p>{t.sub}</p>
           <div className="cta-row">
             <Link href="/sign-up" className="btn btn-gold btn-lg">{t.cta1} <ArrowRight size={16} /></Link>
-            <a href="mailto:post@apex-quantum.com?subject=Apex%20Quantum%20Max%20%E2%80%94%20notify%20me" className="btn btn-ghost btn-lg">{t.cta2}</a>
+            <a href="#record" className="btn btn-ghost btn-lg">{t.cta2}</a>
           </div>
-          <div style={{ marginTop: 28, display: 'flex', gap: 18, justifyContent: 'center', flexWrap: 'wrap', fontFamily: 'var(--aq-font-mono)', fontSize: 11, letterSpacing: '0.12em', color: 'var(--aq-muted)', textTransform: 'uppercase' }}>
-            <span>{t.foot[0]}</span>
-            <span>·</span>
-            <span>{t.foot[1]}</span>
-            <span>·</span>
-            <span>{t.foot[2]}</span>
+          {/* Mikrolenker: risikofaktorer først — et tillitsgrep (§8-07) */}
+          <div className="cta-micro">
+            <Link href="/risikofaktorer">{t.riskLink}</Link>
+            <a href="#venteliste">{t.maxLink}</a>
           </div>
         </div>
       </div>
@@ -128,6 +126,7 @@ export function CTAV2({ lang }: { lang: Lang }) {
 
 export function FooterV2({ lang }: { lang: Lang }) {
   const t = FOOTER_COPY[lang];
+  const lines = LEGAL_LINES[lang];
   return (
     <footer className="footer">
       <div className="container">
@@ -139,8 +138,10 @@ export function FooterV2({ lang }: { lang: Lang }) {
               </div>
               <span className="brand-wm"><span className="quiet">Apex</span> <span className="gold">Quantum</span></span>
             </Link>
-            <p>{t.disc}</p>
-            <span className="aqv2-tag gold"><span className="aqv2-dot" />{t.systemOk}</span>
+            {/* L4 + L5 fra lib/legal-copy — footer og hero-tall peker på samme kilde */}
+            <p>{lines.l4} {lines.l5}</p>
+            {/* Ingen umålte påstander: «System OK» erstattet av lenke til /status */}
+            <Link href="/status" className="footer-status">{t.statusLink}</Link>
           </div>
           <div className="footer-cols">
             {t.cols.map(([h, items]) => (
@@ -158,7 +159,7 @@ export function FooterV2({ lang }: { lang: Lang }) {
           </div>
         </div>
         <div className="footer-base">
-          <span>© {new Date().getFullYear()} Apex Quantum AS · {t.orgLabel} 921 269 962 · {t.rights}</span>
+          <span>© {new Date().getFullYear()} Apex Quantum AS · {t.orgLabel} 921 269 962 · {FOOTER_BASELINE[lang]}</span>
           <span>apex-quantum.com</span>
         </div>
       </div>

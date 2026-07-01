@@ -21,6 +21,7 @@ import { GrokThesisCard } from './components/grok-thesis-card';
 import { PendingIposCard } from './components/pending-ipos-card';
 import type { Currency, Lang } from './components/i18n';
 import { BLUEPRINTS, type AssetClass } from '@/lib/blueprints';
+import { StatusLine } from '@/app/components/terminal/statusline';
 import '../components/marketing-v2/styles.css';
 
 const BLUEPRINT_TITLES: Record<AssetClass, { no: string; en: string }> = {
@@ -136,6 +137,9 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
   const [wdOpen, setWdOpen] = useState(false);
   const [wdStatus, setWdStatus] = useState<WithdrawStatus>('idle');
   const [wdError, setWdError] = useState<string | undefined>();
+  // Ekte siste-synk-tidsstempel til Statuslinjen (§5.6) — settes kun
+  // når en datahenting faktisk lyktes.
+  const [lastSync, setLastSync] = useState<string | null>(null);
   const tickerRef = useRef<NodeJS.Timeout | null>(null);
 
   // Hydrate display-currency preference from localStorage on mount. Default
@@ -195,6 +199,9 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
       if (perfRes?.current) setPerformance(perfRes);
       if (Array.isArray(posRes?.positions)) setPositions(posRes.positions as AlpacaPositionPayload[]);
       if (Array.isArray(ordRes?.orders)) setOrders(ordRes.orders as RecentOrder[]);
+      if (perfRes?.current || Array.isArray(posRes?.positions) || Array.isArray(ordRes?.orders)) {
+        setLastSync(new Date().toLocaleTimeString('en-GB', { hour12: false }));
+      }
     } catch {
       /* soft-fail; next tick will retry */
     }
@@ -487,7 +494,7 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
             <h2 className="grad" style={{ fontSize: 28, fontWeight: 700, marginBottom: 12 }}>
               {lang === 'no' ? 'Ikke tilkoblet' : 'Not connected'}
             </h2>
-            <p style={{ color: 'rgba(255,255,255,0.62)', marginBottom: 24, lineHeight: 1.6 }}>
+            <p style={{ color: 'var(--aq-text-mid)', marginBottom: 24, lineHeight: 1.6 }}>
               {lang === 'no'
                 ? 'Du må koble til din Alpaca-konto for å bruke Apex Quantum.'
                 : 'Connect your Alpaca account to start using Apex Quantum.'}
@@ -539,6 +546,7 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
               sp500Points={sp500Points}
               nasdaqPoints={nasdaqPoints}
               xTicks={chartTicks}
+              lang={lang}
             />
             <ChartSummary
               lang={lang}
@@ -551,15 +559,16 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
             />
           </div>
 
-          {/* 4-stat row */}
+          {/* 4-stat row — treffprosent og Sharpe måles ikke i dag; null
+              rendres som «—» (ærlig tomhet, §5.7). Aldri fabrikkerte tall. */}
           <BottomStats
             lang={lang}
             positionsOpen={positions.length}
             avgHoldMinutes={null}
-            hitRatePct={73.4}
+            hitRatePct={null}
             totalTrades={orders.length}
             maxLossPct={drawdownPct === 0 ? 0 : -Math.abs(drawdownPct)}
-            sharpe={4.12}
+            sharpe={null}
             sim={mode === 'sim'}
             thinData
           />
@@ -665,6 +674,17 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
           <RecentOrders lang={lang} orders={orders} />
         </div>
       </main>
+      <StatusLine
+        lang={lang}
+        lastSync={lastSync}
+        modeOverride={
+          mode === 'live'
+            ? lang === 'no'
+              ? 'LIVE TRADING · REELL KAPITAL'
+              : 'LIVE TRADING · REAL CAPITAL'
+            : undefined
+        }
+      />
       <WithdrawModal
         open={wdOpen}
         lang={lang}

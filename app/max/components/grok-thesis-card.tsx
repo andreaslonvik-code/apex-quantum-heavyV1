@@ -213,7 +213,7 @@ export function GrokThesisCard({ lang, isAdmin = false }: Props) {
       </div>
 
       {!loaded ? null : !hasAny ? (
-        <div style={{ padding: '12px 4px', color: 'rgba(255,255,255,0.55)', fontSize: 13 }}>
+        <div style={{ padding: '12px 4px', color: 'var(--aq-muted)', fontSize: 13 }}>
           {t.none}
         </div>
       ) : (
@@ -225,8 +225,8 @@ export function GrokThesisCard({ lang, isAdmin = false }: Props) {
               <div
                 key={id}
                 style={{
-                  background: 'rgba(255,255,255,0.03)',
-                  border: '1px solid rgba(255,255,255,0.06)',
+                  background: 'var(--aq-surface-2)',
+                  border: '1px solid var(--aq-border-soft)',
                   borderRadius: 10,
                   padding: '10px 12px',
                   display: 'flex',
@@ -247,7 +247,7 @@ export function GrokThesisCard({ lang, isAdmin = false }: Props) {
                     style={{
                       fontFamily: 'var(--font-jetbrains)',
                       fontSize: 11,
-                      color: 'rgba(255,255,255,0.45)',
+                      color: 'var(--aq-muted)',
                     }}
                   >
                     {t.decided} {fmtAge(row.decidedAt, lang)}
@@ -261,7 +261,7 @@ export function GrokThesisCard({ lang, isAdmin = false }: Props) {
                 ) : (
                   <>
                     {row.thesis && (
-                      <div style={{ fontSize: 12.5, color: 'rgba(255,255,255,0.78)', lineHeight: 1.5 }}>
+                      <div style={{ fontSize: 12.5, color: 'var(--aq-text-mid)', lineHeight: 1.5 }}>
                         {row.thesis}
                       </div>
                     )}
@@ -285,7 +285,7 @@ export function GrokThesisCard({ lang, isAdmin = false }: Props) {
                                   ? { label: 'HOPP', color: 'var(--aq-warn)' }
                                   : d.action === 'HOLD'
                                     ? null
-                                    : { label: '…', color: 'rgba(255,255,255,0.4)' };
+                                    : { label: '…', color: 'var(--aq-faint)' };
                           return (
                             <div
                               key={`${d.ticker}-${i}`}
@@ -309,7 +309,7 @@ export function GrokThesisCard({ lang, isAdmin = false }: Props) {
                                       ? 'var(--aq-green)'
                                       : d.action === 'SELL'
                                         ? 'var(--aq-red)'
-                                        : 'rgba(255,255,255,0.5)',
+                                        : 'var(--aq-muted)',
                                 }}
                               >
                                 {t.actions[d.action]}
@@ -326,7 +326,7 @@ export function GrokThesisCard({ lang, isAdmin = false }: Props) {
                               >
                                 {statusBadge?.label ?? ''}
                               </span>
-                              <span style={{ color: 'rgba(255,255,255,0.65)' }}>
+                              <span style={{ color: 'var(--aq-text-mid)' }}>
                                 {outcome?.error
                                   ? `${d.reason} — ${outcome.error.slice(0, 80)}`
                                   : status === 'SKIP' && outcome?.reason

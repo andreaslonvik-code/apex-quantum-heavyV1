@@ -1,0 +1,577 @@
+/* ============================================================
+   PLUS-DASHBOARD — «Hovedboken»-foredling (§10 /dashboard)
+   Lastes ETTER marketing-v2/styles.css (import-rekkefølge i
+   plus-dashboard-client.tsx). Kun var(--aq-*)-tokens fra :root —
+   ingen hardkodede hex. Overstyrer gjenværende legacy-farger fra
+   globals.css (.aqp-*) og stale tokenverdier i .aqv2-dash-scopet.
+   ============================================================ */
+
+/* ---- (a) Token-reanker: .aqv2-dash i styles.css definerer eldre
+       verdier for text-mid/muted/border-hi — :root er kanonisk. ---- */
+.aqv2-dash {
+  --aq-text-mid: rgba(240, 230, 210, 0.72);
+  --aq-muted: rgba(240, 230, 210, 0.56);
+  --aq-border-hi: rgba(240, 230, 210, 0.16);
+}
+
+/* ---- Chrome: sidebar, mobile-toggle, nav-badge ---- */
+.aqv2-dash .aqp-sidebar {
+  background: linear-gradient(180deg, var(--aq-ink-deep), var(--aq-ink));
+  border-right-color: var(--aq-border);
+}
+.aqv2-dash .aqp-mobile-toggle {
+  background: var(--aq-ink-deep);
+  border-color: var(--aq-border);
+  border-radius: 4px;
+  color: var(--aq-text);
+}
+.aqv2-dash .aqp-nav-item.is-active {
+  border-color: transparent;
+}
+.aqv2-dash .aqp-nav-badge--count,
+.aqv2-dash .aqp-nav-item.is-active .aqp-nav-badge--count {
+  background: var(--aq-cyan-tint);
+  color: var(--aq-cyan-hi);
+  border-color: var(--aq-cyan-deep);
+}
+.aqv2-dash .aqp-user-name { color: var(--aq-text); }
+.aqv2-dash .aqp-lang { color: var(--aq-muted); }
+.aqv2-dash .aqp-lang:hover { color: var(--aq-text); }
+
+/* ---- Gullbudsjett (§13.4): Max-kortet i sidebaren er sidens ene
+       gullflate; Gullsnittet på dagens viktigste signal er linjen.
+       Øvrige gull-aksenter i innholdet dempes til muted. ---- */
+.aqv2-dash .m-eyebrow { color: var(--aq-muted); }
+.aqv2-dash .m-badge-dot {
+  background: var(--aq-muted);
+  box-shadow: none;
+  animation: none;
+}
+.aqv2-dash .aqp-summary-eye,
+.aqv2-dash .aqp-track-eye,
+.aqv2-dash .aqp-extra-label,
+.aqv2-dash .aqp-journal-date,
+.aqv2-dash .aqp-answer-eye { color: var(--aq-muted); }
+.aqv2-dash .aqp-cadence::before { display: none; }
+
+/* ---- Morgenutgaven i page-head (§10b) ---- */
+.aqv2-dash .aqp-edition-row { margin: 10px 0 2px; }
+
+/* ---- «Dagens bilde» (§10d) — record-stat-stil, kun målte tall ---- */
+.aqv2-dash .aqp-daybar {
+  border-top: 1px solid var(--aq-border);
+  border-bottom: 1px solid var(--aq-border);
+  padding: 16px 0 18px;
+  margin: 0 0 20px;
+}
+.aqv2-dash .aqp-daybar-eye {
+  font-family: var(--aq-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--aq-muted);
+  margin-bottom: 14px;
+}
+.aqv2-dash .aqp-daybar-stats {
+  display: flex;
+  gap: 24px 56px;
+  flex-wrap: wrap;
+}
+.aqv2-dash .aqp-daybar-num {
+  font-family: var(--aq-font-serif);
+  font-weight: 400;
+  font-size: 28px;
+  line-height: 1;
+  color: var(--aq-text);
+  font-variant-numeric: tabular-nums;
+  font-variation-settings: "opsz" 48, "SOFT" 40;
+}
+.aqv2-dash .aqp-daybar-key {
+  font-family: var(--aq-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--aq-muted);
+  margin-top: 6px;
+}
+
+/* ---- (c) Signalkort-anatomi ---- */
+.aqv2-dash .aqp-signal-card {
+  background: var(--aq-surface-2);
+  border-color: var(--aq-border);
+  border-radius: 8px;
+}
+.aqv2-dash .aqp-signal-card:hover { border-color: var(--aq-border-hi); }
+.aqv2-dash .aqp-signal-card--buy {
+  border-color: var(--aq-up-tint);
+  background: var(--aq-surface-2);
+}
+.aqv2-dash .aqp-signal-card--sell { border-color: var(--aq-down-tint); }
+.aqv2-dash .aqp-signal-card--hold { border-color: var(--aq-border); }
+.aqv2-dash .aqp-signal-card--watch { border-color: var(--aq-cyan-tint); }
+.aqv2-dash .aqp-signal-card--owned {
+  border-color: var(--aq-cyan-deep);
+  box-shadow: none;
+}
+.aqv2-dash .aqp-signal-card--owned::before {
+  background: linear-gradient(180deg, var(--aq-cyan), transparent);
+  opacity: 0.6;
+}
+
+/* Gullsnittet (§5.4) — KUN på dagens viktigste signal. */
+.aqv2-dash .aqp-signal-card--lead { position: relative; }
+.aqv2-dash .aqp-signal-card--lead::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: var(--aq-hairline-grad);
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* Handlings-tags: KJØP up-tint / SELG down-tint / HOLD dempet —
+   mono 10.5 uppercase, radius 2 (§10c). */
+.aqv2-dash .aqp-action-pill {
+  font-family: var(--aq-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border-radius: 2px;
+}
+.aqv2-dash .aqp-action-pill--buy {
+  background: var(--aq-up-tint);
+  color: var(--aq-up-hi);
+  border-color: var(--aq-up);
+}
+.aqv2-dash .aqp-action-pill--sell {
+  background: var(--aq-down-tint);
+  color: var(--aq-down-hi);
+  border-color: var(--aq-down);
+}
+.aqv2-dash .aqp-action-pill--hold {
+  background: var(--aq-surface);
+  color: var(--aq-muted);
+  border-color: var(--aq-border);
+}
+.aqv2-dash .aqp-action-pill--watch {
+  background: var(--aq-cyan-tint);
+  color: var(--aq-cyan-hi);
+  border-color: var(--aq-cyan-deep);
+}
+.aqv2-dash .aqp-action-pill--lg {
+  background: var(--aq-up-tint);
+  border-color: var(--aq-up);
+  box-shadow: none; /* glow er forbudt (§13.3) */
+}
+
+/* Konfidens-dots — semantiske tokens, ingen glow. */
+.aqv2-dash .aqp-confidence-dot--high { background: var(--aq-up); box-shadow: none; }
+.aqv2-dash .aqp-confidence-dot--med { background: var(--aq-warn); box-shadow: none; }
+.aqv2-dash .aqp-confidence-dot--low { background: var(--aq-faint); box-shadow: none; }
+
+/* Eierskaps-toggle. */
+.aqv2-dash .aqp-owned-toggle {
+  font-family: var(--aq-font-mono);
+  color: var(--aq-muted);
+  border-radius: 2px;
+}
+.aqv2-dash .aqp-owned-toggle:hover {
+  color: var(--aq-text);
+  border-color: var(--aq-border-hi);
+}
+.aqv2-dash .aqp-owned-toggle.is-on {
+  background: var(--aq-cyan-tint);
+  color: var(--aq-cyan-hi);
+  border-color: var(--aq-cyan-deep);
+}
+
+/* Prisrad — tabular, opp/ned alltid i -hi mot ink (§3). */
+.aqv2-dash .aqp-price-row {
+  background: var(--aq-surface-2);
+  border-color: var(--aq-border);
+  border-radius: 4px;
+}
+.aqv2-dash .aqp-price-label {
+  background: var(--aq-cyan-tint);
+  color: var(--aq-cyan-hi);
+  border-radius: 2px;
+}
+.aqv2-dash .aqp-price-day.is-up { color: var(--aq-up-hi); }
+.aqv2-dash .aqp-price-day.is-down { color: var(--aq-down-hi); }
+.aqv2-dash .aqp-price-since.is-up { background: var(--aq-up-tint); color: var(--aq-up-hi); }
+.aqv2-dash .aqp-price-since.is-down { background: var(--aq-down-tint); color: var(--aq-down-hi); }
+
+/* Action-mix — semantiske tall. */
+.aqv2-dash .aqp-action-mix {
+  background: transparent;
+  border-color: var(--aq-border);
+  border-radius: 6px;
+}
+.aqv2-dash .aqp-action-mix-stat--buy .aqp-action-mix-num { color: var(--aq-up-hi); }
+.aqv2-dash .aqp-action-mix-stat--sell .aqp-action-mix-num { color: var(--aq-down-hi); }
+.aqv2-dash .aqp-action-mix-stat--hold .aqp-action-mix-num { color: var(--aq-muted); }
+.aqv2-dash .aqp-action-mix-stat--watch .aqp-action-mix-num { color: var(--aq-cyan-hi); }
+
+/* Filterchips — .is-on-tilstanden (globals bruker legacy-cyan). */
+.aqv2-dash .aqp-filter-row button.is-on {
+  background: var(--aq-cyan-tint);
+  border-color: var(--aq-cyan);
+  color: var(--aq-cyan-hi);
+}
+.aqv2-dash .aqp-filter-row button.is-on .aqp-chip-count {
+  background: var(--aq-cyan-tint);
+  color: var(--aq-cyan-hi);
+}
+.aqv2-dash .aqp-chip--buy.is-on { background: var(--aq-up-tint); border-color: var(--aq-up); color: var(--aq-up-hi); }
+.aqv2-dash .aqp-chip--sell.is-on { background: var(--aq-down-tint); border-color: var(--aq-down); color: var(--aq-down-hi); }
+.aqv2-dash .aqp-chip--hold.is-on { background: var(--aq-surface-hi); border-color: var(--aq-border-hi); color: var(--aq-text-mid); }
+.aqv2-dash .aqp-chip--watch.is-on { background: var(--aq-cyan-tint); border-color: var(--aq-cyan-deep); color: var(--aq-cyan-hi); }
+.aqv2-dash .aqp-chip--conviction.is-on { background: var(--aq-up-tint); border-color: var(--aq-up); color: var(--aq-up-hi); }
+
+/* Track-record — tall i -hi (tekst), (e) breakpoints under. */
+.aqv2-dash .aqp-track-num--win { color: var(--aq-up-hi); }
+.aqv2-dash .aqp-track-num--loss { color: var(--aq-down-hi); }
+
+/* ---- Ticker-modal ---- */
+.aqv2-dash .aqp-modal-close {
+  background: var(--aq-surface);
+  color: var(--aq-muted);
+  border-radius: 4px;
+}
+.aqv2-dash .aqp-modal-close:hover { background: var(--aq-surface-hi); color: var(--aq-text); }
+.aqv2-dash .aqp-modal-price-change.is-up { color: var(--aq-up-hi); }
+.aqv2-dash .aqp-modal-price-change.is-down { color: var(--aq-down-hi); }
+.aqv2-dash .aqp-modal-signal-conf { color: var(--aq-text-mid); }
+.aqv2-dash .aqp-modal-signal-reason { color: var(--aq-text-mid); }
+.aqv2-dash .aqp-modal-chart {
+  background: var(--aq-surface-2);
+  border-color: var(--aq-border);
+  border-radius: 8px;
+}
+.aqv2-dash .aqp-modal-signal-row {
+  background: var(--aq-surface-2);
+  border-color: var(--aq-border);
+  border-radius: 6px;
+}
+
+/* ---- Spør AI ---- */
+.aqv2-dash .aqp-picked {
+  background: var(--aq-cyan-tint);
+  border-color: var(--aq-cyan-deep);
+  border-radius: 4px;
+}
+.aqv2-dash .aqp-picked-tk { color: var(--aq-cyan-hi); }
+.aqv2-dash .aqp-picked-x { color: var(--aq-muted); }
+
+/* ---- Watchlist ---- */
+.aqv2-dash .aqp-watch-theme { background: var(--aq-cyan-tint); color: var(--aq-cyan-hi); }
+.aqv2-dash .aqp-watch-region { background: var(--aq-surface); color: var(--aq-muted); }
+
+/* ---- Læring ---- */
+.aqv2-dash .aqp-module-min {
+  font-size: 10px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--aq-muted);
+  margin-bottom: 8px;
+}
+.aqv2-dash .aqp-module-sum {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--aq-text-mid);
+}
+.aqv2-dash .aqp-module-soon {
+  background: var(--aq-surface);
+  border-color: var(--aq-border);
+  color: var(--aq-muted);
+}
+.aqv2-dash .aqp-module-soon--done {
+  background: var(--aq-up-tint);
+  border-color: var(--aq-up);
+  color: var(--aq-up-hi);
+}
+.aqv2-dash .aqp-module-soon--start {
+  background: var(--aq-cyan-tint);
+  border-color: var(--aq-cyan-deep);
+  color: var(--aq-cyan-hi);
+}
+.aqv2-dash .aqp-module-card--clickable:hover {
+  border-color: var(--aq-border-hi);
+  background: var(--aq-surface);
+}
+.aqv2-dash .aqp-lang-note {
+  background: var(--aq-warn-tint);
+  border: 1px solid var(--aq-warn);
+  color: var(--aq-warn);
+}
+
+/* ---- Rapporter / journal — redaksjonell type, parchment-tekst ---- */
+.aqv2-dash .aqp-report-card {
+  background: var(--aq-surface-2);
+  border-color: var(--aq-border);
+  border-radius: 8px;
+}
+.aqv2-dash .aqp-report-title {
+  font-family: var(--aq-font-serif);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  color: var(--aq-text);
+  font-variation-settings: "opsz" 96, "SOFT" 40;
+}
+.aqv2-dash .aqp-report-h1,
+.aqv2-dash .aqp-report-h2,
+.aqv2-dash .aqp-report-h3 {
+  font-family: var(--aq-font-serif);
+  font-weight: 400;
+  color: var(--aq-text);
+  font-variation-settings: "opsz" 48, "SOFT" 40;
+}
+.aqv2-dash .aqp-report-body,
+.aqv2-dash .aqp-report-p,
+.aqv2-dash .aqp-report-list li { color: var(--aq-text-mid); }
+.aqv2-dash .aqp-report-list li::before { color: var(--aq-mute-deep); }
+.aqv2-dash .aqp-report-history-item {
+  background: var(--aq-surface-2);
+  border-color: var(--aq-border);
+  border-radius: 6px;
+}
+.aqv2-dash .aqp-report-history-item summary { color: var(--aq-text-mid); }
+
+/* ---- Ærlig tomhet (§5.7): skravur + mono-melding, identiske mål ---- */
+.aqv2-dash .aqp-empty,
+.aqv2-dash .aqp-empty-card {
+  background: repeating-linear-gradient(
+    45deg, transparent, transparent 7px, var(--aq-border) 7px, var(--aq-border) 8px
+  );
+  border: 1px solid var(--aq-border);
+  border-radius: 8px;
+  font-family: var(--aq-font-mono);
+  font-style: normal;
+  font-size: 11.5px;
+  letter-spacing: 0.10em;
+  text-transform: uppercase;
+  color: var(--aq-muted);
+}
+.aqv2-dash .aqp-empty-title {
+  font-size: 13px;
+  color: var(--aq-text-mid);
+}
+.aqv2-dash .aqp-empty-sub { font-size: 11px; color: var(--aq-muted); }
+
+/* ---- v8-knapper i dashboard-kontekst → editorial (gull/ghost) ---- */
+.aqv2-dash .btn-primary-v8 {
+  background: var(--aq-gold);
+  color: var(--aq-ink);
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  border-radius: 4px;
+}
+.aqv2-dash .btn-primary-v8:hover { background: var(--aq-gold-hi); }
+.aqv2-dash .btn-primary-v8:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  transform: none;
+}
+.aqv2-dash .btn-ghost-v8 {
+  background: transparent;
+  color: var(--aq-text);
+  border: 1px solid var(--aq-border-hi);
+  border-radius: 4px;
+}
+.aqv2-dash .btn-ghost-v8:hover {
+  background: transparent;
+  border-color: var(--aq-gold);
+  color: var(--aq-gold);
+}
+
+/* ---- (f) Onboarding + risikoattestasjon — editorial ---- */
+.aqv2-dash .aqp-onb-overlay {
+  background: rgba(6, 13, 26, 0.86); /* ink-deep-slør */
+  backdrop-filter: none; /* blur kun i header (§3) */
+  -webkit-backdrop-filter: none;
+}
+.aqv2-dash .aqp-onb-card {
+  background: var(--aq-ink-deep);
+  border: 1px solid var(--aq-border);
+  border-radius: 8px;
+  padding: 36px 32px 28px;
+  box-shadow: var(--aq-shadow-panel);
+  animation: none; /* ærlighet hopper ikke (§11) */
+}
+.aqv2-dash .aqp-onb-title {
+  font-family: var(--aq-font-serif);
+  font-weight: 400;
+  font-size: 26px;
+  letter-spacing: -0.015em;
+  color: var(--aq-text);
+  font-variation-settings: "opsz" 48, "SOFT" 50;
+}
+.aqv2-dash .aqp-onb-sub {
+  color: var(--aq-text-mid);
+  font-size: 14.5px;
+  line-height: 1.6;
+}
+.aqv2-dash .aqp-onb-eye {
+  font-family: var(--aq-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--aq-muted);
+  margin-bottom: 10px;
+}
+.aqv2-dash .aqp-onb-step {
+  background: var(--aq-surface-2);
+  border: 1px solid var(--aq-border);
+  border-radius: 6px;
+}
+.aqv2-dash .aqp-onb-step-title {
+  font-family: var(--aq-font-serif);
+  font-weight: 400;
+  font-size: 18px;
+  color: var(--aq-text);
+  font-variation-settings: "opsz" 48, "SOFT" 50;
+}
+.aqv2-dash .aqp-onb-step-body { color: var(--aq-text-mid); }
+.aqv2-dash .aqp-onb-dot { background: var(--aq-mute-deep); box-shadow: none; }
+.aqv2-dash .aqp-onb-dot.is-on { background: var(--aq-cyan); box-shadow: none; }
+.aqv2-dash .aqp-onb-dot.is-done { background: var(--aq-cyan-deep); }
+
+.aqp-onb-points {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.aqp-onb-points li {
+  position: relative;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--aq-text-mid);
+}
+.aqp-onb-points li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--aq-mute-deep);
+}
+.aqp-onb-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  background: var(--aq-surface-2);
+  border: 1px solid var(--aq-border);
+  border-radius: 6px;
+  margin-bottom: 20px;
+  cursor: pointer;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--aq-text);
+}
+.aqp-onb-check input {
+  flex: none;
+  width: 16px;
+  height: 16px;
+  margin-top: 2px;
+  accent-color: var(--aq-cyan);
+}
+.aqp-onb-error {
+  margin: 0 0 16px;
+  font-size: 13px;
+  color: var(--aq-down-hi);
+}
+.aqv2-dash .aqp-onb-actions--end { justify-content: flex-end; }
+
+/* ---- (i) Statuslinjen nederst — spenner hele grid-bredden ---- */
+.aqv2-dash .aqp-shell { grid-template-rows: 1fr auto; }
+.aqv2-dash .aqp-shell > .aq-statusline { grid-column: 1 / -1; }
+
+/* ---- Bunn-tab-bar (§10h) — skjult over 768px ---- */
+.aqp-tabbar { display: none; }
+
+/* ============================================================
+   RESPONSIVT (§10e/h, §12)
+   ============================================================ */
+
+/* (e) aqp-track-grid: 6 → 3 kolonner ved 1080px */
+@media (max-width: 1080px) {
+  .aqv2-dash .aqp-track-grid { grid-template-columns: repeat(3, 1fr); }
+}
+
+@media (max-width: 880px) {
+  .aqv2-dash .aqp-daybar-stats { gap: 20px 32px; }
+  .aqv2-dash .aqp-daybar-num { font-size: 24px; }
+}
+
+/* (h) ≤768px: sidebar → bunn-tab-bar (5 ikoner + «mer») */
+@media (max-width: 768px) {
+  .aqv2-dash .aqp-mobile-toggle { display: none; }
+  .aqv2-dash .aqp-tabbar {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 80;
+    padding-bottom: env(safe-area-inset-bottom);
+    background: var(--aq-ink-deep);
+    border-top: 1px solid var(--aq-border);
+  }
+  .aqv2-dash .aqp-tab {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    min-height: 52px; /* tap-target ≥44px (§12f) */
+    padding: 6px 2px;
+    background: transparent;
+    border: 0;
+    color: var(--aq-muted);
+    cursor: pointer;
+    position: relative;
+  }
+  .aqv2-dash .aqp-tab.is-active { color: var(--aq-cyan-hi); }
+  .aqv2-dash .aqp-tab.is-active::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 22%;
+    right: 22%;
+    height: 2px;
+    background: var(--aq-cyan);
+  }
+  .aqv2-dash .aqp-tab-label {
+    font-family: var(--aq-font-mono);
+    font-size: 9px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  /* Innhold + statuslinje løftes over den faste tab-baren. */
+  .aqv2-dash .aqp-shell { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+  .aqv2-dash .aqp-main { padding-top: 40px; }
+  /* Skuffen (fra globals ≤900px) åpnes nå via «mer» — ligger under tab-baren. */
+  .aqv2-dash .aqp-sidebar { padding-bottom: 80px; }
+}
+
+/* (e) aqp-track-grid: 3 → 2 kolonner ved 640px + tap-targets */
+@media (max-width: 640px) {
+  .aqv2-dash .aqp-track-grid { grid-template-columns: repeat(2, 1fr); }
+  .aqv2-dash .aqp-filter-row button,
+  .aqv2-dash .aqp-owned-toggle { min-height: 44px; }
+  .aqv2-dash .aqp-daybar-stats { gap: 16px 24px; }
+}

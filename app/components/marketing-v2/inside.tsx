@@ -7,12 +7,14 @@ type Part = string | { em: string } | { sym: string } | { up: string } | { dn: s
 
 const INSIDE_COPY: Record<Lang, {
   eye: string;
+  exampleTag: string;
   quote: Part[];
   cite: string;
   steps: Array<{ tag: [string, string]; parts: Part[] }>;
 }> = {
   no: {
-    eye: '04 · Inni motoren',
+    eye: '05 · Inni motoren',
+    exampleTag: 'EKSEMPEL FRA LOGGEN · PAPER',
     quote: ['Hver anbefaling kommer med ', { em: 'fullstendig begrunnelse' }, '. Ingen svart boks, ingen ', { em: 'stol på oss' }, '.'],
     cite: 'Apex Quantum + · daglige signaler med begrunnelse',
     steps: [
@@ -23,7 +25,8 @@ const INSIDE_COPY: Record<Lang, {
     ],
   },
   en: {
-    eye: '04 · Inside the engine',
+    eye: '05 · Inside the engine',
+    exampleTag: 'EXAMPLE FROM THE LOG · PAPER',
     quote: ['Every recommendation arrives with ', { em: 'full reasoning' }, '. No black box, no ', { em: 'trust us' }, '.'],
     cite: 'Apex Quantum + · daily signals with reasoning',
     steps: [
@@ -49,7 +52,7 @@ function renderParts(parts: Part[]) {
 export function InsideV2({ lang }: { lang: Lang }) {
   const t = INSIDE_COPY[lang];
   return (
-    <section id="inside" className="inside">
+    <section id="inside" className="inside" data-reveal>
       <div className="container">
         <div className="inside-grid">
           <div className="quote-block">
@@ -59,6 +62,8 @@ export function InsideV2({ lang }: { lang: Lang }) {
             <span className="quote-cite">{t.cite}</span>
           </div>
           <div className="reasoning">
+            {/* Ingenting skal fremstå live uten å være det (§8-06) */}
+            <span className="inside-example-tag">{t.exampleTag}</span>
             {t.steps.map((s, i) => (
               <div key={i} className="reasoning-step">
                 <span className="step-tag">

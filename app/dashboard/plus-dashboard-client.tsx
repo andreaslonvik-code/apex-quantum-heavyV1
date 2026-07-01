@@ -4,7 +4,9 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { SignOutButton, useUser } from '@clerk/nextjs';
 import '../components/marketing-v2/styles.css';
+import './dashboard.css';
 import { PLUS_LANGS, PLUS_LANG_LABELS, type PlusLang } from '@/lib/i18n/plus-lang';
+import { StatusLine } from '@/app/components/terminal/statusline';
 import { SignalsView } from './views/signals-view';
 import { AskView } from './views/ask-view';
 import { WatchlistView } from './views/watchlist-view';
@@ -48,6 +50,9 @@ const COPY = {
     signOut: 'Logg ut',
     manageSub: 'Administrer abonnement',
     manageError: 'Klarte ikke åpne Stripe',
+    navAria: 'Åpne meny',
+    more: 'Mer',
+    signalsUpdated: 'SIGNALER OPPDATERT',
   },
   en: {
     productTag: 'APEX QUANTUM +',
@@ -58,6 +63,9 @@ const COPY = {
     signOut: 'Sign out',
     manageSub: 'Manage subscription',
     manageError: 'Could not open Stripe',
+    navAria: 'Open menu',
+    more: 'More',
+    signalsUpdated: 'SIGNALS UPDATED',
   },
   de: {
     productTag: 'APEX QUANTUM +',
@@ -68,6 +76,9 @@ const COPY = {
     signOut: 'Abmelden',
     manageSub: 'Abonnement verwalten',
     manageError: 'Konnte Stripe nicht öffnen',
+    navAria: 'Menü öffnen',
+    more: 'Mehr',
+    signalsUpdated: 'SIGNALE AKTUALISIERT',
   },
   es: {
     productTag: 'APEX QUANTUM +',
@@ -78,6 +89,9 @@ const COPY = {
     signOut: 'Cerrar sesión',
     manageSub: 'Administrar suscripción',
     manageError: 'No se pudo abrir Stripe',
+    navAria: 'Abrir menú',
+    more: 'Más',
+    signalsUpdated: 'SEÑALES ACTUALIZADAS',
   },
   zh: {
     productTag: 'APEX QUANTUM +',
@@ -88,8 +102,23 @@ const COPY = {
     signOut: '登出',
     manageSub: '管理订阅',
     manageError: '无法打开 Stripe',
+    navAria: '打开菜单',
+    more: '更多',
+    signalsUpdated: '信号已更新',
   },
 } as const;
+
+/** «HH:MM» / «HH:MM:SS» i lokal tid fra ISO-tidsstempel — ekte synk-tid. */
+function fmtClock(iso: string | null, withSeconds: boolean): string | null {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  if (!withSeconds) return `${hh}:${mm}`;
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
 
 interface Props {
   allowlisted: boolean;
@@ -102,6 +131,7 @@ export default function PlusDashboardClient({ allowlisted, hasSubscription }: Pr
   const [navOpen, setNavOpen] = useState(false);
   const [manageBusy, setManageBusy] = useState(false);
   const [signalCount, setSignalCount] = useState<number | null>(null);
+  const [signalSyncIso, setSignalSyncIso] = useState<string | null>(null);
   const { user } = useUser();
   const t = COPY[lang];
 
@@ -117,6 +147,10 @@ export default function PlusDashboardClient({ allowlisted, hasSubscription }: Pr
         if (cancelled) return;
         if (data.ok && Array.isArray(data.signals)) {
           setSignalCount(data.signals.length);
+        }
+        // Ekte tidsstempel fra siste signalskann — driver statuslinjen.
+        if (data.ok && typeof data.scan?.generatedAt === 'string') {
+          setSignalSyncIso(data.scan.generatedAt);
         }
       } catch {
         /* ignore — badge just won't show */
@@ -166,7 +200,7 @@ export default function PlusDashboardClient({ allowlisted, hasSubscription }: Pr
         <button
           type="button"
           className="aqp-mobile-toggle"
-          aria-label="Toggle navigation"
+          aria-label={t.navAria}
           onClick={() => setNavOpen((v) => !v)}
         >
           <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2">
@@ -267,6 +301,47 @@ export default function PlusDashboardClient({ allowlisted, hasSubscription }: Pr
       </aside>
 
       <main className="aqp-main">{renderView()}</main>
+
+      {/* Statuslinjen (§5.6/§10i) — kun sanne, målte verdier. */}
+      <StatusLine
+        lang={lang === 'no' ? 'no' : 'en'}
+        lastSync={fmtClock(signalSyncIso, true)}
+        modeOverride={`${t.signalsUpdated} ${fmtClock(signalSyncIso, false) ?? '—'}`}
+      />
+
+      {/* Bunn-tab-bar ≤768px (§10h): 5 ikoner + «mer». */}
+      <nav className="aqp-tabbar" aria-label={t.navAria}>
+        {NAV.slice(0, 5).map((item) => {
+          const isActive = view === item.key && !navOpen;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              className={`aqp-tab ${isActive ? 'is-active' : ''}`}
+              onClick={() => {
+                setView(item.key);
+                setNavOpen(false);
+              }}
+            >
+              <NavIcon type={item.icon} />
+              <span className="aqp-tab-label">{NAV_LABELS[item.key][lang]}</span>
+            </button>
+          );
+        })}
+        <button
+          type="button"
+          className={`aqp-tab ${navOpen ? 'is-active' : ''}`}
+          onClick={() => setNavOpen((v) => !v)}
+          aria-expanded={navOpen}
+        >
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden>
+            <circle cx="5" cy="12" r="1.8" />
+            <circle cx="12" cy="12" r="1.8" />
+            <circle cx="19" cy="12" r="1.8" />
+          </svg>
+          <span className="aqp-tab-label">{t.more}</span>
+        </button>
+      </nav>
 
       <OnboardingModal lang={lang} />
       </div>

@@ -2,11 +2,16 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import '../components/marketing-v2/styles.css';
+import '@/app/styles/pages.css';
 import './innsyn.css';
 import type { Lang } from '../components/marketing/types';
 import type { GrokCatalyst, GrokDecision } from '@/lib/grok';
+import type { MarketingStats } from '@/lib/marketing-stats';
 import { HeaderV2 } from '../components/marketing-v2/header';
 import { FooterV2 } from '../components/marketing-v2/cta-footer';
+import { EquityChart } from '../components/marketing-v2/equity-chart';
+import { PaperTag } from '../components/marketing-v2/paper-tag';
+import { fmtPct, fmtSyncTime, fmtUsd } from '@/lib/marketing-format';
 
 /** Public-safe view — mirrors /api/transparency/timeline's PublicTradeOutcome.
  *  H8: raw `error` strings are NEVER published; only a stable `error_code`. */
@@ -100,6 +105,32 @@ const COPY: Record<Lang, {
   noteBody: string;
   noteEye: string;
   readArticle: string;
+  kpiEye: string;
+  kpiTitle: { pre: string; em: string; post: string };
+  kpiSub: string;
+  kpiHead: [string, string, string, string];
+  kpiSource: string;
+  kpiRows: {
+    ret: { lbl: string; def: string };
+    cap: { lbl: string; def: string };
+    pos: { lbl: string; def: string };
+    dd: { lbl: string; def: string };
+  };
+  kpiUnavailable: string;
+  posEye: string;
+  posTitle: { pre: string; em: string; post: string };
+  posSub: string;
+  posMoreSuffix: string;
+  posEmpty: string;
+  chartEye: string;
+  chartTitle: { pre: string; em: string; post: string };
+  chartEmpty: string;
+  livePaper: string;
+  methodEye: string;
+  methodHead: string;
+  methodBody: string[];
+  changelogHead: string;
+  changelog: Array<{ date: string; text: string }>;
 }> = {
   no: {
     pageTitle: { pre: 'Hendelsene som driver ', em: 'hver handel', post: '.' },
@@ -130,6 +161,53 @@ const COPY: Record<Lang, {
       'AI-trading er bygd på tillit. Vi viser hendelsene som drev hver handel — Trump-poster, tariffer, makro-prints, sektor-rotasjoner — og hva motoren gjorde med dem. Ikke kuratert. Bare det som faktisk skjedde, slik det skjedde.',
     noteEye: 'Hva du ser',
     readArticle: 'Les',
+    kpiEye: '01 · Nøkkeltallene',
+    kpiTitle: { pre: 'Hvert tall, med ', em: 'kilde og tidsstempel', post: '.' },
+    kpiSub:
+      'Dette er nøkkeltallene nettstedet viser — samme kilde som forsiden, satt opp som revisorbekreftede noter: verdi, kilde, hentetidspunkt og definisjon.',
+    kpiHead: ['NØKKELTALL', 'KILDE', 'OPPDATERT', 'DEFINISJON'],
+    kpiSource: 'ALPACA PAPER-KONTO',
+    kpiRows: {
+      ret: {
+        lbl: 'Avkastning siden oppstart',
+        def: 'Endring i porteføljeverdi fra første registrerte punkt i år til nå, i prosent. Paper trading — simulert kapital.',
+      },
+      cap: {
+        lbl: 'Forvaltet kapital',
+        def: 'Total porteføljeverdi (USD) på leder-kontoen akkurat nå, slik Alpaca rapporterer den.',
+      },
+      pos: {
+        lbl: 'Aktive posisjoner',
+        def: 'Antall åpne long-posisjoner på kontoen i øyeblikket.',
+      },
+      dd: {
+        lbl: 'Maks drawdown',
+        def: 'Største fall fra løpende toppunkt til bunn i årets kurve — tapene vises like tydelig som gevinstene.',
+      },
+    },
+    kpiUnavailable: 'LIVE-DATA UTILGJENGELIG · PRØVER IGJEN',
+    posEye: '02 · Posisjonene',
+    posTitle: { pre: 'Boken, ', em: 'rad for rad', post: '.' },
+    posSub: 'Åpne posisjoner sortert etter markedsverdi, med urealisert avkastning per posisjon.',
+    posMoreSuffix: 'flere posisjoner på kontoen',
+    posEmpty: 'INGEN ÅPNE POSISJONER AKKURAT NÅ',
+    chartEye: '03 · Kurven',
+    chartTitle: { pre: 'Egenkapital, ', em: 'dag for dag', post: '.' },
+    chartEmpty: 'HISTORIKK BYGGES DAG FOR DAG — INGEN TILBAKEBEREGNEDE TALL',
+    livePaper: 'LIVE · PAPER',
+    methodEye: 'Metode',
+    methodHead: 'Slik er tallene laget',
+    methodBody: [
+      'Alle tall hentes fra leder-kontoens paper trading-miljø hos Alpaca Markets via API, og mellomlagres i inntil fem minutter. Avkastning beregnes mot første registrerte verdi i kalenderåret; drawdown måles mot løpende maksimum i samme vindu. Minus settes som ekte minustegn, og alle tall er tabulære.',
+      'Hendelsesstrømmen lenger ned er motorens egne beslutningslogger — sitert kildebruk, tese og utfall per scan. Ingenting kurateres bort: feilede og hoppede ordre vises med samme vekt som utførte.',
+    ],
+    changelogHead: 'Endringslogg',
+    changelog: [
+      {
+        date: '01.07.2026',
+        text: 'Innsynsprotokollen utvidet: KPI-ledger med kilde og definisjon, posisjonstabell og equity-graf lagt til over hendelsesstrømmen.',
+      },
+    ],
   },
   en: {
     pageTitle: { pre: 'The events that drive ', em: 'every trade', post: '.' },
@@ -160,6 +238,53 @@ const COPY: Record<Lang, {
       'AI trading runs on trust. We expose the events that drove each trade — Trump posts, tariffs, macro prints, sector rotations — and what the engine did with them. Not curated. Just what actually happened, as it happened.',
     noteEye: 'What you’re seeing',
     readArticle: 'Read',
+    kpiEye: '01 · The key figures',
+    kpiTitle: { pre: 'Every figure, with ', em: 'source and timestamp', post: '.' },
+    kpiSub:
+      'These are the key figures shown across the site — same source as the front page, set out like audited notes: value, source, fetch time and definition.',
+    kpiHead: ['KEY FIGURE', 'SOURCE', 'UPDATED', 'DEFINITION'],
+    kpiSource: 'ALPACA PAPER ACCOUNT',
+    kpiRows: {
+      ret: {
+        lbl: 'Return since launch',
+        def: 'Change in portfolio value from the first recorded point this year to now, in percent. Paper trading — simulated capital.',
+      },
+      cap: {
+        lbl: 'Capital under model',
+        def: 'Total portfolio value (USD) on the leader account right now, as reported by Alpaca.',
+      },
+      pos: {
+        lbl: 'Active positions',
+        def: 'Number of open long positions on the account at this moment.',
+      },
+      dd: {
+        lbl: 'Max drawdown',
+        def: 'Largest fall from a running peak to a trough in this year’s curve — losses shown as clearly as gains.',
+      },
+    },
+    kpiUnavailable: 'LIVE DATA UNAVAILABLE · RETRYING',
+    posEye: '02 · The positions',
+    posTitle: { pre: 'The ledger, ', em: 'row by row', post: '.' },
+    posSub: 'Open positions sorted by market value, with unrealised return per position.',
+    posMoreSuffix: 'more positions on the account',
+    posEmpty: 'NO OPEN POSITIONS RIGHT NOW',
+    chartEye: '03 · The curve',
+    chartTitle: { pre: 'Equity, ', em: 'day by day', post: '.' },
+    chartEmpty: 'THE RECORD IS BUILT DAY BY DAY — NO BACK-CALCULATED FIGURES',
+    livePaper: 'LIVE · PAPER',
+    methodEye: 'Method',
+    methodHead: 'How the numbers are made',
+    methodBody: [
+      'All figures are fetched from the leader account’s paper-trading environment at Alpaca Markets via API and cached for up to five minutes. Return is measured against the first recorded value of the calendar year; drawdown is measured against the running maximum in the same window. Minus signs are true minus characters, and all figures are tabular.',
+      'The event stream further down is the engine’s own decision log — cited sources, thesis and outcome per scan. Nothing is curated away: failed and skipped orders are shown with the same weight as executed ones.',
+    ],
+    changelogHead: 'Changelog',
+    changelog: [
+      {
+        date: '01.07.2026',
+        text: 'Transparency protocol extended: KPI ledger with source and definition, positions table and equity chart added above the event stream.',
+      },
+    ],
   },
 };
 
@@ -229,7 +354,13 @@ function flattenEvents(rows: TimelineRow[]): EventEntry[] {
   return out;
 }
 
-export function InnsynClient({ initialLang }: { initialLang: Lang }) {
+export function InnsynClient({
+  initialLang,
+  stats,
+}: {
+  initialLang: Lang;
+  stats: MarketingStats;
+}) {
   const [lang, setLang] = useState<Lang>(initialLang);
   const [rows, setRows] = useState<TimelineRow[] | null>(null);
   const [asOfIso, setAsOfIso] = useState<string | null>(null);
@@ -327,7 +458,160 @@ export function InnsynClient({ initialLang }: { initialLang: Lang }) {
           </div>
         </section>
 
-        <section className="band-parch innsyn-band">
+        {/* 01 · KPI-LEDGER — Kildenote-daggernes landingspunkt (§9) */}
+        <section className="innsyn-section">
+          <div className="container">
+            <span className="eyebrow">
+              <span className="rule" />
+              {t.kpiEye}
+            </span>
+            <h2 className="innsyn-section-h">
+              {t.kpiTitle.pre}
+              <em>{t.kpiTitle.em}</em>
+              {t.kpiTitle.post}
+            </h2>
+            <p className="innsyn-section-sub">{t.kpiSub}</p>
+            {stats.ok ? (
+              <>
+                <div className="innsyn-kpi-table">
+                  <div className="innsyn-kpi-row head" aria-hidden>
+                    <span>{t.kpiHead[0]}</span>
+                    <span>{t.kpiHead[1]}</span>
+                    <span>{t.kpiHead[2]}</span>
+                    <span>{t.kpiHead[3]}</span>
+                  </div>
+                  {(
+                    [
+                      {
+                        key: 'ret',
+                        val: fmtPct(stats.ytdReturnPct, lang),
+                        cls:
+                          stats.ytdReturnPct == null
+                            ? ''
+                            : stats.ytdReturnPct >= 0
+                              ? 'up'
+                              : 'down',
+                      },
+                      { key: 'cap', val: fmtUsd(stats.totalValue, lang), cls: '' },
+                      {
+                        key: 'pos',
+                        val: stats.positionsHeld == null ? '—' : String(stats.positionsHeld),
+                        cls: '',
+                      },
+                      {
+                        key: 'dd',
+                        val:
+                          stats.maxDrawdownPct == null
+                            ? '—'
+                            : `−${stats.maxDrawdownPct
+                                .toFixed(1)
+                                .replace('.', lang === 'no' ? ',' : '.')} %`,
+                        cls: stats.maxDrawdownPct ? 'down' : '',
+                      },
+                    ] as const
+                  ).map((row) => (
+                    <div key={row.key} className="innsyn-kpi-row">
+                      <span className="innsyn-kpi-name">
+                        <span className="innsyn-kpi-lbl">{t.kpiRows[row.key].lbl}</span>
+                        <span className={`innsyn-kpi-val ${row.cls}`}>{row.val}</span>
+                      </span>
+                      <span className="innsyn-kpi-src">{t.kpiSource}</span>
+                      <span className="innsyn-kpi-upd">{fmtSyncTime(stats.asOfIso)}</span>
+                      <span className="innsyn-kpi-def">{t.kpiRows[row.key].def}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="innsyn-kpi-foot">
+                  <PaperTag lang={lang} />
+                </div>
+              </>
+            ) : (
+              <div className="aq-hatch innsyn-hatch-kpi">{t.kpiUnavailable}</div>
+            )}
+          </div>
+        </section>
+
+        {/* 02 · POSISJONSTABELL — ledger-rader (§5.3) */}
+        <section className="innsyn-section">
+          <div className="container">
+            <span className="eyebrow">
+              <span className="rule" />
+              {t.posEye}
+            </span>
+            <h2 className="innsyn-section-h">
+              {t.posTitle.pre}
+              <em>{t.posTitle.em}</em>
+              {t.posTitle.post}
+            </h2>
+            <p className="innsyn-section-sub">{t.posSub}</p>
+            {stats.ok && stats.positions.length > 0 ? (
+              <>
+                <div className="innsyn-pos-table">
+                  {stats.positions.map((p) => {
+                    const side = p.side === 'up' ? 'up' : 'down';
+                    return (
+                      <div key={p.ticker} className="aq-ledger-row">
+                        <span className="aq-ledger-swatch" data-side={side} />
+                        <span className="aq-ledger-ticker">{p.ticker}</span>
+                        <span className="aq-ledger-val">$ {p.price.toFixed(2)}</span>
+                        <span className="aq-ledger-delta" data-side={side}>
+                          {p.changePct >= 0 ? '+' : '−'}
+                          {Math.abs(p.changePct).toFixed(2).replace('.', lang === 'no' ? ',' : '.')} %
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+                {stats.positionsHeld != null &&
+                  stats.positionsHeld > stats.positions.length && (
+                    <span className="innsyn-pos-more">
+                      +{stats.positionsHeld - stats.positions.length} {t.posMoreSuffix}
+                    </span>
+                  )}
+                <div className="innsyn-kpi-foot">
+                  <PaperTag lang={lang} />
+                </div>
+              </>
+            ) : (
+              <div className="aq-hatch" style={{ minHeight: 160 }}>
+                {stats.ok ? t.posEmpty : t.kpiUnavailable}
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* 03 · EQUITY-GRAFEN — samme delte komponent som record (§9c) */}
+        <section className="innsyn-section">
+          <div className="container">
+            <span className="eyebrow">
+              <span className="rule" />
+              {t.chartEye}
+            </span>
+            <h2 className="innsyn-section-h">
+              {t.chartTitle.pre}
+              <em>{t.chartTitle.em}</em>
+              {t.chartTitle.post}
+            </h2>
+            <div className="innsyn-chart">
+              <div className="innsyn-chart-head">
+                <PaperTag lang={lang} />
+                <span className="aqv2-tag cy">
+                  <span className="aqv2-dot" />
+                  {t.livePaper}
+                </span>
+              </div>
+              {stats.ok && stats.hasChart ? (
+                <EquityChart history={stats.equityHistory} lang={lang} />
+              ) : (
+                <div className="aq-hatch innsyn-hatch-chart">
+                  {stats.ok ? t.chartEmpty : t.kpiUnavailable}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <section className="band-parch innsyn-band" style={{ marginTop: 64 }}>
           <div className="container">
             <span className="eyebrow">
               <span className="rule" />
@@ -455,6 +739,29 @@ export function InnsynClient({ initialLang }: { initialLang: Lang }) {
                 ))}
               </ol>
             )}
+          </div>
+        </section>
+
+        {/* Metodenote + endringslogg (§9e) */}
+        <section className="innsyn-method">
+          <div className="container">
+            <div className="pg-note">
+              <span className="pg-note-eye">{t.methodEye}</span>
+              {t.methodBody.map((p) => (
+                <p key={p.slice(0, 32)}>{p}</p>
+              ))}
+            </div>
+            <div style={{ marginTop: 40 }}>
+              <span className="pg-note-eye">{t.changelogHead}</span>
+              <ul className="innsyn-changelog">
+                {t.changelog.map((c) => (
+                  <li key={c.date + c.text.slice(0, 16)}>
+                    <span className="date">{c.date}</span>
+                    <span>{c.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
           </div>
         </section>
 

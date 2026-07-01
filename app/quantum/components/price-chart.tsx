@@ -1,214 +1,216 @@
-"use client";
+'use client';
 
-import { useState, useMemo } from "react";
-import { motion } from "framer-motion";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, ComposedChart, ReferenceLine } from "recharts";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { TrendingUp, TrendingDown, Activity, Zap } from "lucide-react";
+/**
+ * Hovedflatens graf (§10): porteføljens EKTE utvikling fra
+ * /api/apex/performance — omtegnet i editorial grafspråk. Gullkurve
+ * 2.2px, slate-grid, mono-akser med datoer, drawdown-skravering,
+ * cyan crosshair med 0ms transition og mono-tooltip i ink-deep.
+ *
+ * Den gamle Math.random-genererte kursserien (fiktive priser for
+ * hardkodede tickere) er fjernet — §13.2 forbyr udokumenterte tall.
+ * Ingen entry-animasjon: investoren ser tallene umiddelbart (§11).
+ */
 
-// Generate realistic OHLCV data
-function generateCandleData(basePrice: number, volatility: number, points: number) {
-  const data = [];
-  let price = basePrice;
-  const now = Date.now();
-  
-  for (let i = points; i > 0; i--) {
-    const change = (Math.random() - 0.48) * volatility;
-    const open = price;
-    const close = price + change;
-    const high = Math.max(open, close) + Math.random() * volatility * 0.5;
-    const low = Math.min(open, close) - Math.random() * volatility * 0.5;
-    const volume = Math.floor(50000 + Math.random() * 150000);
-    
-    data.push({
-      time: new Date(now - i * 60000).toLocaleTimeString("no-NO", { hour: "2-digit", minute: "2-digit" }),
-      open,
-      high,
-      low,
-      close,
-      volume,
-      isUp: close >= open,
+import { useMemo } from 'react';
+import {
+  Area,
+  ComposedChart,
+  CartesianGrid,
+  Line,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import type { Lang } from '@/app/components/marketing/types';
+import { fmtCompactUsd } from '@/lib/marketing-format';
+import { COCKPIT_COPY } from '../lib/copy';
+import type { CockpitPerformance, CockpitTf } from '../lib/types';
+
+const TFS: CockpitTf[] = ['1H', '24H', '7D', '30D', 'YTD', 'ALL'];
+
+interface Row {
+  label: string;
+  value: number;
+  /** [kurve, løpende maksimum] → drawdown-bånd */
+  dd: [number, number];
+}
+
+function tsLabel(unixSec: number, spanDays: number, lang: Lang): string {
+  const d = new Date(unixSec * 1000);
+  if (spanDays <= 2) {
+    return d.toLocaleTimeString(lang === 'no' ? 'nb-NO' : 'en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: false,
     });
-    
-    price = close;
   }
-  return data;
+  return d.toLocaleDateString(lang === 'no' ? 'nb-NO' : 'en-GB', {
+    day: 'numeric',
+    month: 'short',
+  });
 }
 
-const timeframes = [
-  { key: "1m", label: "1M", points: 60 },
-  { key: "5m", label: "5M", points: 48 },
-  { key: "15m", label: "15M", points: 32 },
-  { key: "1h", label: "1H", points: 24 },
-  { key: "1d", label: "1D", points: 30 },
-  { key: "1w", label: "1W", points: 52 },
-];
-
-interface PriceChartProps {
-  selectedTicker?: string;
-}
-
-export function PriceChart({ selectedTicker = "MU" }: PriceChartProps) {
-  const [timeframe, setTimeframe] = useState("5m");
-  
-  const tickerData: Record<string, { price: number; volatility: number; change: number; name: string }> = {
-    MU: { price: 422.35, volatility: 8, change: 2.41, name: "Micron Technology" },
-    CEG: { price: 286.50, volatility: 5, change: -0.95, name: "Constellation Energy" },
-    VRT: { price: 295.11, volatility: 6, change: 2.60, name: "Vertiv Holdings" },
-    RKLB: { price: 68.05, volatility: 4, change: -1.54, name: "Rocket Lab" },
-    LMND: { price: 54.45, volatility: 3, change: -3.17, name: "Lemonade Inc" },
-    ABSI: { price: 2.98, volatility: 0.5, change: -6.67, name: "Absci Corporation" },
-  };
-  
-  const ticker = tickerData[selectedTicker] || tickerData.MU;
-  const tf = timeframes.find(t => t.key === timeframe) || timeframes[1];
-  
-  const chartData = useMemo(() => 
-    generateCandleData(ticker.price, ticker.volatility, tf.points),
-    [ticker.price, ticker.volatility, tf.points, selectedTicker]
+function ChartTooltip({
+  active,
+  payload,
+  label,
+  lang,
+}: {
+  active?: boolean;
+  payload?: Array<{ value?: number | number[]; dataKey?: string }>;
+  label?: string;
+  lang: Lang;
+}) {
+  if (!active || !payload?.length) return null;
+  const v = payload.find((p) => p.dataKey === 'value')?.value;
+  if (typeof v !== 'number') return null;
+  return (
+    <div
+      style={{
+        background: 'var(--aq-ink-deep)',
+        border: '1px solid var(--aq-border)',
+        borderRadius: 4,
+        padding: '8px 10px',
+        fontFamily: 'var(--aq-font-mono)',
+        fontSize: 11,
+        letterSpacing: '0.06em',
+        color: 'var(--aq-text-mid)',
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      <div style={{ color: 'var(--aq-faint)', marginBottom: 2 }}>{label}</div>
+      <div style={{ color: 'var(--aq-text)' }}>
+        ${v.toLocaleString(lang === 'no' ? 'nb-NO' : 'en-US', { maximumFractionDigits: 0 })}
+      </div>
+    </div>
   );
-  
-  const currentPrice = chartData[chartData.length - 1]?.close || ticker.price;
-  const isPositive = ticker.change >= 0;
+}
+
+export function PriceChart({
+  lang,
+  connected,
+  performance,
+  tf,
+  onTf,
+}: {
+  lang: Lang;
+  connected: boolean | null;
+  performance: CockpitPerformance | null;
+  tf: CockpitTf;
+  onTf: (tf: CockpitTf) => void;
+}) {
+  const t = COCKPIT_COPY[lang];
+
+  const rows: Row[] = useMemo(() => {
+    const data = performance?.chartData ?? [];
+    if (data.length < 2) return [];
+    const first = data[0]?.timestamp ?? 0;
+    const last = data[data.length - 1]?.timestamp ?? 0;
+    const spanDays = Math.max(0, (last - first) / 86400);
+    let peak = -Infinity;
+    return data.map((d, i) => {
+      peak = Math.max(peak, d.value);
+      return {
+        label: d.timestamp ? tsLabel(d.timestamp, spanDays, lang) : String(i),
+        value: d.value,
+        dd: [d.value, peak] as [number, number],
+      };
+    });
+  }, [performance, lang]);
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-      className="glass-card rounded-xl border border-[rgba(0,240,255,0.1)] p-4 h-full flex flex-col"
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-bold text-white">{selectedTicker}</h2>
-              <motion.div
-                animate={{ scale: [1, 1.2, 1] }}
-                transition={{ duration: 2, repeat: Infinity }}
-                className="w-2 h-2 rounded-full bg-[#00f0ff]"
+    <section className="aq-panel" aria-label={t.chartTitle}>
+      <div className="aq-panel-head">
+        <span>{t.chartTitle}</span>
+        <div className="aq-ck-chart-tabs" role="tablist" aria-label="Tidsvindu">
+          {TFS.map((k) => (
+            <button
+              key={k}
+              type="button"
+              role="tab"
+              aria-selected={tf === k}
+              data-on={tf === k || undefined}
+              onClick={() => onTf(k)}
+            >
+              {k}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {connected === false ? (
+        <div className="aq-hatch aq-ck-hatch-fill">{t.noAccount}</div>
+      ) : rows.length === 0 ? (
+        <div className="aq-hatch aq-ck-hatch-fill">
+          {performance == null ? t.dataUnavailable : t.chartEmpty}
+        </div>
+      ) : (
+        <div className="aq-ck-chart-body">
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={rows} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid
+                stroke="var(--aq-slate)"
+                strokeOpacity={0.3}
+                strokeDasharray="3 3"
+                vertical={false}
               />
-            </div>
-            <p className="text-xs text-zinc-500">{ticker.name}</p>
-          </div>
-          
-          <div className="flex items-center gap-3 pl-4 border-l border-zinc-800">
-            <div>
-              <p className="text-2xl font-bold neon-text-cyan">
-                ${currentPrice.toFixed(2)}
-              </p>
-              <div className={`flex items-center gap-1 text-sm ${isPositive ? "text-emerald-400" : "text-red-400"}`}>
-                {isPositive ? <TrendingUp className="w-4 h-4" /> : <TrendingDown className="w-4 h-4" />}
-                {isPositive ? "+" : ""}{ticker.change.toFixed(2)}%
-              </div>
-            </div>
-          </div>
+              <XAxis
+                dataKey="label"
+                axisLine={{ stroke: 'var(--aq-border)' }}
+                tickLine={false}
+                tick={{
+                  fill: 'var(--aq-faint)',
+                  fontSize: 10,
+                  fontFamily: 'var(--aq-font-mono)',
+                }}
+                interval="preserveStartEnd"
+                minTickGap={48}
+              />
+              <YAxis
+                domain={['dataMin', 'dataMax']}
+                axisLine={false}
+                tickLine={false}
+                width={54}
+                tick={{
+                  fill: 'var(--aq-faint)',
+                  fontSize: 10,
+                  fontFamily: 'var(--aq-font-mono)',
+                }}
+                tickFormatter={(v: number) => fmtCompactUsd(v, lang)}
+              />
+              <Tooltip
+                content={<ChartTooltip lang={lang} />}
+                isAnimationActive={false}
+                cursor={{ stroke: 'var(--aq-cyan)', strokeWidth: 1 }}
+              />
+              {/* Drawdown-skravering: løpende maksimum → kurven */}
+              <Area
+                dataKey="dd"
+                stroke="none"
+                fill="var(--aq-down)"
+                fillOpacity={0.08}
+                isAnimationActive={false}
+                activeDot={false}
+              />
+              <Line
+                dataKey="value"
+                type="linear"
+                stroke="var(--aq-gold)"
+                strokeWidth={2.2}
+                dot={false}
+                isAnimationActive={false}
+                activeDot={{
+                  r: 3,
+                  fill: 'var(--aq-gold)',
+                  stroke: 'var(--aq-ink-deep)',
+                  strokeWidth: 1,
+                }}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
         </div>
-        
-        {/* Timeframe Selector */}
-        <Tabs value={timeframe} onValueChange={setTimeframe}>
-          <TabsList className="bg-zinc-900/50 border border-zinc-800">
-            {timeframes.map(tf => (
-              <TabsTrigger
-                key={tf.key}
-                value={tf.key}
-                className="text-xs data-[state=active]:bg-[#00f0ff]/20 data-[state=active]:text-[#00f0ff]"
-              >
-                {tf.label}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
-      </div>
-
-      {/* Main Chart */}
-      <div className="flex-1 min-h-0">
-        <ResponsiveContainer width="100%" height="70%">
-          <ComposedChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="priceGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#00f0ff" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#00f0ff" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <XAxis
-              dataKey="time"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "#71717a", fontSize: 10 }}
-              interval="preserveStartEnd"
-            />
-            <YAxis
-              domain={["dataMin - 2", "dataMax + 2"]}
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "#71717a", fontSize: 10 }}
-              width={50}
-              tickFormatter={(v) => `$${Number(v).toFixed(0)}`}
-            />
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "rgba(17, 17, 19, 0.95)",
-                border: "1px solid rgba(0, 240, 255, 0.2)",
-                borderRadius: "8px",
-                padding: "12px",
-              }}
-              labelStyle={{ color: "#fff", fontWeight: "bold" }}
-              formatter={(value, name) => [
-                `$${Number(value).toFixed(2)}`,
-                String(name).charAt(0).toUpperCase() + String(name).slice(1),
-              ]}
-            />
-            <ReferenceLine y={ticker.price} stroke="#71717a" strokeDasharray="3 3" />
-            <Area
-              type="monotone"
-              dataKey="close"
-              stroke="#00f0ff"
-              strokeWidth={2}
-              fill="url(#priceGradient)"
-            />
-          </ComposedChart>
-        </ResponsiveContainer>
-
-        {/* Volume Chart */}
-        <ResponsiveContainer width="100%" height="25%">
-          <BarChart data={chartData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
-            <XAxis dataKey="time" hide />
-            <YAxis hide />
-            <Bar
-              dataKey="volume"
-              fill="rgba(0, 240, 255, 0.3)"
-              radius={[2, 2, 0, 0]}
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
-
-      {/* Quick Stats */}
-      <div className="flex items-center justify-between pt-3 border-t border-zinc-800/50 mt-2">
-        <div className="flex items-center gap-4 text-xs">
-          <div className="flex items-center gap-1.5">
-            <Activity className="w-3 h-3 text-zinc-500" />
-            <span className="text-zinc-500">Vol:</span>
-            <span className="text-zinc-300">2.4M</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <Zap className="w-3 h-3 text-[#00f0ff]" />
-            <span className="text-zinc-500">Volatilitet:</span>
-            <span className="text-[#00f0ff]">Hoy</span>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] text-zinc-500">Oppdatert</span>
-          <motion.div
-            animate={{ opacity: [1, 0.3, 1] }}
-            transition={{ duration: 1.5, repeat: Infinity }}
-            className="w-1.5 h-1.5 rounded-full bg-emerald-400"
-          />
-          <span className="text-[10px] text-emerald-400">Live</span>
-        </div>
-      </div>
-    </motion.div>
+      )}
+    </section>
   );
 }

@@ -2,12 +2,13 @@
 
 import { ArticleBody, PageShell } from '@/app/components/marketing/page-shell';
 import type { Lang } from '@/app/components/marketing/types';
+import { LEGAL_LINES } from '@/lib/legal-copy';
 
 const COPY = {
   no: {
     title: 'Vilkår',
     updatedLabel: 'Sist oppdatert',
-    updatedDate: '8. mai 2026',
+    updatedDate: '1. juli 2026',
     sections: [
       [
         '1. Avtaleparter',
@@ -35,7 +36,7 @@ const COPY = {
       ],
       [
         '7. Innholdet er ikke individuell investeringsrådgivning',
-        'Apex Quantum + leverer generell markedsanalyse, signaler og læringsinnhold. Innholdet er ikke individuell investeringsrådgivning eller investeringsanbefaling i regulatorisk forstand, og er ikke tilpasset din spesifikke økonomiske situasjon, mål eller risikotoleranse. Du tar alle investeringsbeslutninger selv. Apex Quantum AS er ikke en regulert verdipapirforetak under verdipapirhandelloven og driver ikke konsesjonspliktig virksomhet.',
+        'Apex Quantum + leverer generell markedsanalyse, signaler og læringsinnhold. Innholdet er ikke individuell investeringsrådgivning eller investeringsanbefaling i regulatorisk forstand, og er ikke tilpasset din spesifikke økonomiske situasjon, mål eller risikotoleranse. Du tar alle investeringsbeslutninger selv.',
       ],
       [
         '8. Ditt ansvar',
@@ -43,7 +44,7 @@ const COPY = {
       ],
       [
         '9. Risiko og ansvarsbegrensning',
-        'Handel med verdipapirer innebærer betydelig risiko og kan medføre tap av kapital. Tidligere resultater er ikke en garanti for fremtidig avkastning. Vi gir ingen garantier for spesifikk avkastning, og vårt ansvar er begrenset til beløpet du har betalt for tjenesten de siste 12 månedene, så langt loven tillater. Vi er ikke ansvarlige for tap som følge av tredjepart (Stripe, Alpaca, Clerk, Vercel, xAI) sin nedetid eller feil.',
+        'Vi gir ingen garantier for spesifikk avkastning, og vårt ansvar er begrenset til beløpet du har betalt for tjenesten de siste 12 månedene, så langt loven tillater. Vi er ikke ansvarlige for tap som følge av tredjepart (Stripe, Alpaca, Clerk, Vercel, xAI) sin nedetid eller feil.',
       ],
       [
         '10. Personvern',
@@ -62,7 +63,7 @@ const COPY = {
   en: {
     title: 'Terms of service',
     updatedLabel: 'Last updated',
-    updatedDate: 'May 8, 2026',
+    updatedDate: '1 July 2026',
     sections: [
       [
         '1. The parties',
@@ -90,7 +91,7 @@ const COPY = {
       ],
       [
         '7. Content is not individual investment advice',
-        'Apex Quantum + provides general market analysis, signals and educational content. The content is not individual investment advice or an investment recommendation in the regulatory sense, and is not tailored to your specific financial situation, goals or risk tolerance. You make all investment decisions yourself. Apex Quantum AS is not a regulated investment firm under the Norwegian Securities Trading Act and does not conduct licensed activities.',
+        'Apex Quantum + provides general market analysis, signals and educational content. The content is not individual investment advice or an investment recommendation in the regulatory sense, and is not tailored to your specific financial situation, goals or risk tolerance. You make all investment decisions yourself.',
       ],
       [
         '8. Your responsibilities',
@@ -98,7 +99,7 @@ const COPY = {
       ],
       [
         '9. Risk and limitation of liability',
-        'Trading securities involves significant risk and can lead to loss of capital. Past performance is not a guarantee of future returns. We make no guarantee of specific returns, and our liability is limited, to the extent permitted by law, to the amount you have paid for the service in the preceding 12 months. We are not liable for losses arising from third-party (Stripe, Alpaca, Clerk, Vercel, xAI) downtime or errors.',
+        'We make no guarantee of specific returns, and our liability is limited, to the extent permitted by law, to the amount you have paid for the service in the preceding 12 months. We are not liable for losses arising from third-party (Stripe, Alpaca, Clerk, Vercel, xAI) downtime or errors.',
       ],
       [
         '10. Privacy',
@@ -121,6 +122,15 @@ export default function VilkarPage() {
     <PageShell>
       {(lang: Lang) => {
         const t = COPY[lang];
+        const L = LEGAL_LINES[lang];
+        // Copy-vask (§9): de kanoniske regulatoriske setningene hentes fra
+        // lib/legal-copy og skjøtes inn i §7 (rådgivning/lisensstatus) og
+        // §9 (generell risiko) — én kilde, aldri hardkodet her.
+        const composed = t.sections.map(([h, body]) => {
+          if (h.startsWith('7.')) return [h, `${body} ${L.l3} ${L.l2}`] as const;
+          if (h.startsWith('9.')) return [h, `${L.l4} ${L.l5} ${body}`] as const;
+          return [h, body] as const;
+        });
         return (
           <ArticleBody
             title={t.title}
@@ -128,9 +138,9 @@ export default function VilkarPage() {
             updatedDate={t.updatedDate}
             body={
               <>
-                {t.sections.map(([h, body]) => (
+                {composed.map(([h, body]) => (
                   <div key={h}>
-                    <h2 style={{ marginTop: 36, fontSize: 24, fontWeight: 600 }}>{h}</h2>
+                    <h2>{h}</h2>
                     <p>{body}</p>
                   </div>
                 ))}

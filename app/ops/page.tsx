@@ -271,10 +271,10 @@ function checkEnv() {
 // ============================================================
 
 const STATUS_COLOR: Record<Status, string> = {
-  ok: 'var(--aq-green)',
+  ok: 'var(--aq-up-hi)',
   warn: 'var(--aq-warn)',
-  down: 'var(--aq-red)',
-  unknown: 'rgba(255,255,255,0.35)',
+  down: 'var(--aq-down-hi)',
+  unknown: 'var(--aq-faint)',
 };
 
 const STATUS_LABEL: Record<Status, string> = {
@@ -305,8 +305,8 @@ function ProbeCard({ p }: { p: Probe }) {
       style={{
         padding: '16px 18px',
         borderRadius: 12,
-        background: 'rgba(10,10,20,0.6)',
-        border: '1px solid rgba(255,255,255,0.08)',
+        background: 'var(--aq-ink-deep)',
+        border: '1px solid var(--aq-border)',
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
@@ -319,7 +319,7 @@ function ProbeCard({ p }: { p: Probe }) {
         </span>
         <span
           style={{
-            fontFamily: 'var(--font-jetbrains)',
+            fontFamily: 'var(--aq-font-mono)',
             fontSize: 11,
             color: STATUS_COLOR[p.status],
             letterSpacing: 0.5,
@@ -330,7 +330,7 @@ function ProbeCard({ p }: { p: Probe }) {
         </span>
       </div>
       {p.detail && (
-        <div style={{ fontSize: 13, color: 'rgba(255,255,255,0.7)' }}>{p.detail}</div>
+        <div style={{ fontSize: 13, color: 'var(--aq-text-mid)' }}>{p.detail}</div>
       )}
       {p.hint && (
         <div style={{ fontSize: 12, color: 'var(--aq-warn)' }}>↳ {p.hint}</div>
@@ -342,7 +342,7 @@ function ProbeCard({ p }: { p: Probe }) {
           rel="noreferrer"
           style={{
             fontSize: 12,
-            color: 'var(--aq-cyan)',
+            color: 'var(--aq-cyan-hi)',
             textDecoration: 'none',
             marginTop: 2,
           }}
@@ -429,10 +429,10 @@ export default async function OpsPage({
               style={{
                 padding: '8px 14px',
                 borderRadius: 10,
-                background: 'rgba(0,245,255,0.08)',
-                border: '1px solid rgba(0,245,255,0.3)',
-                color: 'var(--aq-cyan)',
-                fontFamily: 'var(--font-jetbrains)',
+                background: 'var(--aq-cyan-tint)',
+                border: '1px solid var(--aq-cyan-deep)',
+                color: 'var(--aq-cyan-hi)',
+                fontFamily: 'var(--aq-font-mono)',
                 fontSize: 12,
                 cursor: 'pointer',
               }}
@@ -441,7 +441,7 @@ export default async function OpsPage({
             </button>
           </form>
         </div>
-        <div style={{ fontSize: 12, color: 'var(--aq-muted)', marginTop: 8, fontFamily: 'var(--font-jetbrains)' }}>
+        <div style={{ fontSize: 12, color: 'var(--aq-muted)', marginTop: 8, fontFamily: 'var(--aq-font-mono)' }}>
           Probed {new Date().toISOString()} · {email}
         </div>
       </header>
@@ -457,14 +457,14 @@ export default async function OpsPage({
       <Section title="Database — siste aktivitet">
         <div
           style={{
-            border: '1px solid rgba(255,255,255,0.08)',
+            border: '1px solid var(--aq-border)',
             borderRadius: 12,
             overflow: 'hidden',
           }}
         >
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
             <thead>
-              <tr style={{ background: 'rgba(255,255,255,0.04)' }}>
+              <tr style={{ background: 'var(--aq-surface)' }}>
                 <th style={thStyle}>tabell</th>
                 <th style={thStyle}>rader</th>
                 <th style={thStyle}>siste aktivitet</th>
@@ -473,15 +473,15 @@ export default async function OpsPage({
             </thead>
             <tbody>
               {dbActivity.map((d) => (
-                <tr key={d.table} style={{ borderTop: '1px solid rgba(255,255,255,0.05)' }}>
+                <tr key={d.table} style={{ borderTop: '1px solid var(--aq-border-soft)' }}>
                   <td style={tdStyle}>{d.table}</td>
-                  <td style={{ ...tdStyle, fontFamily: 'var(--font-jetbrains)' }}>
-                    {d.error ? <span style={{ color: 'var(--aq-red)' }}>err</span> : d.rows}
+                  <td style={{ ...tdStyle, fontFamily: 'var(--aq-font-mono)' }}>
+                    {d.error ? <span style={{ color: 'var(--aq-down-hi)' }}>err</span> : d.rows}
                   </td>
-                  <td style={{ ...tdStyle, fontFamily: 'var(--font-jetbrains)', color: d.lastActivity ? 'var(--aq-text)' : 'var(--aq-muted)' }}>
+                  <td style={{ ...tdStyle, fontFamily: 'var(--aq-font-mono)', color: d.lastActivity ? 'var(--aq-text)' : 'var(--aq-muted)' }}>
                     {d.error ? d.error : fmtAge(d.lastActivity)}
                   </td>
-                  <td style={{ ...tdStyle, color: 'var(--aq-muted)', fontFamily: 'var(--font-jetbrains)' }}>
+                  <td style={{ ...tdStyle, color: 'var(--aq-muted)', fontFamily: 'var(--aq-font-mono)' }}>
                     {d.lastActivityField ?? '—'}
                   </td>
                 </tr>
@@ -499,8 +499,8 @@ export default async function OpsPage({
               style={{
                 padding: '14px 16px',
                 borderRadius: 12,
-                background: 'rgba(10,10,20,0.6)',
-                border: '1px solid rgba(255,255,255,0.08)',
+                background: 'var(--aq-ink-deep)',
+                border: '1px solid var(--aq-border)',
               }}
             >
               <div style={{ fontSize: 12, color: 'var(--aq-muted)', letterSpacing: 1, marginBottom: 8 }}>
@@ -516,14 +516,14 @@ export default async function OpsPage({
                         display: 'flex',
                         justifyContent: 'space-between',
                         alignItems: 'center',
-                        fontFamily: 'var(--font-jetbrains)',
+                        fontFamily: 'var(--aq-font-mono)',
                         fontSize: 12,
                       }}
                     >
-                      <span style={{ color: bad ? 'var(--aq-red)' : 'var(--aq-text)' }}>{e.key}</span>
+                      <span style={{ color: bad ? 'var(--aq-down-hi)' : 'var(--aq-text)' }}>{e.key}</span>
                       <span
                         style={{
-                          color: e.present ? 'var(--aq-green)' : e.required ? 'var(--aq-red)' : 'var(--aq-muted)',
+                          color: e.present ? 'var(--aq-up-hi)' : e.required ? 'var(--aq-down-hi)' : 'var(--aq-muted)',
                         }}
                       >
                         {e.present ? '✓' : e.required ? '✗ required' : '·'}
@@ -555,9 +555,9 @@ export default async function OpsPage({
               style={{
                 padding: '14px 16px',
                 borderRadius: 12,
-                background: 'rgba(10,10,20,0.6)',
-                border: '1px solid rgba(0,245,255,0.12)',
-                color: 'var(--aq-cyan)',
+                background: 'var(--aq-ink-deep)',
+                border: '1px solid var(--aq-border)',
+                color: 'var(--aq-cyan-hi)',
                 textDecoration: 'none',
                 fontSize: 14,
               }}

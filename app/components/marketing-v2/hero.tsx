@@ -3,6 +3,9 @@
 import Link from 'next/link';
 import type { Lang } from '../marketing/types';
 import type { MarketingStats } from '@/lib/marketing-stats';
+import { daysSinceLaunch, fmtPct, fmtUsd, fmtSyncTime } from '@/lib/marketing-format';
+import { SourceNote } from './source-note';
+import { PaperTag } from './paper-tag';
 import { ArrowRight } from './icons';
 
 const HERO_COPY: Record<Lang, {
@@ -15,11 +18,15 @@ const HERO_COPY: Record<Lang, {
   ctaPrimary: string;
   ctaSecondary: string;
   panelTitle: string;
-  panelFoot: [string, string];
+  panelSync: string;
+  panelExchanges: string;
   panelEmpty: string;
+  panelOffline: string;
+  panelMore: (n: number) => string;
   /** Tail of the return KPI label — prefixed with the live day-count.
-   *  E.g. "20 dager siden oppstart" / "20 days since launch". */
+   *  E.g. "20 dager siden oppstart · paper". */
   kpiYtdSuffix: string;
+  kpiErr: string;
   kpiCapital: string;
   kpiPositions: string;
 }> = {
@@ -29,13 +36,17 @@ const HERO_COPY: Record<Lang, {
     titleB: 'eller la ',
     titleEm: 'KI-motoren',
     titleC: ' ta over.',
-    desc: 'Apex Quantum + gir deg daglige AI-signaler med fullstendig begrunnelse, ukentlige rapporter og strukturert læring fra 199 kr/mnd. Apex Quantum Max — den autonome trading-motoren via Alpaca — lanseres i 2026. Drevet av en blueprint utviklet over et år for ekspertise i aksjeanalyse.',
+    desc: 'Apex Quantum + gir deg daglige AI-signaler med fullstendig begrunnelse, ukentlige rapporter og strukturert læring fra 199 kr/mnd. Apex Quantum Max — den autonome trading-motoren via Alpaca — lanseres i 2026.',
     ctaPrimary: 'Start med Apex Quantum +',
     ctaSecondary: 'Se produktene',
     panelTitle: 'Live posisjoner · paper trading',
-    panelFoot: ['Auto-oppdatert', 'NASDAQ · NYSE · ARCA'],
+    panelSync: 'SYNK',
+    panelExchanges: 'NASDAQ · NYSE · ARCA',
     panelEmpty: 'Ingen åpne posisjoner akkurat nå.',
-    kpiYtdSuffix: 'dager siden oppstart',
+    panelOffline: 'FRAKOBLET',
+    panelMore: (n) => `+${n} flere posisjoner →`,
+    kpiYtdSuffix: 'dager siden oppstart · paper',
+    kpiErr: 'LIVE-DATA UTILGJENGELIG · PRØVER IGJEN',
     kpiCapital: 'Forvaltet kapital',
     kpiPositions: 'Aktive posisjoner',
   },
@@ -45,53 +56,26 @@ const HERO_COPY: Record<Lang, {
     titleB: 'or let the ',
     titleEm: 'AI engine',
     titleC: ' take over.',
-    desc: 'Apex Quantum + gives you daily AI signals with full reasoning, weekly reports and structured learning from $19/month. Apex Quantum Max — the autonomous trading engine via Alpaca — launches in 2026. Driven by a blueprint developed over a year for stock-analysis expertise.',
+    desc: 'Apex Quantum + gives you daily AI signals with full reasoning, weekly reports and structured learning from $19/month. Apex Quantum Max — the autonomous trading engine via Alpaca — launches in 2026.',
     ctaPrimary: 'Start with Apex Quantum +',
     ctaSecondary: 'See the products',
     panelTitle: 'Live positions · paper trading',
-    panelFoot: ['Live · auto-refresh', 'NASDAQ · NYSE · ARCA'],
+    panelSync: 'SYNC',
+    panelExchanges: 'NASDAQ · NYSE · ARCA',
     panelEmpty: 'No open positions right now.',
-    kpiYtdSuffix: 'days since launch',
+    panelOffline: 'OFFLINE',
+    panelMore: (n) => `+${n} more positions →`,
+    kpiYtdSuffix: 'days since launch · paper',
+    kpiErr: 'LIVE DATA UNAVAILABLE · RETRYING',
     kpiCapital: 'Capital under model',
     kpiPositions: 'Active positions',
   },
 };
 
-/**
- * Days since Apex Quantum went live on 2026-05-06. Increments each day
- * the page is rendered. Computed at module import so SSR + first client
- * paint agree; the daily flip happens at midnight UTC server-side, which
- * is close enough to local for marketing copy. Reads "1 dag" on day 1,
- * "2 dager" on day 2, etc.
- */
-const LAUNCH_DATE_MS = Date.UTC(2026, 4, 6); // month is 0-indexed → 4 = May
-function daysSinceLaunch(): number {
-  const now = Date.now();
-  const diffMs = now - LAUNCH_DATE_MS;
-  const days = Math.floor(diffMs / (24 * 60 * 60 * 1000));
-  // Minimum 1 so the copy never reads "0 dager siden oppstart" before
-  // anyone has had a chance to fix the clock.
-  return Math.max(1, days);
-}
-
-function fmtPct(v: number | null, lang: Lang): string {
-  if (v == null) return '—';
-  const sign = v >= 0 ? '+' : '−';
-  const abs = Math.abs(v).toFixed(1).replace('.', lang === 'no' ? ',' : '.');
-  return `${sign}${abs} %`;
-}
-
-function fmtUsd(v: number | null, lang: Lang): string {
-  if (v == null || v <= 0) return '—';
-  if (v >= 1_000_000) {
-    const m = v / 1_000_000;
-    return `$${m.toFixed(2).replace('.', lang === 'no' ? ',' : '.')}M`;
-  }
-  return `$${Math.round(v).toLocaleString(lang === 'no' ? 'nb-NO' : 'en-US')}`;
-}
-
 export function HeroV2({ lang, stats }: { lang: Lang; stats: MarketingStats }) {
   const t = HERO_COPY[lang];
+  const ytdUp = (stats.ytdReturnPct ?? 0) >= 0;
+  const hiddenPositions = Math.max(0, (stats.positionsHeld ?? 0) - stats.positions.length);
   return (
     <section className="hero">
       <div className="container">
@@ -109,36 +93,63 @@ export function HeroV2({ lang, stats }: { lang: Lang; stats: MarketingStats }) {
               </Link>
               <a href="#products" className="btn btn-ghost btn-lg">{t.ctaSecondary}</a>
             </div>
-            {stats.ok && (
-              <div className="hero-meta">
-                <div className="hero-meta-item">
-                  <span className="hero-meta-num em">{fmtPct(stats.ytdReturnPct, lang)}</span>
-                  <span className="hero-meta-lab">{daysSinceLaunch()} {t.kpiYtdSuffix}</span>
-                </div>
-                <div className="hero-meta-item">
-                  <span className="hero-meta-num gold">{fmtUsd(stats.totalValue, lang)}</span>
-                  <span className="hero-meta-lab">{t.kpiCapital}</span>
-                </div>
-                <div className="hero-meta-item">
-                  <span className="hero-meta-num">{stats.positionsHeld ?? '—'}</span>
-                  <span className="hero-meta-lab">{t.kpiPositions}</span>
-                </div>
+            {/* KPI-raden rendres ALLTID — feiltilstand med «—»-verdier i
+                identiske dimensjoner så layouten aldri hopper (§8-01c). */}
+            <div className="hero-meta">
+              <div className="hero-meta-item">
+                <span className={`hero-meta-num${stats.ok && stats.ytdReturnPct != null ? (ytdUp ? ' em' : ' dn') : ''}`}>
+                  {stats.ok ? (
+                    <>
+                      {fmtPct(stats.ytdReturnPct, lang)}
+                      <SourceNote lang={lang} asOfIso={stats.asOfIso} />
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </span>
+                <span className={`hero-meta-lab${stats.ok ? '' : ' err'}`}>
+                  {stats.ok ? `${daysSinceLaunch()} ${t.kpiYtdSuffix}` : t.kpiErr}
+                </span>
               </div>
-            )}
+              <div className="hero-meta-item">
+                <span className="hero-meta-num gold">
+                  {stats.ok ? (
+                    <>
+                      {fmtUsd(stats.totalValue, lang)}
+                      <SourceNote lang={lang} asOfIso={stats.asOfIso} />
+                    </>
+                  ) : (
+                    '—'
+                  )}
+                </span>
+                <span className="hero-meta-lab">{t.kpiCapital}</span>
+              </div>
+              <div className="hero-meta-item">
+                <span className="hero-meta-num">{stats.ok ? (stats.positionsHeld ?? '—') : '—'}</span>
+                <span className="hero-meta-lab">{t.kpiPositions}</span>
+              </div>
+            </div>
+            <div className="hero-meta-paper">
+              <PaperTag lang={lang} />
+            </div>
           </div>
           <div className="hero-right">
             <div className="hero-panel">
               <div className="panel-head">
                 <span className="panel-title">{t.panelTitle}</span>
-                <span className="aqv2-tag cy"><span className="aqv2-dot" />LIVE</span>
-              </div>
-              <div className="panel-rows">
-                {stats.positions.length === 0 ? (
-                  <div className="panel-row" style={{ gridTemplateColumns: '1fr' }}>
-                    <span style={{ color: 'var(--aq-muted)', fontSize: 13 }}>{t.panelEmpty}</span>
-                  </div>
+                {stats.ok ? (
+                  <span className="aqv2-tag cy"><span className="aqv2-dot" />LIVE</span>
                 ) : (
-                  stats.positions.map((p) => (
+                  <span className="aqv2-tag dev">{t.panelOffline}</span>
+                )}
+              </div>
+              {!stats.ok ? (
+                <div className="hero-panel-hatch aq-hatch">{t.kpiErr}</div>
+              ) : stats.positions.length === 0 ? (
+                <div className="hero-panel-hatch aq-hatch">{t.panelEmpty}</div>
+              ) : (
+                <div className="panel-rows">
+                  {stats.positions.slice(0, 6).map((p) => (
                     <div key={p.ticker} className="panel-row">
                       <span className="tk">
                         <span className={`swatch-${p.side}`} />{p.ticker}
@@ -148,12 +159,17 @@ export function HeroV2({ lang, stats }: { lang: Lang; stats: MarketingStats }) {
                         {p.changePct >= 0 ? '+' : '−'}{Math.abs(p.changePct).toFixed(2)}%
                       </span>
                     </div>
-                  ))
-                )}
-              </div>
+                  ))}
+                  {hiddenPositions > 0 && (
+                    <Link href="/innsyn" className="panel-more">
+                      {t.panelMore(hiddenPositions)}
+                    </Link>
+                  )}
+                </div>
+              )}
               <div className="hero-panel-foot">
-                <span>{t.panelFoot[0]}</span>
-                <span>{t.panelFoot[1]}</span>
+                <span>{t.panelSync} {stats.ok ? fmtSyncTime(stats.asOfIso) : '—'}</span>
+                <span>{t.panelExchanges}</span>
               </div>
             </div>
           </div>

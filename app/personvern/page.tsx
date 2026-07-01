@@ -106,7 +106,7 @@ export default function PersonvernPage() {
               <>
                 {t.sections.map(([h, body]) => (
                   <div key={h}>
-                    <h2 style={{ marginTop: 36, fontSize: 24, fontWeight: 600 }}>{h}</h2>
+                    <h2>{h}</h2>
                     <p>{body}</p>
                   </div>
                 ))}

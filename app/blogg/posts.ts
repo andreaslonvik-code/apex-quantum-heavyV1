@@ -70,7 +70,7 @@ I dette tilfellet har AI-en valgt å holde to halvleder-aksjer (QCOM og MU) som 
 
 <!-- image2 -->
 
-Max ligger i lukket beta nå. Den åpnes bredere når Finanstilsynet-lisensen er på plass.
+Max ligger i lukket beta nå. Den åpnes bredere når lisensen for AI-drevne rådgivningstjenester (RAIEAS, Financial Services Commission, Mauritius) er innvilget — søknaden er under behandling.
 
 ## Apex Quantum + — produktet som åpner først
 
@@ -120,7 +120,7 @@ In this case the AI is holding two semiconductor names (QCOM and MU), both showi
 
 <!-- image2 -->
 
-Max is in closed beta now. It opens more broadly once the Finanstilsynet license is in place.
+Max is in closed beta now. It opens more broadly once the licence for AI-enabled advisory services (RAIEAS, Financial Services Commission, Mauritius) is granted — the application is under review.
 
 ## Apex Quantum + — the product launching first
 

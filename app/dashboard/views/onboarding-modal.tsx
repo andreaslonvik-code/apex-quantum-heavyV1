@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useUser } from '@clerk/nextjs';
 import type { PlusLang } from '@/lib/i18n/plus-lang';
-
-const STORAGE_KEY = 'aqp:onboarded';
+import { ATTESTATION, RISK_VERSION } from '@/lib/legal-copy';
 
 const COPY = {
   no: {
@@ -26,9 +26,11 @@ const COPY = {
         body: 'Strukturerte leksjoner fra nybegynner til avansert. Logg beslutningene dine i journalen og se mønstrene dine over tid — det er der den ekte læringen skjer.',
       },
     ],
+    attestEye: 'RISIKOATTESTASJON',
     next: 'Neste',
     skip: 'Hopp over',
-    done: 'Kom i gang',
+    attestError: 'Kunne ikke lagre bekreftelsen. Prøv igjen.',
+    attestBusy: 'Lagrer …',
   },
   en: {
     title: 'Welcome to Apex Quantum +',
@@ -50,9 +52,11 @@ const COPY = {
         body: 'Structured lessons from beginner to advanced. Log your decisions in the journal and see your patterns over time — that is where real learning happens.',
       },
     ],
+    attestEye: 'RISK ATTESTATION',
     next: 'Next',
     skip: 'Skip',
-    done: 'Get started',
+    attestError: 'Could not save the confirmation. Please try again.',
+    attestBusy: 'Saving …',
   },
   de: {
     title: 'Willkommen bei Apex Quantum +',
@@ -74,9 +78,11 @@ const COPY = {
         body: 'Strukturierte Lektionen vom Anfänger bis Fortgeschrittenen. Loggen Sie Entscheidungen im Journal und erkennen Sie Muster über Zeit.',
       },
     ],
+    attestEye: 'RISK ATTESTATION',
     next: 'Weiter',
     skip: 'Überspringen',
-    done: 'Loslegen',
+    attestError: 'Bestätigung konnte nicht gespeichert werden. Bitte erneut versuchen.',
+    attestBusy: 'Speichert …',
   },
   es: {
     title: 'Bienvenido a Apex Quantum +',
@@ -98,9 +104,11 @@ const COPY = {
         body: 'Lecciones estructuradas de principiante a avanzado. Registra decisiones y observa tus patrones con el tiempo.',
       },
     ],
+    attestEye: 'RISK ATTESTATION',
     next: 'Siguiente',
     skip: 'Saltar',
-    done: 'Empezar',
+    attestError: 'No se pudo guardar la confirmación. Inténtalo de nuevo.',
+    attestBusy: 'Guardando …',
   },
   zh: {
     title: '欢迎使用 Apex Quantum +',
@@ -122,9 +130,11 @@ const COPY = {
         body: '从入门到高级的结构化课程。在日志中记录决定，发现自己的模式。',
       },
     ],
+    attestEye: 'RISK ATTESTATION',
     next: '下一步',
     skip: '跳过',
-    done: '开始使用',
+    attestError: '无法保存确认，请重试。',
+    attestBusy: '保存中 …',
   },
 } as const;
 
@@ -132,52 +142,118 @@ interface Props {
   lang: PlusLang;
 }
 
+/**
+ * Onboarding + risikoattestasjon (§6 lag 4a).
+ *
+ * Vises KUN når Clerk publicMetadata mangler riskAttestedAt/riskVersion,
+ * eller riskVersion < RISK_VERSION — aldri per sesjon. Siste steg er
+ * attestasjonen fra lib/legal-copy: tre punkter, checkbox, «Bekreft og
+ * fortsett». Tour-stegene kan hoppes over; attestasjonen kan ikke.
+ */
 export function OnboardingModal({ lang }: Props) {
-  const [open, setOpen] = useState(false);
+  const { user, isLoaded } = useUser();
   const [step, setStep] = useState(0);
+  const [checked, setChecked] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(false);
+  const [done, setDone] = useState(false);
+
   const t = COPY[lang];
+  // Juridisk tekst finnes kanonisk kun på NO/EN (lib/legal-copy).
+  const legalLang = lang === 'no' ? 'no' : 'en';
+  const legal = ATTESTATION[legalLang];
 
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const seen = window.localStorage.getItem(STORAGE_KEY) === '1';
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!seen) setOpen(true);
-  }, []);
+  if (!isLoaded || !user || done) return null;
 
-  const close = () => {
-    setOpen(false);
+  const meta = (user.publicMetadata ?? {}) as {
+    riskAttestedAt?: unknown;
+    riskVersion?: unknown;
+  };
+  const attested =
+    typeof meta.riskAttestedAt === 'string' &&
+    typeof meta.riskVersion === 'number' &&
+    meta.riskVersion >= RISK_VERSION;
+  if (attested) return null;
+
+  const attestIndex = t.steps.length; // attestasjonen er alltid siste steg
+  const isAttest = step === attestIndex;
+  const totalSteps = t.steps.length + 1;
+
+  const confirm = async () => {
+    if (!checked || busy) return;
+    setBusy(true);
+    setError(false);
     try {
-      window.localStorage.setItem(STORAGE_KEY, '1');
+      const res = await fetch('/api/attest-risk', {
+        method: 'POST',
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (!res.ok || !data.ok) throw new Error('attest_failed');
+      // Oppdater Clerks klient-cache så metadata-sjekken over holder
+      // ved neste render — attestasjonen overlever refresh uansett.
+      await user.reload();
+      setDone(true);
     } catch {
-      /* ignore */
+      setError(true);
+    } finally {
+      setBusy(false);
     }
   };
-
-  if (!open) return null;
-  const isLast = step === t.steps.length - 1;
-  const current = t.steps[step];
 
   return (
     <div className="aqp-onb-overlay" role="dialog" aria-modal="true" aria-labelledby="aqp-onb-title">
       <div className="aqp-onb-card">
-        <header className="aqp-onb-head">
-          <h2 id="aqp-onb-title" className="aqp-onb-title">
-            {t.title}
-          </h2>
-          <p className="aqp-onb-sub">{t.sub}</p>
-        </header>
+        {isAttest ? (
+          <>
+            <header className="aqp-onb-head">
+              <div className="aqp-onb-eye">{t.attestEye}</div>
+              <h2 id="aqp-onb-title" className="aqp-onb-title">
+                {legal.title}
+              </h2>
+              <p className="aqp-onb-sub">{legal.intro}</p>
+            </header>
 
-        <div className="aqp-onb-step">
-          <div className="aqp-onb-eye">
-            <span className="m-badge-dot" />
-            {current.eye}
-          </div>
-          <h3 className="aqp-onb-step-title">{current.title}</h3>
-          <p className="aqp-onb-step-body">{current.body}</p>
-        </div>
+            <ul className="aqp-onb-points">
+              {legal.points.map((p, i) => (
+                <li key={i}>{p}</li>
+              ))}
+            </ul>
 
-        <div className="aqp-onb-progress">
-          {t.steps.map((_, i) => (
+            <label className="aqp-onb-check">
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={(e) => setChecked(e.target.checked)}
+              />
+              <span>{legal.checkbox}</span>
+            </label>
+
+            {error && (
+              <p className="aqp-onb-error" role="alert">
+                {t.attestError}
+              </p>
+            )}
+          </>
+        ) : (
+          <>
+            <header className="aqp-onb-head">
+              <h2 id="aqp-onb-title" className="aqp-onb-title">
+                {t.title}
+              </h2>
+              <p className="aqp-onb-sub">{t.sub}</p>
+            </header>
+
+            <div className="aqp-onb-step">
+              <div className="aqp-onb-eye">{t.steps[step].eye}</div>
+              <h3 className="aqp-onb-step-title">{t.steps[step].title}</h3>
+              <p className="aqp-onb-step-body">{t.steps[step].body}</p>
+            </div>
+          </>
+        )}
+
+        <div className="aqp-onb-progress" aria-hidden>
+          {Array.from({ length: totalSteps }, (_, i) => (
             <span
               key={i}
               className={`aqp-onb-dot ${i === step ? 'is-on' : i < step ? 'is-done' : ''}`}
@@ -185,20 +261,37 @@ export function OnboardingModal({ lang }: Props) {
           ))}
         </div>
 
-        <div className="aqp-onb-actions">
-          <button type="button" className="btn-ghost-v8 btn-sm" onClick={close}>
-            {t.skip}
-          </button>
-          <button
-            type="button"
-            className="btn-primary-v8 btn-sm"
-            onClick={() => (isLast ? close() : setStep((s) => s + 1))}
-          >
-            {isLast ? t.done : t.next}
-            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          </button>
+        <div className={`aqp-onb-actions ${isAttest ? 'aqp-onb-actions--end' : ''}`}>
+          {isAttest ? (
+            <button
+              type="button"
+              className="btn-primary-v8 btn-sm aqp-onb-confirm"
+              onClick={confirm}
+              disabled={!checked || busy}
+            >
+              {busy ? t.attestBusy : legal.confirm}
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="btn-ghost-v8 btn-sm"
+                onClick={() => setStep(attestIndex)}
+              >
+                {t.skip}
+              </button>
+              <button
+                type="button"
+                className="btn-primary-v8 btn-sm"
+                onClick={() => setStep((s) => s + 1)}
+              >
+                {t.next}
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.2">
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                </svg>
+              </button>
+            </>
+          )}
         </div>
       </div>
     </div>

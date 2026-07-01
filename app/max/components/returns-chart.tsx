@@ -2,6 +2,8 @@
 
 import { useMemo } from 'react';
 
+import type { Lang } from './i18n';
+
 interface Props {
   /** APEX portfolio equity values over time (real USD). */
   points?: number[];
@@ -10,6 +12,8 @@ interface Props {
   /** Real NASDAQ Composite (^IXIC) level, aligned to equity timestamps. */
   nasdaqPoints?: number[];
   xTicks?: string[];
+  /** Språk for tom-tilstandsteksten. */
+  lang?: Lang;
 }
 
 const DEFAULT_TICKS = ['09:30', '10:30', '11:30', '12:30', '13:30', '14:30', '15:30', '16:00'];
@@ -31,30 +35,34 @@ function toPctReturn(values: number[]): number[] {
   return values.map((v) => (v / base - 1) * 100);
 }
 
-export function ReturnsChart({ points, sp500Points, nasdaqPoints, xTicks = DEFAULT_TICKS }: Props) {
-  const pts = useMemo(() => {
-    if (points && points.length > 1) return points;
-    const out: number[] = [];
-    let v = 1_000_000;
-    for (let i = 0; i < 120; i++) {
-      // Deterministic placeholder curve (no Math.random — keeps useMemo pure).
-      v += (Math.sin(i / 9) + 0.6) * 450 + Math.sin(i / 2.3) * 120;
-      out.push(v);
-    }
-    return out;
-  }, [points]);
+export function ReturnsChart({ points, sp500Points, nasdaqPoints, xTicks = DEFAULT_TICKS, lang = 'no' }: Props) {
+  // Kun ekte serier tegnes. Den gamle «placeholder-kurven» viste en
+  // fabrikkert utvikling når data manglet — erstattet med ærlig tomhet
+  // (§5.7/§13.2) i identiske dimensjoner.
+  const pts = useMemo(() => (points && points.length > 1 ? points : null), [points]);
 
-  const n = pts.length;
+  const n = pts?.length ?? 0;
 
-  const apexPct = useMemo(() => toPctReturn(pts), [pts]);
+  const apexPct = useMemo(() => (pts ? toPctReturn(pts) : []), [pts]);
   const sp500Pct = useMemo(
-    () => (sp500Points && sp500Points.length === n ? toPctReturn(sp500Points) : null),
-    [sp500Points, n],
+    () => (pts && sp500Points && sp500Points.length === n ? toPctReturn(sp500Points) : null),
+    [pts, sp500Points, n],
   );
   const nasdaqPct = useMemo(
-    () => (nasdaqPoints && nasdaqPoints.length === n ? toPctReturn(nasdaqPoints) : null),
-    [nasdaqPoints, n],
+    () => (pts && nasdaqPoints && nasdaqPoints.length === n ? toPctReturn(nasdaqPoints) : null),
+    [pts, nasdaqPoints, n],
   );
+
+  if (!pts) {
+    // Samme høyde som .chart-svg (280px) — ingen layout-hopp (§13.7).
+    return (
+      <div className="chart">
+        <div className="aq-hatch" style={{ height: 280 }}>
+          {lang === 'no' ? 'INGEN HISTORIKK Å VISE ENNÅ' : 'NO HISTORY TO SHOW YET'}
+        </div>
+      </div>
+    );
+  }
 
   // Y-axis: percentage scale shared by all three series. Always include 0 %
   // so break-even is in view; pad by 5 % of the range so the lines aren't
@@ -102,12 +110,12 @@ export function ReturnsChart({ points, sp500Points, nasdaqPoints, xTicks = DEFAU
       <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="chart-svg">
         <defs>
           <linearGradient id="rc-grn" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0%" stopColor="#10B981" stopOpacity="0.45" />
-            <stop offset="100%" stopColor="#10B981" stopOpacity="0" />
+            <stop offset="0%" stopColor="var(--aq-up)" stopOpacity="0.45" />
+            <stop offset="100%" stopColor="var(--aq-up)" stopOpacity="0" />
           </linearGradient>
           <linearGradient id="rc-line" x1="0" x2="1" y1="0" y2="0">
-            <stop offset="0%" stopColor="#34D399" />
-            <stop offset="100%" stopColor="#10B981" />
+            <stop offset="0%" stopColor="var(--aq-up-hi)" />
+            <stop offset="100%" stopColor="var(--aq-up)" />
           </linearGradient>
         </defs>
 
@@ -119,7 +127,7 @@ export function ReturnsChart({ points, sp500Points, nasdaqPoints, xTicks = DEFAU
             x2={W - PAD_R}
             y1={PAD_TB + p * (H - PAD_TB * 2)}
             y2={PAD_TB + p * (H - PAD_TB * 2)}
-            stroke="rgba(255,255,255,0.05)"
+            stroke="var(--aq-border-soft)"
             strokeDasharray="2 4"
           />
         ))}
@@ -131,7 +139,7 @@ export function ReturnsChart({ points, sp500Points, nasdaqPoints, xTicks = DEFAU
             x2={W - PAD_R}
             y1={zeroY}
             y2={zeroY}
-            stroke="rgba(255,255,255,0.18)"
+            stroke="var(--aq-mute-deep)"
             strokeWidth="1"
           />
         )}
@@ -144,7 +152,7 @@ export function ReturnsChart({ points, sp500Points, nasdaqPoints, xTicks = DEFAU
         {sp500Path && (
           <path
             d={sp500Path}
-            stroke="rgba(255,255,255,0.42)"
+            stroke="var(--aq-faint)"
             strokeWidth="1.2"
             fill="none"
             strokeDasharray="3 4"
@@ -155,7 +163,7 @@ export function ReturnsChart({ points, sp500Points, nasdaqPoints, xTicks = DEFAU
         {nasdaqPath && (
           <path
             d={nasdaqPath}
-            stroke="rgba(96,165,250,0.45)"
+            stroke="var(--aq-cyan-deep)"
             strokeWidth="1.2"
             fill="none"
             strokeDasharray="2 3"
@@ -163,7 +171,7 @@ export function ReturnsChart({ points, sp500Points, nasdaqPoints, xTicks = DEFAU
         )}
 
         {/* Pulsing end-marker on APEX */}
-        <circle cx={x(n - 1)} cy={y(apexEnd)} r="4" fill="#34D399">
+        <circle cx={x(n - 1)} cy={y(apexEnd)} r="4" fill="var(--aq-up-hi)">
           <animate attributeName="r" values="4;7;4" dur="1.6s" repeatCount="indefinite" />
           <animate attributeName="opacity" values="1;.5;1" dur="1.6s" repeatCount="indefinite" />
         </circle>
@@ -175,8 +183,8 @@ export function ReturnsChart({ points, sp500Points, nasdaqPoints, xTicks = DEFAU
             x={W - PAD_R + 6}
             y={PAD_TB + p * (H - PAD_TB * 2) + 3}
             fontSize="10"
-            fontFamily="JetBrains Mono"
-            fill="rgba(255,255,255,0.5)"
+            fontFamily="var(--aq-font-mono)"
+            fill="var(--aq-muted)"
             textAnchor="start"
           >
             {fmtPct(val)}
@@ -189,8 +197,8 @@ export function ReturnsChart({ points, sp500Points, nasdaqPoints, xTicks = DEFAU
             x={x(n - 1) + 4}
             y={y(sp500Pct[n - 1]) - 3}
             fontSize="9"
-            fontFamily="JetBrains Mono"
-            fill="rgba(255,255,255,0.55)"
+            fontFamily="var(--aq-font-mono)"
+            fill="var(--aq-muted)"
             textAnchor="start"
           >
             S&amp;P
@@ -201,8 +209,8 @@ export function ReturnsChart({ points, sp500Points, nasdaqPoints, xTicks = DEFAU
             x={x(n - 1) + 4}
             y={y(nasdaqPct[n - 1]) - 3}
             fontSize="9"
-            fontFamily="JetBrains Mono"
-            fill="rgba(96,165,250,0.6)"
+            fontFamily="var(--aq-font-mono)"
+            fill="var(--aq-cyan-deep)"
             textAnchor="start"
           >
             NASDAQ

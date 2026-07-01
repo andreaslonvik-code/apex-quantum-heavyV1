@@ -1,12 +1,96 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { SignedIn, SignedOut, SignOutButton } from '@clerk/nextjs';
 import type { Lang } from '../marketing/types';
 import { writeLangCookie } from '@/lib/i18n/lang-cookie';
+import { SOURCE_NOTE } from '@/lib/legal-copy';
 import { ArrowRight } from './icons';
+
+/**
+ * PAPER-badge (§7) — diskret mono-badge ytterst i headeren som åpner
+ * Kildenotens innhold ved hover/tap. Ærligheten sitter i selve kromen.
+ * Gjenbruker Kildenotens popover-vokabular (.aq-srcnote-pop) og copy
+ * fra lib/legal-copy — HENTET-linjen utelates siden headeren ikke
+ * bærer et eget tidsstempel (kun sanne, målte verdier vises).
+ */
+function PaperBadge({ lang }: { lang: Lang }) {
+  const t = SOURCE_NOTE[lang];
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const popId = useId();
+
+  const close = useCallback(() => {
+    setOpen(false);
+    btnRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') close();
+    };
+    const onDown = (e: PointerEvent) => {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    document.addEventListener('pointerdown', onDown);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.removeEventListener('pointerdown', onDown);
+    };
+  }, [open, close]);
+
+  return (
+    <div
+      ref={rootRef}
+      className="hdr-paper"
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+    >
+      <button
+        ref={btnRef}
+        type="button"
+        className="hdr-paper-badge"
+        aria-expanded={open}
+        aria-controls={popId}
+        aria-label={t.ariaLabel}
+        onClick={() => setOpen((v) => !v)}
+      >
+        PAPER
+      </button>
+      <span
+        id={popId}
+        role="note"
+        className="aq-srcnote-pop"
+        data-open={open || undefined}
+        hidden={!open}
+      >
+        <span className="aq-srcnote-line">{t.source}</span>
+        <span className="aq-srcnote-line">{t.mode}</span>
+        <span className="aq-srcnote-caveat">{t.caveat}</span>
+        <span className="aq-srcnote-links">
+          <Link href="/risikofaktorer">{t.riskLink}</Link>
+          <Link href="/innsyn">{t.methodLink}</Link>
+        </span>
+      </span>
+    </div>
+  );
+}
+
+const NAV_ITEMS: Array<{ href: string; label: Record<Lang, string> }> = [
+  { href: '/#products', label: { no: 'Produkter', en: 'Products' } },
+  { href: '/#record', label: { no: 'Resultater', en: 'Results' } },
+  { href: '/pris', label: { no: 'Priser', en: 'Pricing' } },
+  { href: '/om-oss', label: { no: 'Om oss', en: 'About' } },
+  { href: '/blogg', label: { no: 'Blogg', en: 'Blog' } },
+  { href: '/innsyn', label: { no: 'Innsyn', en: 'Transparency' } },
+];
 
 export function HeaderV2({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -40,12 +124,9 @@ export function HeaderV2({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => 
           </span>
         </Link>
         <nav className="nav">
-          <Link href="/plus">Apex Quantum +</Link>
-          <Link href="/#products">{lang === 'no' ? 'Produkter' : 'Products'}</Link>
-          <Link href="/#principles">{lang === 'no' ? 'Funksjoner' : 'Features'}</Link>
-          <Link href="/innsyn">{lang === 'no' ? 'Innsyn' : 'Transparency'}</Link>
-          <Link href="/pris">{lang === 'no' ? 'Pris' : 'Pricing'}</Link>
-          <Link href="/om-oss">{lang === 'no' ? 'Om oss' : 'About'}</Link>
+          {NAV_ITEMS.map((it) => (
+            <Link key={it.href} href={it.href}>{it.label[lang]}</Link>
+          ))}
         </nav>
         <div className="hdr-right">
           <div className="lang">
@@ -57,7 +138,7 @@ export function HeaderV2({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => 
               {lang === 'no' ? 'Logg inn' : 'Sign in'}
             </Link>
             <Link href="/sign-up" className="btn btn-gold btn-sm hide-on-mobile">
-              {lang === 'no' ? 'Start nå' : 'Get started'} <ArrowRight />
+              {lang === 'no' ? 'Kom i gang' : 'Get started'} <ArrowRight />
             </Link>
           </SignedOut>
           <SignedIn>
@@ -68,6 +149,7 @@ export function HeaderV2({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => 
               </button>
             </SignOutButton>
           </SignedIn>
+          <PaperBadge lang={lang} />
           <button
             type="button"
             className="hdr-burger"
@@ -87,12 +169,9 @@ export function HeaderV2({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => 
           same routes as the desktop nav so search engines see one source. */}
       <div className={`mobile-sheet ${menuOpen ? 'is-open' : ''}`} aria-hidden={!menuOpen}>
         <nav className="mobile-nav" onClick={closeMenu}>
-          <Link href="/plus">Apex Quantum +</Link>
-          <Link href="/#products">{lang === 'no' ? 'Produkter' : 'Products'}</Link>
-          <Link href="/#principles">{lang === 'no' ? 'Funksjoner' : 'Features'}</Link>
-          <Link href="/innsyn">{lang === 'no' ? 'Innsyn' : 'Transparency'}</Link>
-          <Link href="/pris">{lang === 'no' ? 'Pris' : 'Pricing'}</Link>
-          <Link href="/om-oss">{lang === 'no' ? 'Om oss' : 'About'}</Link>
+          {NAV_ITEMS.map((it) => (
+            <Link key={it.href} href={it.href}>{it.label[lang]}</Link>
+          ))}
         </nav>
         <div className="mobile-cta" onClick={closeMenu}>
           <SignedOut>
@@ -100,7 +179,7 @@ export function HeaderV2({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => 
               {lang === 'no' ? 'Logg inn' : 'Sign in'}
             </Link>
             <Link href="/sign-up" className="btn btn-gold btn-lg">
-              {lang === 'no' ? 'Start nå' : 'Get started'} <ArrowRight />
+              {lang === 'no' ? 'Kom i gang' : 'Get started'} <ArrowRight />
             </Link>
           </SignedOut>
           <SignedIn>

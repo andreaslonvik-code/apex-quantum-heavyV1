@@ -8,7 +8,7 @@ const PRINCIPLES_COPY: Record<Lang, {
   titleEm: string;
   titlePost: string;
   sub: string;
-  items: Array<{ n: string; t: string; d: string }>;
+  items: Array<{ eye: string; n: string; t: string; d: string }>;
 }> = {
   no: {
     eye: '02 · Plattformen',
@@ -17,9 +17,24 @@ const PRINCIPLES_COPY: Record<Lang, {
     titlePost: ' fravikes.',
     sub: 'Alle Apex Quantum-produkter er bygget over de samme prinsippene — disse styrer hvordan koden er skrevet og hvordan kunden behandles.',
     items: [
-      { n: 'I',   t: 'Du beholder kontrollen.',  d: 'Du velger megler. Du velger paper eller live. Du kan koble fra når som helst. Apex Quantum kobler seg til din egen Alpaca-konto — vi tar aldri imot dine midler, og vi flytter dem aldri.' },
-      { n: 'II',  t: 'Sikkerhet er ikke en fotnote.', d: 'Alpaca API-nøkler lagres kryptert med AES-256-GCM, per bruker. Rate-limiting og DDoS-beskyttelse i kanten. Strukturert revisjons-logging på hver handling. Juridiske ansvarsfraskrivelser er inkludert, ikke gjemt.' },
-      { n: 'III', t: 'Du ser hva motoren gjør.',  d: 'Live dashboard med porteføljeoversikt, handelslogg og performance-metrikker. Hver AI-anbefaling kommer med fullstendig begrunnelse. Ingen svart boks — du forstår, eller du forkaster.' },
+      {
+        eye: 'PRINSIPP 01 · KONTROLL',
+        n: 'I',
+        t: 'Du beholder kontrollen.',
+        d: 'Motoren handler mot din egen Alpaca-konto via API-nøkler du selv kan trekke tilbake. Vi tar aldri imot, oppbevarer eller flytter dine midler. Du kan koble fra når som helst.',
+      },
+      {
+        eye: 'PRINSIPP 02 · SIKKERHET',
+        n: 'II',
+        t: 'Sikkerhet er ikke en fotnote.',
+        d: 'API-nøkler lagres kryptert med AES-256-GCM, per bruker. Hver handling skrives til strukturert revisjonslogg, og hver ordre logges med begrunnelse før den sendes.',
+      },
+      {
+        eye: 'PRINSIPP 03 · INNSYN',
+        n: 'III',
+        t: 'Du ser hva motoren gjør.',
+        d: 'Hvert signal publiseres med fullstendig begrunnelse og tidsstempel. Porteføljen, handelsloggen og beslutningene kan etterprøves på innsynssiden — ingen svart boks.',
+      },
     ],
   },
   en: {
@@ -29,9 +44,24 @@ const PRINCIPLES_COPY: Record<Lang, {
     titlePost: ' bend.',
     sub: 'Every Apex Quantum product is built on the same principles — they govern how the code is written and how the customer is treated.',
     items: [
-      { n: 'I',   t: 'You keep control.',             d: 'You pick the broker. You pick paper or live. You can disconnect at any time. Apex Quantum connects to your own Alpaca account — we never receive your funds, and we never move them.' },
-      { n: 'II',  t: 'Security is not a footnote.',   d: 'Alpaca API keys are stored AES-256-GCM encrypted, per user. Rate-limiting and DDoS protection at the edge. Structured audit logging on every action. Legal disclaimers are included, not hidden.' },
-      { n: 'III', t: 'You see what the engine does.', d: 'A live dashboard with portfolio overview, trade log and performance metrics. Every AI recommendation arrives with full reasoning. No black box — you understand it, or you reject it.' },
+      {
+        eye: 'PRINCIPLE 01 · CONTROL',
+        n: 'I',
+        t: 'You keep control.',
+        d: 'The engine trades against your own Alpaca account via API keys you can revoke yourself. We never receive, hold or move your funds. You can disconnect at any time.',
+      },
+      {
+        eye: 'PRINCIPLE 02 · SECURITY',
+        n: 'II',
+        t: 'Security is not a footnote.',
+        d: 'API keys are stored encrypted with AES-256-GCM, per user. Every action is written to a structured audit log, and every order is logged with its reasoning before it is sent.',
+      },
+      {
+        eye: 'PRINCIPLE 03 · TRANSPARENCY',
+        n: 'III',
+        t: 'You see what the engine does.',
+        d: 'Every signal is published with full reasoning and a timestamp. The portfolio, trade log and decisions can be verified on the transparency page — no black box.',
+      },
     ],
   },
 };
@@ -39,7 +69,7 @@ const PRINCIPLES_COPY: Record<Lang, {
 export function PrinciplesV2({ lang }: { lang: Lang }) {
   const t = PRINCIPLES_COPY[lang];
   return (
-    <section id="principles" className="principles">
+    <section id="principles" className="principles" data-reveal>
       <div className="container">
         <div className="principles-head">
           <div>
@@ -51,7 +81,8 @@ export function PrinciplesV2({ lang }: { lang: Lang }) {
         <div className="principles-grid">
           {t.items.map((it) => (
             <div key={it.n} className="principle">
-              <span className="principle-num">{it.n}.</span>
+              <span className="principle-eye">{it.eye}</span>
+              <span className="principle-num" aria-hidden>{it.n}.</span>
               <h3>{it.t}</h3>
               <p>{it.d}</p>
             </div>

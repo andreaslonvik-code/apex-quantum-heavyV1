@@ -5,6 +5,7 @@ import type { PlusLang } from '@/lib/i18n/plus-lang';
 import { PLUS_WATCHLIST, type PlusRegion } from '@/lib/blueprints/plus';
 import { type PlusAction, SEED_SIGNALS } from './seed-signals';
 import { useOwnedTickers } from './use-owned-tickers';
+import { EditionRow } from './edition-row';
 
 interface DisplaySignal {
   id: string;
@@ -101,6 +102,12 @@ const COPY = {
     empty: 'Ingen signaler ennå. Neste skann kjører ved neste hele time.',
     refresh: 'Oppdater',
     noteOnLang: 'Signaler genereres på norsk. Oversettelse til andre språk kommer snart.',
+    dayEye: 'Dagens bilde',
+    dayNew: 'Nye signaler',
+    dayHit: 'Treffprosent 30 d',
+    dayNext: 'Neste skann',
+    openDetails: 'Vis detaljer for',
+    close: 'Lukk',
   },
   en: {
     eye: 'TODAY',
@@ -154,6 +161,12 @@ const COPY = {
     empty: 'No signals yet. Next scan runs at the top of the next hour.',
     refresh: 'Refresh',
     noteOnLang: 'Signals are generated in Norwegian. Translation to other languages coming soon.',
+    dayEye: 'Today at a glance',
+    dayNew: 'New signals',
+    dayHit: 'Win rate 30 d',
+    dayNext: 'Next scan',
+    openDetails: 'Show details for',
+    close: 'Close',
   },
   de: {
     eye: 'HEUTE',
@@ -207,6 +220,12 @@ const COPY = {
     empty: 'Noch keine Signale. Nächster Scan zur nächsten vollen Stunde.',
     refresh: 'Aktualisieren',
     noteOnLang: 'Signale werden auf Norwegisch generiert. Übersetzung in andere Sprachen folgt.',
+    dayEye: 'Heute im Überblick',
+    dayNew: 'Neue Signale',
+    dayHit: 'Trefferquote 30 T',
+    dayNext: 'Nächster Scan',
+    openDetails: 'Details anzeigen für',
+    close: 'Schließen',
   },
   es: {
     eye: 'HOY',
@@ -260,6 +279,12 @@ const COPY = {
     empty: 'Aún no hay señales. Próximo escaneo a la próxima hora en punto.',
     refresh: 'Actualizar',
     noteOnLang: 'Las señales se generan en noruego. Traducción a otros idiomas próximamente.',
+    dayEye: 'El día de hoy',
+    dayNew: 'Señales nuevas',
+    dayHit: 'Acierto 30 d',
+    dayNext: 'Próximo escaneo',
+    openDetails: 'Ver detalles de',
+    close: 'Cerrar',
   },
   zh: {
     eye: '今日',
@@ -312,6 +337,12 @@ const COPY = {
     empty: '暂无信号。下次扫描将在下一个整点运行。',
     refresh: '刷新',
     noteOnLang: '信号目前以挪威语生成，其他语言版本即将推出。',
+    dayEye: '今日概览',
+    dayNew: '新信号',
+    dayHit: '30 天胜率',
+    dayNext: '下次扫描',
+    openDetails: '查看详情',
+    close: '关闭',
   },
 } as const;
 
@@ -503,6 +534,21 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
     );
   }, [signals]);
 
+  // Dagens viktigste signal — Gullsnitt-topplinjen (§5.4) tegnes KUN her.
+  // Deterministisk: høyest handlingsprioritet, deretter høyest konfidens.
+  const leadSignalId = useMemo(() => {
+    if (!signals || signals.length === 0) return null;
+    let lead = signals[0];
+    for (const s of signals) {
+      const better =
+        ACTION_PRIORITY[s.action] < ACTION_PRIORITY[lead.action] ||
+        (ACTION_PRIORITY[s.action] === ACTION_PRIORITY[lead.action] &&
+          s.confidence > lead.confidence);
+      if (better) lead = s;
+    }
+    return lead.id;
+  }, [signals]);
+
   return (
     <div className="aqp-content">
       <div className="aqp-page-head">
@@ -511,7 +557,35 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
           {t.eye}
         </div>
         <h1 className="aqp-page-title">{t.title}</h1>
+        <EditionRow lang={lang} />
         <p className="aqp-page-sub">{t.sub}</p>
+      </div>
+
+      {/* «Dagens bilde» (§10d) — kun tall som faktisk måles; umålte felt utelates. */}
+      <div className="aqp-daybar">
+        <div className="aqp-daybar-eye">{t.dayEye}</div>
+        <div className="aqp-daybar-stats">
+          {meta.isReal && signals && (
+            <div className="aqp-daybar-stat">
+              <div className="aqp-daybar-num">{signals.length}</div>
+              <div className="aqp-daybar-key">{t.dayNew}</div>
+            </div>
+          )}
+          {trackRecord && trackRecord.closed > 0 && trackRecord.winRate !== null && (
+            <div className="aqp-daybar-stat">
+              <div className="aqp-daybar-num">
+                {Math.round(trackRecord.winRate * 100)} %
+              </div>
+              <div className="aqp-daybar-key">{t.dayHit}</div>
+            </div>
+          )}
+          <div className="aqp-daybar-stat">
+            <div className="aqp-daybar-num" suppressHydrationWarning>
+              {formatNextUpdate(lang)}
+            </div>
+            <div className="aqp-daybar-key">{t.dayNext}</div>
+          </div>
+        </div>
       </div>
 
       {/* Cadence + last-updated banner */}
@@ -707,19 +781,22 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
     const isBuy = s.action === 'BUY';
     const confidenceTier =
       s.confidence >= 80 ? 'high' : s.confidence >= 60 ? 'med' : 'low';
+    const isLead = s.id === leadSignalId;
     return (
       <article
         key={s.id}
         className={`aqp-signal-card aqp-signal-card--${s.action.toLowerCase()} ${
           owned ? 'aqp-signal-card--owned' : ''
-        }`}
+        } ${isLead ? 'aqp-signal-card--lead' : ''}`}
       >
+                {/* Anatomi (§10c): ticker-rad → handlings-tag → Fraunces-
+                    begrunnelse → meta-rad → detaljgrid. */}
                 <header className="aqp-signal-head">
                   <button
                     type="button"
                     className="aqp-signal-id aqp-signal-id--clickable"
                     onClick={() => setOpenTicker(s.ticker)}
-                    aria-label={`Open ${s.ticker} details`}
+                    aria-label={`${t.openDetails} ${s.ticker}`}
                   >
                     <div className="aqp-ticker">{s.ticker}</div>
                     <div className="aqp-ticker-name">{meta?.name ?? s.ticker}</div>
@@ -743,6 +820,8 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
                 </header>
 
                 <div className="aqp-action-explain">{t.actionExplain[s.action]}</div>
+
+                <p className="aqp-signal-reasoning">{s.reasoning}</p>
 
                 <PriceRow
                   signal={s}
@@ -787,8 +866,6 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
                     </button>
                   </div>
                 )}
-
-                <p className="aqp-signal-reasoning">{s.reasoning}</p>
 
                 {(s.peerComparison || s.insiderSignal) && (
                   <div className="aqp-extra-row">
@@ -958,7 +1035,7 @@ function TickerModal({
           type="button"
           className="aqp-modal-close"
           onClick={onClose}
-          aria-label="Close"
+          aria-label={t.close}
         >
           ✕
         </button>
@@ -1037,8 +1114,8 @@ function Sparkline({ points }: { points: ChartPoint[] }) {
     })
     .join(' ');
   const lastUp = ys[ys.length - 1] >= ys[0];
-  const stroke = lastUp ? '#34D399' : '#F87171';
-  const fill = lastUp ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.10)';
+  const stroke = lastUp ? 'var(--aq-up-hi)' : 'var(--aq-down-hi)';
+  const fill = lastUp ? 'var(--aq-up-tint)' : 'var(--aq-down-tint)';
   const areaPath = `${path} L${(width - pad).toFixed(1)},${(height - pad).toFixed(1)} L${pad},${(height - pad).toFixed(1)} Z`;
   return (
     <svg viewBox={`0 0 ${width} ${height}`} className="aqp-spark-svg">

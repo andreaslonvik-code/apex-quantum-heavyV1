@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import type { PlusLang } from '@/lib/i18n/plus-lang';
 import { PLUS_WATCHLIST } from '@/lib/blueprints/plus';
+import { EditionRow } from './edition-row';
 
 const COPY = {
   no: {
@@ -141,6 +142,7 @@ export function AskView({ lang }: { lang: PlusLang }) {
           {t.eye}
         </div>
         <h1 className="aqp-page-title">{t.title}</h1>
+        <EditionRow lang={lang} />
         <p className="aqp-page-sub">{t.sub}</p>
       </div>
 

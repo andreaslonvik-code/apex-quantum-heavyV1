@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import type { PlusLang } from '@/lib/i18n/plus-lang';
+import { EditionRow } from './edition-row';
 
 type JournalAction = 'BUY' | 'SELL' | 'HOLD' | 'WATCH' | 'NOTE';
 
@@ -263,6 +264,7 @@ export function JournalView({ lang }: { lang: PlusLang }) {
           {t.eye}
         </div>
         <h1 className="aqp-page-title">{t.title}</h1>
+        <EditionRow lang={lang} />
         <p className="aqp-page-sub">{t.sub}</p>
       </div>
 

@@ -1,36 +1,41 @@
-"use client";
+'use client';
 
-import { useState, useRef, useEffect } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Send, Sparkles, Zap, RefreshCw, Target, Brain, AlertTriangle } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { useToast } from '@/app/components/toast';
+/**
+ * Motor-dialogen (§10): motorens svar i Fraunces 15–16px, brukeren i
+ * Satoshi 14px, mono-tidsstempler og terminal-prompt-input med «> ».
+ *
+ * Mekanikken er beholdt (meldingsflyt, trigger-baserte svar,
+ * interaksjonshistorikk i localStorage). Copyen er sanert: ingen
+ * emoji, ingen fabrikkerte tall eller kursmål (§13.1/§13.2) — svarene
+ * beskriver metoden ærlig og er tydelig merket som forhåndsdefinerte.
+ * Sanntidstall i åpningsmeldingen kommer fra ekte API-data via props.
+ */
+
+import { useEffect, useRef, useState } from 'react';
+import type { Lang } from '@/app/components/marketing/types';
+import { fmtPct, fmtUsd } from '@/lib/marketing-format';
+import { COCKPIT_COPY } from '../lib/copy';
+import type { CockpitTf } from '../lib/types';
 
 interface Message {
   id: string;
-  role: "user" | "assistant";
+  role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
 }
 
-/** Safe inline-markdown renderer: handles **bold** + newlines without
- *  ever passing user text to dangerouslySetInnerHTML. JSX escaping
- *  on the string children means typed `<img onerror=...>` renders as
- *  literal text instead of executing. */
+/** Trygg inline-markdown: **fet** + linjeskift uten dangerouslySetInnerHTML.
+ *  JSX-escaping på strengbarna gjør at innskrevet HTML rendres som tekst. */
 function renderInlineMarkdown(content: string): React.ReactNode[] {
-  // Split on **bold** markers; even indices = plain text, odd = bold.
   const parts = content.split(/\*\*(.*?)\*\*/g);
   const out: React.ReactNode[] = [];
   parts.forEach((part, partIdx) => {
     const isBold = partIdx % 2 === 1;
-    // Now split each part on newlines and interleave <br/>.
     const lines = part.split('\n');
     lines.forEach((line, lineIdx) => {
       const key = `${partIdx}-${lineIdx}`;
       if (isBold) {
-        out.push(<strong key={key} className="text-white">{line}</strong>);
+        out.push(<strong key={key}>{line}</strong>);
       } else {
         out.push(<span key={key}>{line}</span>);
       }
@@ -42,380 +47,199 @@ function renderInlineMarkdown(content: string): React.ReactNode[] {
   return out;
 }
 
-const grokResponses = [
-  {
-    trigger: "scan",
-    response: `**QUANTUM SCAN KOMPLETT** 🔍
+/** Forhåndsdefinerte, ærlige svar — trigger-mekanismen er beholdt. */
+const CANNED: Record<Lang, Array<{ triggers: string[]; response: string }>> = {
+  no: [
+    {
+      triggers: ['metode', 'blueprint', 'hvordan'],
+      response: `**Metoden**\n\nMotoren følger faste blueprint-lister for aksjer, krypto og råvarer. Hver vurderingsrunde ser den på nyheter og katalysatorer for tickerne på listen, og hver ordre logges med begrunnelse før den sendes til Alpaca.\n\nAlt du ser her stammer fra paper trading — simulert handel uten reell kapital. Full metodikk ligger på /innsyn.`,
+    },
+    {
+      triggers: ['risiko', 'tap', 'trygt'],
+      response: `**Risiko**\n\nAll handel med verdipapirer innebærer risiko for tap av hele det investerte beløpet, og AI-modeller kan feiltolke data eller reagere uventet på uvanlige markedsforhold.\n\nJeg pynter ikke på dette. Les de fullstendige risikofaktorene på /risikofaktorer før du kobler til en konto.`,
+    },
+    {
+      triggers: ['journal', 'logg', 'hendelse'],
+      response: `**Journalen**\n\nKolonnen til høyre er den faktiske hendelsesloggen: gjennomførte kjøp og salg fra megler-API-et, og motorens vurderinger med tidsstempel. Ingenting der er konstruert for visning — det er de samme radene som ligger til grunn for innsynssiden.`,
+    },
+    {
+      triggers: ['ordre', 'kjøp', 'selg', 'handle'],
+      response: `**Ordre**\n\nJeg legger ikke inn ordre fra denne dialogen. Handler besluttes av motoren i faste vurderingsrunder på serversiden, og hver ordre får sin begrunnelse i journalen. Vil du stoppe motoren, kobler du fra kontoen — det er den reelle stoppkontrollen.`,
+    },
+  ],
+  en: [
+    {
+      triggers: ['method', 'blueprint', 'how'],
+      response: `**The method**\n\nThe engine follows fixed blueprint lists for stocks, crypto and commodities. Each assessment round it reviews news and catalysts for the tickers on the list, and every order is logged with a written reason before it is sent to Alpaca.\n\nEverything you see here comes from paper trading — simulated trading without real capital. The full methodology lives at /innsyn.`,
+    },
+    {
+      triggers: ['risk', 'loss', 'safe'],
+      response: `**Risk**\n\nAll trading in securities carries a risk of losing the entire invested amount, and AI models can misread data or react unexpectedly to unusual market conditions.\n\nI will not dress this up. Read the full risk factors at /risikofaktorer before connecting an account.`,
+    },
+    {
+      triggers: ['journal', 'log', 'event'],
+      response: `**The journal**\n\nThe column on the right is the actual event log: executed buys and sells from the broker API, and the engine's assessments with timestamps. Nothing there is staged — they are the same rows that power the transparency page.`,
+    },
+    {
+      triggers: ['order', 'buy', 'sell', 'trade'],
+      response: `**Orders**\n\nI do not place orders from this dialogue. Trades are decided by the engine in fixed server-side assessment rounds, and every order gets its reason in the journal. To stop the engine, disconnect the account — that is the real stop control.`,
+    },
+  ],
+};
 
-Analyserte 847 instrumenter pa 0.3 sekunder.
+const FALLBACK: Record<Lang, string> = {
+  no: `Jeg har et begrenset sett forhåndsdefinerte svar i denne visningen, og dikter ikke opp analyser jeg ikke har grunnlag for.\n\nPrøv **metode**, **risiko**, **journal** eller **ordre** — eller se den fulle beslutningsloggen på /innsyn.`,
+  en: `I have a limited set of predefined answers in this view, and I do not invent analysis I have no basis for.\n\nTry **method**, **risk**, **journal** or **orders** — or see the full decision log at /innsyn.`,
+};
 
-**ASYMMETRISK ALPHA DETEKTERT:**
-- **MU** (Score: 9.2/10) - Memory-boom fortsetter. AI-infrastruktur driver ettersporselen. Entry: $420, Target: $580 (+38%)
-- **PLTR** (Score: 8.7/10) - EKSTREM OVERVAKNING AKTIVERT. Regjeringskontrakter + AI-pivot = eksplosiv vekst. Venter pa dip til $78.
-- **CEG** (Score: 8.4/10) - Nuklear renessanse er REAL. Datacenter-demand = uendelig.
+function buildIntro(
+  lang: Lang,
+  status: { totalValue: number | null; positionsCount: number | null; changePct: number | null; tf: CockpitTf },
+): string {
+  const { totalValue, positionsCount, changePct, tf } = status;
+  if (lang === 'no') {
+    if (totalValue == null) {
+      return `**Forvalterens bord**\n\nIngen tilkoblet konto — jeg har ingen live-tall å vise. Jeg kan likevel forklare metoden, risikoen og journalen. Alle svar her er forhåndsdefinerte, og ingen ordre utføres fra dialogen.`;
+    }
+    return `**Status**\n\nPorteføljeverdi: ${fmtUsd(totalValue, lang)} · ${positionsCount ?? '—'} posisjoner · endring (${tf}): ${changePct == null ? '—' : fmtPct(changePct, lang)}. Alle tall er paper trading via Alpaca.\n\nSpør meg om metoden, risikoen eller journalen.`;
+  }
+  if (totalValue == null) {
+    return `**The manager's desk**\n\nNo connected account — I have no live figures to show. I can still explain the method, the risk and the journal. All answers here are predefined, and no orders are placed from this dialogue.`;
+  }
+  return `**Status**\n\nPortfolio value: ${fmtUsd(totalValue, lang)} · ${positionsCount ?? '—'} positions · change (${tf}): ${changePct == null ? '—' : fmtPct(changePct, lang)}. All figures are paper trading via Alpaca.\n\nAsk me about the method, the risk or the journal.`;
+}
 
-**RISIKOFAKTORER:**
-- VIX opp 12% siste 24t - volatilitet oker
-- Fed-meeting om 3 dager - posisjonering pagaende
-
-*Anbefaling: Hold MU-eksponering, akkumuler CEG pa svakhet.*`
-  },
-  {
-    trigger: "pltr",
-    response: `**PALANTIR DEEP ANALYSIS** 🎯
-
-PLTR er den mest polariserende aksjen i portefoljen. Her er sannheten:
-
-**BULLCASE (70% sannsynlighet):**
-- AIP (Artificial Intelligence Platform) er en game-changer
-- Regjeringskontrakter gir recurring revenue
-- Commercial-vekst akselererer: +55% YoY
-- CEO Karp kjopper aksjer selv
-
-**BEARCASE (30% sannsynlighet):**
-- Valuering er strukket (P/S: 22x)
-- Insider-salg historisk hoyt
-- Konkurranse fra Microsoft, Google
-
-**APEX QUANTUM VERDICT:**
-Entry-sone: $76-80
-Target 12M: $145 (+85%)
-Stop-loss: $68 (-13%)
-
-*Asymmetrisk oppsiden rettferdiggjor risikoen. Akkumuler pa svakhet.*`
-  },
-  {
-    trigger: "rebalance",
-    response: `**AUTONOM REALLOKERING INITIALISERT** ⚡
-
-Basert pa dagens momentum og asymmetrisk scoring:
-
-**KJOP:**
-- +50 CEG @ $286.50 = $14,325 (undervektet, nuklear-momentum)
-- +200 RKLB @ $68.05 = $13,610 (space-kontrakter kommer)
-
-**SELG:**
-- -100 ABSI @ $2.98 = $298 (score under 5, kapitalbevaring)
-
-**VENT:**
-- MU, VRT, LMND - hold eksisterende posisjoner
-
-**ESTIMERT EFFEKT:**
-- Forventet alpha: +3.2% neste maned
-- Drawdown-risiko: -5.8% (akseptabelt)
-
-*Klar for utforelse. Si "utfor" for a plassere ordrene.*`
-  },
-  {
-    trigger: "utfor",
-    response: `**ORDRE SENDT TIL ALPACA** ✅
-
-Folgende handler er plassert:
-
-| Ticker | Aksjon | Antall | Pris | Status |
-|--------|--------|--------|------|--------|
-| CEG | KJOP | 50 | $286.50 | FYLT |
-| RKLB | KJOP | 200 | $68.05 | FYLT |
-| ABSI | SELG | 100 | $2.98 | FYLT |
-
-**Total transaksjonskostnad:** $47.50
-**Ny portefoljeverdi:** $1,310,235
-
-*Reallokering komplett. Portefoljen er na optimalisert for maksimal asymmetrisk avkastning.*`
-  },
-];
-
-const quickActions = [
-  { label: "Scan market", icon: Target },
-  { label: "Rebalance", icon: RefreshCw },
-  { label: "PLTR entry?", icon: Zap },
-];
-
-const initialMessages: Message[] = [
-  {
-    id: "1",
-    role: "assistant",
-    content: `**APEX QUANTUM AI TRADER v8** 🧠
-
-Jeg er din autonome handelspartner. Jeg soker sannhet i markedene - ikke hopium.
-
-**STATUS:**
-- Portefolje: $1,296,010 (+1.48% i dag)
-- Aktive posisjoner: 6
-- Risikoniwa: MODERAT-HOY
-
-**DAGENS OBSERVASJONER:**
-1. MU raller pa AI-hype - HOLD, ikke jag
-2. PLTR konsoliderer - akkumulasjons-sone nar
-3. VRT breakout bekreftet - momentum intakt
-
-*Spor meg om noe. Jeg gir deg brutalt aerlige svar.*`,
-    timestamp: new Date(),
-  },
-  {
-    id: "2",
-    role: "assistant", 
-    content: `**SELV-EVOLUSJON LOGG #847**
-
-Jeg har analysert mine siste 100 anbefalinger:
-- Treffrate: 73%
-- Gjennomsnittlig avkastning: +8.2%
-- Storste feil: For sen exit pa NVDA (-12%)
-
-**LARING:** Jeg ma vare mer aggressiv pa profitt-taking over 15% gevinst.
-
-*Algoritmen er oppdatert. Fremtidige signaler vil reflektere dette.*`,
-    timestamp: new Date(Date.now() - 300000),
-  },
-];
-
-export function AIChat() {
-  const [messages, setMessages] = useState<Message[]>(initialMessages);
-  const [input, setInput] = useState("");
+export function AIChat({
+  lang,
+  connected,
+  status,
+}: {
+  lang: Lang;
+  /** null = tilkoblingsstatus ukjent (laster fortsatt) */
+  connected: boolean | null;
+  status: { totalValue: number | null; positionsCount: number | null; changePct: number | null; tf: CockpitTf };
+}) {
+  const t = COCKPIT_COPY[lang];
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const { add: addToast } = useToast();
+  const listRef = useRef<HTMLDivElement>(null);
+  const introSetRef = useRef(false);
 
-  // Self-learning: Load and save interactions
-  const [interactionHistory, setInteractionHistory] = useState<Array<{input: string, response: string, timestamp: Date}>>([]);
-
+  // Interaksjonshistorikk i localStorage — mekanismen beholdt.
+  const historyRef = useRef<Array<{ input: string; response: string; timestamp: string }>>([]);
   useEffect(() => {
-    // Load interaction history from localStorage
-    const saved = localStorage.getItem('apex-quantum-interactions');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved).map((item: any) => ({
-          ...item,
-          timestamp: new Date(item.timestamp)
-        }));
-        setInteractionHistory(parsed);
-      } catch (e) {
-        console.error('Failed to load interaction history:', e);
-      }
+    try {
+      const saved = localStorage.getItem('apex-quantum-interactions');
+      if (saved) historyRef.current = JSON.parse(saved);
+    } catch {
+      /* korrupt lagring ignoreres */
     }
   }, []);
 
-  const saveInteraction = (input: string, response: string) => {
-    const newInteraction = { input, response, timestamp: new Date() };
-    const updated = [...interactionHistory, newInteraction].slice(-50); // Keep last 50
-    setInteractionHistory(updated);
-    localStorage.setItem('apex-quantum-interactions', JSON.stringify(updated));
-  };
+  // Åpningsmelding med ekte status — settes én gang når tilkoblingsstatus
+  // er avklart (og live-tall foreligger hvis tilkoblet). Oppdateres ikke
+  // i etterkant; tall animeres/oppdateres aldri i løpende samtale.
+  useEffect(() => {
+    if (introSetRef.current) return;
+    if (connected == null) return; // fortsatt ukjent — vent
+    if (connected && status.totalValue == null) return; // vent på ekte tall
+    introSetRef.current = true;
+    setMessages([
+      {
+        id: 'intro',
+        role: 'assistant',
+        content: buildIntro(lang, status),
+        timestamp: new Date(),
+      },
+    ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, status.totalValue]);
 
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    const el = listRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [messages, isTyping]);
+
+  const saveInteraction = (q: string, a: string) => {
+    const updated = [
+      ...historyRef.current,
+      { input: q, response: a, timestamp: new Date().toISOString() },
+    ].slice(-50);
+    historyRef.current = updated;
+    try {
+      localStorage.setItem('apex-quantum-interactions', JSON.stringify(updated));
+    } catch {
+      /* lagring kan være blokkert */
     }
-  }, [messages]);
-
-  const handleSend = async () => {
-    if (!input.trim()) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: "user",
-      content: input,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInput("");
-    setIsTyping(true);
-
-    addToast("Melding sendt til APEX QUANTUM AI", "info", 2000);
-
-    // Self-learning: Check for similar previous interactions
-    const similarInteractions = interactionHistory.filter(item =>
-      item.input.toLowerCase().includes(input.toLowerCase().split(' ')[0]) ||
-      input.toLowerCase().includes(item.input.toLowerCase().split(' ')[0])
-    );
-
-    // Simulate AI response
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    let responseContent = grokResponses.find(r => 
-      input.toLowerCase().includes(r.trigger)
-    )?.response;
-
-    if (!responseContent) {
-      // Use self-learning to generate better response
-      if (similarInteractions.length > 0) {
-        const lastSimilar = similarInteractions[similarInteractions.length - 1];
-        responseContent = `**LÆRT FRA TIDLIGERE INTERAKSJONER**
-
-Basert pa tidligere samtaler om lignende emner:
-
-${lastSimilar.response.split('\n').slice(0, 3).join('\n')}
-
-**OPPdatERT ANALYSE:**
-Interessant sporrsmal. La meg analysere dette med hensyn til dine tidligere interesser...
-
-*Jeg har na lært fra ${interactionHistory.length} tidligere interaksjoner for a gi bedre svar.*`;
-      } else {
-        responseContent = `**ANALYSERER: "${input}"**
-
-Interessant sporrsmal. La meg grave dypere i dataene...
-
-Basert pa min analyse av 10,000+ datapunkter, ser jeg ingen umiddelbar edge her. Markedet er effisient pa dette omradet.
-
-*Forslag: Fokuser pa de 6 kjerneposisjonene i blueprint. De har hoeyest asymmetrisk potensial.*`;
-      }
-    }
-
-    const aiMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: "assistant",
-      content: responseContent,
-      timestamp: new Date(),
-    };
-
-    setMessages(prev => [...prev, aiMessage]);
-    setIsTyping(false);
-
-    // Save interaction for self-learning
-    saveInteraction(input, responseContent);
-
-    addToast("APEX QUANTUM AI har svart", "success", 2000);
   };
 
-  const handleQuickAction = (action: string) => {
-    setInput(action);
-    setTimeout(() => handleSend(), 100);
+  const handleSend = async () => {
+    const q = input.trim();
+    if (!q || isTyping) return;
+
+    setMessages((prev) => [
+      ...prev,
+      { id: Date.now().toString(), role: 'user', content: q, timestamp: new Date() },
+    ]);
+    setInput('');
+    setIsTyping(true);
+
+    await new Promise((resolve) => setTimeout(resolve, 600));
+
+    const lower = q.toLowerCase();
+    const hit = CANNED[lang].find((c) => c.triggers.some((trig) => lower.includes(trig)));
+    const response = hit?.response ?? FALLBACK[lang];
+
+    setMessages((prev) => [
+      ...prev,
+      { id: `${Date.now()}-a`, role: 'assistant', content: response, timestamp: new Date() },
+    ]);
+    setIsTyping(false);
+    saveInteraction(q, response);
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5, delay: 0.2 }}
-      className="glass-card rounded-xl border border-[rgba(0,240,255,0.1)] flex flex-col h-full"
-    >
-      {/* Header */}
-      <div className="flex items-center justify-between p-4 border-b border-zinc-800/50">
-        <div className="flex items-center gap-3">
-          <motion.div
-            animate={{
-              boxShadow: [
-                "0 0 10px rgba(255, 0, 170, 0.3)",
-                "0 0 20px rgba(255, 0, 170, 0.5)",
-                "0 0 10px rgba(255, 0, 170, 0.3)",
-              ],
-            }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="w-10 h-10 rounded-full bg-gradient-to-br from-[#ff00aa] to-[#00f0ff] flex items-center justify-center"
-          >
-            <Brain className="w-5 h-5 text-white" />
-          </motion.div>
-          <div>
-            <h2 className="font-bold text-white flex items-center gap-2">
-              APEX QUANTUM AI Trader
-              <Sparkles className="w-4 h-4 text-[#ff00aa]" />
-            </h2>
-            <p className="text-[10px] text-zinc-500">Grok-drevet • Selvlærende • Brutalt ærlig</p>
+    <section className="aq-panel" aria-label={t.chatTitle}>
+      <div className="aq-panel-head">
+        <span>{t.chatTitle}</span>
+        <span className="aq-ck-panel-note">{t.chatDisclosure}</span>
+      </div>
+
+      <div className="aq-ck-chat-list" ref={listRef}>
+        {messages.map((m) => (
+          <div key={m.id} className="aq-ck-msg" data-role={m.role}>
+            <div className="aq-ck-msg-body">{renderInlineMarkdown(m.content)}</div>
+            <div className="aq-ck-msg-meta" suppressHydrationWarning>
+              {m.timestamp.toLocaleTimeString(lang === 'no' ? 'nb-NO' : 'en-GB', {
+                hour12: false,
+              })}
+            </div>
           </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <motion.div
-            animate={{ opacity: [1, 0.5, 1] }}
-            transition={{ duration: 2, repeat: Infinity }}
-            className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30"
-          >
-            <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span className="text-[10px] text-emerald-400">AKTIV</span>
-          </motion.div>
-        </div>
+        ))}
+        {isTyping && <div className="aq-ck-msg-meta">{t.chatThinking}</div>}
       </div>
 
-      {/* Messages */}
-      <ScrollArea className="flex-1 p-4" ref={scrollRef}>
-        <div className="space-y-4">
-          <AnimatePresence>
-            {messages.map((message) => (
-              <motion.div
-                key={message.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0 }}
-                className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
-              >
-                <div
-                  className={`max-w-[85%] rounded-lg p-3 ${
-                    message.role === "user"
-                      ? "bg-[#00f0ff]/20 border border-[#00f0ff]/30"
-                      : "bg-zinc-900/50 border border-zinc-800/50"
-                  }`}
-                >
-                  {/* M4 XSS fix — user-input is inlined into assistant
-                       responses ("ANALYSERER: \"${input}\"") so an
-                       attacker typing <img src=x onerror=…> would have
-                       executed via dangerouslySetInnerHTML. Now we
-                       escape HTML first, then render bold/newlines via
-                       JSX (no innerHTML at all). */}
-                  <div className="text-sm text-zinc-300 prose-custom whitespace-pre-wrap">
-                    {renderInlineMarkdown(message.content)}
-                  </div>
-                  <p className="text-[9px] text-zinc-600 mt-2">
-                    {message.timestamp.toLocaleTimeString("no-NO")}
-                  </p>
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-          
-          {isTyping && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="flex items-center gap-2 text-zinc-500 text-sm"
-            >
-              <motion.div
-                animate={{ scale: [1, 1.2, 1] }}
-                transition={{ duration: 0.6, repeat: Infinity }}
-                className="w-2 h-2 rounded-full bg-[#ff00aa]"
-              />
-              APEX QUANTUM tenker...
-            </motion.div>
-          )}
-        </div>
-      </ScrollArea>
-
-      {/* Quick Actions */}
-      <div className="px-4 pb-2">
-        <div className="flex items-center gap-2">
-          {quickActions.map((action) => (
-            <Button
-              key={action.label}
-              variant="outline"
-              size="sm"
-              onClick={() => handleQuickAction(action.label)}
-              className="text-xs border-zinc-800 hover:border-[#00f0ff]/50 hover:bg-[#00f0ff]/5 hover:text-[#00f0ff]"
-            >
-              <action.icon className="w-3 h-3 mr-1.5" />
-              {action.label}
-            </Button>
-          ))}
-        </div>
+      <div className="aq-ck-chat-input">
+        <span className="aq-ck-prompt" aria-hidden>
+          &gt;
+        </span>
+        <input
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+          placeholder={t.chatPlaceholder}
+          aria-label={t.chatTitle}
+        />
+        <button
+          type="button"
+          className="aq-ck-chat-send"
+          onClick={handleSend}
+          disabled={!input.trim() || isTyping}
+        >
+          {t.chatSend}
+        </button>
       </div>
-
-      {/* Input */}
-      <div className="p-4 border-t border-zinc-800/50">
-        <div className="flex items-center gap-2">
-          <Input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSend()}
-            placeholder="Spor APEX QUANTUM..."
-            className="flex-1 bg-zinc-900/50 border-zinc-800 focus:border-[#00f0ff]/50 focus:ring-[#00f0ff]/20 text-white placeholder:text-zinc-600"
-          />
-          <Button
-            onClick={handleSend}
-            disabled={!input.trim() || isTyping}
-            className="cyber-button bg-gradient-to-r from-[#ff00aa] to-[#00f0ff] hover:opacity-90 text-white"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
-        </div>
-      </div>
-    </motion.div>
+    </section>
   );
 }

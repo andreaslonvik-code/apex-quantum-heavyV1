@@ -130,7 +130,7 @@ export function AllocationCard({ lang }: Props) {
           <div key={key} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <label
               htmlFor={`alloc-${key}`}
-              style={{ flex: '0 0 160px', fontSize: 13, color: 'rgba(255,255,255,0.85)' }}
+              style={{ flex: '0 0 160px', fontSize: 13, color: 'var(--aq-text)' }}
             >
               {t[key]}
             </label>
@@ -156,8 +156,8 @@ export function AllocationCard({ lang }: Props) {
               style={{
                 flex: '0 0 70px',
                 padding: '6px 8px',
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.12)',
+                background: 'var(--aq-surface)',
+                border: '1px solid var(--aq-border-hi)',
                 borderRadius: 8,
                 color: 'var(--aq-text)',
                 fontFamily: 'var(--font-jetbrains)',
@@ -165,7 +165,7 @@ export function AllocationCard({ lang }: Props) {
                 fontSize: 13,
               }}
             />
-            <span style={{ width: 14, color: 'rgba(255,255,255,0.45)' }}>%</span>
+            <span style={{ width: 14, color: 'var(--aq-muted)' }}>%</span>
           </div>
         ))}
       </div>

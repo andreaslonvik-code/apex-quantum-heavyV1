@@ -1,5 +1,6 @@
 'use client';
 
+import { Fragment, useState, type FormEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { PLUS_FOR_SALE, PLUS_DEV_LABELS } from '@/lib/product-status';
 import type { Lang } from '../marketing/types';
@@ -23,6 +24,9 @@ const TIERS_COPY: Record<Lang, {
   titleEm: string;
   titlePost: string;
   sub: string;
+  note: string;
+  waitPlaceholder: string;
+  waitAria: string;
   plus: TierData;
   max: TierData;
 }> = {
@@ -32,6 +36,9 @@ const TIERS_COPY: Record<Lang, {
     titleEm:  'Apex Quantum',
     titlePost: '.',
     sub: 'Lær markedet med signaler og rapporter — eller la den fullautomatiske motoren ta over når den lanseres.',
+    note: 'BEGGE: AES-256-GCM-KRYPTERTE NØKLER · INGEN BINDING · NO/EN',
+    waitPlaceholder: 'din@epost.no',
+    waitAria: 'E-postadresse for Max-ventelisten',
     plus: {
       name: 'Plus', tag: 'TILGJENGELIG NÅ',
       tagline: 'Signaler, rapporter og læring.',
@@ -47,18 +54,18 @@ const TIERS_COPY: Record<Lang, {
       cta1: 'Start nå', cta2: 'Les mer',
     },
     max: {
-      name: 'Max', tag: 'UNDER UTVIKLING',
+      name: 'Max', tag: 'UNDER UTVIKLING · LANSERING 2026',
       tagline: 'Fullautomatisk AI-trading.',
       currency: '4 990', cycle: 'kr / mnd',
       desc: 'Den autonome trading-motoren med 12-måneders investeringshorisont. Bygger en portefølje av AI-/semis-leaders fordelt på åtte sektorer og lar vinnerne ride for kvartaler — ikke timer. Drevet av en blueprint utviklet over et år. Utført via Alpaca, døgnet rundt. Lansering planlagt 2026.',
       bullets: [
-        '12-måneders horisont — rider normale pullbacks (-3 til -8 %) med vilje',
+        '12-måneders horisont — rider normale pullbacks (−3 til −8 %) med vilje',
         'Cutter raskt ved ekte trend-bryt (FDA-avslag, dårlig earnings, SMA50-brudd)',
         'Fullautomatisk handel via Alpaca, krypterte API-nøkler (AES-256-GCM)',
         'Live cockpit, P&L og porteføljegraf',
         'Ta ut avkastning på ett klikk',
       ],
-      cta1: 'Varsle meg', cta2: 'Detaljer',
+      cta1: 'Sett meg på ventelisten', cta2: 'Detaljer',
     },
   },
   en: {
@@ -67,6 +74,9 @@ const TIERS_COPY: Record<Lang, {
     titleEm:  'Apex Quantum',
     titlePost: '.',
     sub: 'Learn the market with signals and reports — or let the fully autonomous engine take over once it launches.',
+    note: 'BOTH: AES-256-GCM ENCRYPTED KEYS · NO COMMITMENT · NO/EN',
+    waitPlaceholder: 'you@email.com',
+    waitAria: 'Email address for the Max waitlist',
     plus: {
       name: 'Plus', tag: 'AVAILABLE NOW',
       tagline: 'Signals, reports and learning.',
@@ -82,42 +92,108 @@ const TIERS_COPY: Record<Lang, {
       cta1: 'Start now', cta2: 'Learn more',
     },
     max: {
-      name: 'Max', tag: 'IN DEVELOPMENT',
+      name: 'Max', tag: 'IN DEVELOPMENT · LAUNCHING 2026',
       tagline: 'Fully autonomous AI trading.',
       currency: '499', cycle: '$ / month',
       desc: 'The autonomous trading engine with a 12-month investment horizon. Builds a portfolio of AI/semis leaders across eight sectors and lets winners ride for quarters — not hours. Driven by a blueprint developed over a year. Executed via Alpaca, around the clock. Launch planned 2026.',
       bullets: [
-        '12-month horizon — rides normal pullbacks (-3 to -8 %) on purpose',
+        '12-month horizon — rides normal pullbacks (−3 to −8 %) on purpose',
         'Cuts fast on real breakdowns (FDA rejection, bad earnings, SMA50 break)',
         'Fully automated trading via Alpaca, encrypted API keys (AES-256-GCM)',
         'Live cockpit, P&L and portfolio chart',
         'Withdraw profits with one click',
       ],
-      cta1: 'Notify me', cta2: 'Details',
+      cta1: 'Join the waitlist', cta2: 'Details',
     },
   },
 };
+
+/** Fagtermer med title-tooltip (§8-05). */
+const TERM_TITLES: Record<Lang, Record<string, string>> = {
+  no: {
+    'SMA50': '50-dagers glidende gjennomsnitt — teknisk trendindikator',
+    'FDA': 'U.S. Food and Drug Administration — amerikansk legemiddelmyndighet',
+    'AES-256-GCM': 'Krypteringsstandard brukt for lagring av API-nøkler',
+    'P&L': 'Gevinst og tap (profit and loss)',
+  },
+  en: {
+    'SMA50': '50-day simple moving average — technical trend indicator',
+    'FDA': 'U.S. Food and Drug Administration',
+    'AES-256-GCM': 'Encryption standard used for storing API keys',
+    'P&L': 'Profit and loss',
+  },
+};
+
+function escapeRe(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function renderBullet(text: string, lang: Lang): ReactNode {
+  const titles = TERM_TITLES[lang];
+  const re = new RegExp(`(${Object.keys(titles).map(escapeRe).join('|')})`, 'g');
+  return text.split(re).map((part, i) =>
+    titles[part] ? (
+      <span key={i} className="tier-term" title={titles[part]}>{part}</span>
+    ) : (
+      <Fragment key={i}>{part}</Fragment>
+    ),
+  );
+}
+
+/**
+ * Max-venteliste (§8-05): e-postfelt + gullknapp. Submit åpner samme
+ * mailto som før med utfylt emne — ingen ny backend.
+ */
+function MaxWaitlist({ lang, cta, placeholder, ariaLabel }: {
+  lang: Lang;
+  cta: string;
+  placeholder: string;
+  ariaLabel: string;
+}) {
+  const [email, setEmail] = useState('');
+  const onSubmit = (e: FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const subject = lang === 'no' ? 'Apex Quantum Max — venteliste' : 'Apex Quantum Max — waitlist';
+    const body = lang === 'no'
+      ? `Sett meg på ventelisten. E-post: ${email}`
+      : `Add me to the waitlist. Email: ${email}`;
+    window.location.href = `mailto:post@apex-quantum.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+  };
+  return (
+    <form className="tier-wait" onSubmit={onSubmit}>
+      <input
+        type="email"
+        required
+        className="tier-wait-input"
+        placeholder={placeholder}
+        aria-label={ariaLabel}
+        value={email}
+        onChange={(e) => setEmail(e.target.value)}
+      />
+      <button type="submit" className="btn btn-gold">
+        {cta} <ArrowRight size={14} />
+      </button>
+    </form>
+  );
+}
 
 function Tier({
   data,
   kind,
   available,
-  primaryHref,
-  secondaryHref,
   primaryTag,
-  primaryCta,
+  lang,
+  actions,
 }: {
   data: TierData;
   kind: 'cyan' | 'gold';
   available: boolean;
-  primaryHref: string;
-  secondaryHref: string;
   primaryTag: string;
-  primaryCta: string;
+  lang: Lang;
+  actions: ReactNode;
 }) {
   const cls = kind === 'gold' ? 'tier gold' : 'tier';
   const tagCls = kind === 'gold' ? 'aqv2-tag gold' : available ? 'aqv2-tag cy' : 'aqv2-tag dev';
-  const isMailto = primaryHref.startsWith('mailto:');
   return (
     <div className={available ? cls : `${cls} dev`}>
       <div className="tier-head">
@@ -138,26 +214,10 @@ function Tier({
       <p style={{ color: 'var(--aq-text-mid)', fontSize: 14.5, lineHeight: 1.6, margin: '0 0 8px' }}>{data.desc}</p>
       <ul>
         {data.bullets.map((b) => (
-          <li key={b}><span className="mark"><Check /></span>{b}</li>
+          <li key={b}><span className="mark"><Check /></span><span>{renderBullet(b, lang)}</span></li>
         ))}
       </ul>
-      <div className="tier-actions">
-        {isMailto ? (
-          <a href={primaryHref} className={kind === 'gold' ? 'btn btn-gold' : 'btn btn-cyan'}>
-            {primaryCta} <ArrowRight size={14} />
-          </a>
-        ) : (
-          <Link
-            href={primaryHref}
-            className={kind === 'gold' ? 'btn btn-gold' : 'btn btn-cyan'}
-            aria-disabled={!available}
-            style={!available ? { opacity: 0.6, pointerEvents: 'none' } : undefined}
-          >
-            {primaryCta} <ArrowRight size={14} />
-          </Link>
-        )}
-        <Link href={secondaryHref} className="btn btn-ghost">{data.cta2}</Link>
-      </div>
+      <div className="tier-actions">{actions}</div>
     </div>
   );
 }
@@ -167,7 +227,7 @@ export function TiersV2({ lang }: { lang: Lang }) {
   const plusTag = PLUS_FOR_SALE ? t.plus.tag : PLUS_DEV_LABELS[lang].tag;
   const plusCta = PLUS_FOR_SALE ? t.plus.cta1 : PLUS_DEV_LABELS[lang].cta;
   return (
-    <section id="products" className="tiers">
+    <section id="products" className="tiers" data-reveal>
       <div className="container">
         <div className="tiers-head">
           <span className="eyebrow"><span className="rule" />{t.eye}</span>
@@ -179,21 +239,45 @@ export function TiersV2({ lang }: { lang: Lang }) {
             data={t.plus}
             kind="cyan"
             available={PLUS_FOR_SALE}
-            primaryHref={PLUS_FOR_SALE ? '/sign-up' : '#'}
-            secondaryHref="/plus"
             primaryTag={plusTag}
-            primaryCta={plusCta}
+            lang={lang}
+            actions={
+              <>
+                <Link
+                  href={PLUS_FOR_SALE ? '/sign-up' : '#'}
+                  className="btn btn-cyan"
+                  aria-disabled={!PLUS_FOR_SALE}
+                  style={!PLUS_FOR_SALE ? { opacity: 0.6, pointerEvents: 'none' } : undefined}
+                >
+                  {plusCta} <ArrowRight size={14} />
+                </Link>
+                <Link href="/plus" className="btn btn-ghost">{t.plus.cta2}</Link>
+              </>
+            }
           />
-          <Tier
-            data={t.max}
-            kind="gold"
-            available={false}
-            primaryHref="mailto:post@apex-quantum.com?subject=Apex%20Quantum%20Max%20%E2%80%94%20notify%20me"
-            secondaryHref="/pris"
-            primaryTag={t.max.tag}
-            primaryCta={t.max.cta1}
-          />
+          {/* id="venteliste" — ankeret CTA-seksjonens Max-lenke peker på */}
+          <div id="venteliste" className="tiers-anchor">
+            <Tier
+              data={t.max}
+              kind="gold"
+              available={false}
+              primaryTag={t.max.tag}
+              lang={lang}
+              actions={
+                <>
+                  <MaxWaitlist
+                    lang={lang}
+                    cta={t.max.cta1}
+                    placeholder={t.waitPlaceholder}
+                    ariaLabel={t.waitAria}
+                  />
+                  <Link href="/pris" className="btn btn-ghost">{t.max.cta2}</Link>
+                </>
+              }
+            />
+          </div>
         </div>
+        <p className="tiers-note">{t.note}</p>
       </div>
     </section>
   );

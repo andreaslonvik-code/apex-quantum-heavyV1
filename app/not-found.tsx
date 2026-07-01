@@ -1,68 +1,53 @@
-import Link from 'next/link';
+'use client';
 
-export const dynamic = 'force-dynamic';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
+import '@/app/styles/pages.css';
+import type { Lang } from '@/app/components/marketing/types';
+import { readLangCookie } from '@/lib/i18n/lang-cookie';
+
+/**
+ * 404 — «finnes ikke i hovedboken» (§9). Ink-deep flate, Fraunces-404
+ * med gull-kursiv null og btn-ghost tilbake til forsiden. Språk leses
+ * fra aq-lang-cookien etter hydrering (samme mønster som PageShell).
+ */
+
+const COPY = {
+  no: {
+    msg: 'Denne siden finnes ikke i hovedboken.',
+    sub: 'Lenken er sannsynligvis utdatert, eller siden er flyttet.',
+    cta: 'Til forsiden',
+  },
+  en: {
+    msg: 'This page is not in the ledger.',
+    sub: 'The link is probably outdated, or the page has moved.',
+    cta: 'To the front page',
+  },
+} as const;
 
 export default function NotFound() {
+  const [lang, setLang] = useState<Lang>('no');
+
+  useEffect(() => {
+    const cookieLang = readLangCookie();
+    if (cookieLang && cookieLang !== lang) setLang(cookieLang);
+    // Kjøres én gang etter hydrering — samme mønster som PageShell.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const t = COPY[lang];
   return (
-    <>
-      <div className="ambient" aria-hidden="true" />
-      <div className="grain" aria-hidden="true" />
-      <main
-        style={{
-          minHeight: '100vh',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          padding: 24,
-          position: 'relative',
-          zIndex: 2,
-        }}
-      >
-        <div style={{ maxWidth: 520, textAlign: 'center' }}>
-          <div
-            className="aq-mono"
-            style={{
-              fontSize: 13,
-              letterSpacing: '0.08em',
-              color: 'var(--aq-cyan)',
-              marginBottom: 16,
-            }}
-          >
-            404 — SIDE IKKE FUNNET
-          </div>
-          <h1
-            style={{
-              fontSize: 'clamp(36px, 5vw, 56px)',
-              fontWeight: 700,
-              letterSpacing: '-0.025em',
-              lineHeight: 1.05,
-              margin: 0,
-            }}
-          >
-            Denne siden finnes ikke.
-          </h1>
-          <p
-            style={{
-              marginTop: 16,
-              color: 'rgba(255,255,255,0.6)',
-              fontSize: 16,
-              lineHeight: 1.6,
-            }}
-          >
-            Lenken er sannsynligvis utdatert, eller siden er flyttet. Gå tilbake til forsiden.
-          </p>
-          <Link
-            href="/"
-            className="btn-primary-v8 btn-lg"
-            style={{ marginTop: 32, display: 'inline-flex' }}
-          >
-            Tilbake til forsiden
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2.2">
-              <path d="M5 12h14M12 5l7 7-7 7" />
-            </svg>
-          </Link>
-        </div>
-      </main>
-    </>
+    <main className="pg-404">
+      <div className="pg-404-inner">
+        <h1 className="pg-404-code">
+          4<em>0</em>4
+        </h1>
+        <p className="pg-404-msg">{t.msg}</p>
+        <p className="pg-404-sub">{t.sub}</p>
+        <Link href="/" className="pg-404-cta">
+          {t.cta}
+        </Link>
+      </div>
+    </main>
   );
 }

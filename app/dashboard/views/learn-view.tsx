@@ -8,6 +8,7 @@ import {
   type LessonLevel,
   lessonText,
 } from './learn-content';
+import { EditionRow } from './edition-row';
 
 const PROGRESS_KEY = 'aqp:lesson-progress';
 
@@ -195,15 +196,15 @@ function VizTrendChannel() {
     <svg className="aqp-viz" viewBox="0 0 320 140" role="img" aria-label="Trend-kanal illustrasjon">
       <defs>
         <linearGradient id="aqpTrend" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor="rgba(0,245,255,0.30)" />
-          <stop offset="100%" stopColor="rgba(0,245,255,0)" />
+          <stop offset="0%" stopColor="var(--aq-cyan)" stopOpacity="0.30" />
+          <stop offset="100%" stopColor="var(--aq-cyan)" stopOpacity="0" />
         </linearGradient>
       </defs>
-      <line x1="10" y1="40" x2="310" y2="20" stroke="rgba(0,245,255,0.45)" strokeDasharray="4 4" strokeWidth="1.5" />
-      <line x1="10" y1="120" x2="310" y2="100" stroke="rgba(0,245,255,0.45)" strokeDasharray="4 4" strokeWidth="1.5" />
-      <path d="M10,90 L40,75 L70,95 L100,60 L130,80 L160,55 L190,70 L220,40 L250,60 L280,30 L310,50" fill="none" stroke="#5CFAFF" strokeWidth="2" />
-      <text x="14" y="14" fill="rgba(255,255,255,0.6)" fontSize="9" fontFamily="monospace">øvre motstand</text>
-      <text x="14" y="135" fill="rgba(255,255,255,0.6)" fontSize="9" fontFamily="monospace">nedre støtte</text>
+      <line x1="10" y1="40" x2="310" y2="20" stroke="var(--aq-cyan)" strokeOpacity="0.45" strokeDasharray="4 4" strokeWidth="1.5" />
+      <line x1="10" y1="120" x2="310" y2="100" stroke="var(--aq-cyan)" strokeOpacity="0.45" strokeDasharray="4 4" strokeWidth="1.5" />
+      <path d="M10,90 L40,75 L70,95 L100,60 L130,80 L160,55 L190,70 L220,40 L250,60 L280,30 L310,50" fill="none" stroke="var(--aq-cyan-hi)" strokeWidth="2" />
+      <text x="14" y="14" fill="var(--aq-muted)" fontSize="9" fontFamily="monospace">øvre motstand</text>
+      <text x="14" y="135" fill="var(--aq-muted)" fontSize="9" fontFamily="monospace">nedre støtte</text>
     </svg>
   );
 }
@@ -211,26 +212,26 @@ function VizTrendChannel() {
 function VizOrderBook() {
   return (
     <svg className="aqp-viz" viewBox="0 0 320 160" role="img" aria-label="Ordrebok illustrasjon">
-      <text x="10" y="14" fill="rgba(255,255,255,0.6)" fontSize="10" fontFamily="monospace">BID</text>
-      <text x="280" y="14" fill="rgba(255,255,255,0.6)" fontSize="10" fontFamily="monospace">ASK</text>
+      <text x="10" y="14" fill="var(--aq-muted)" fontSize="10" fontFamily="monospace">BID</text>
+      <text x="280" y="14" fill="var(--aq-muted)" fontSize="10" fontFamily="monospace">ASK</text>
       {[0, 1, 2, 3, 4].map((i) => (
         <g key={`b${i}`}>
-          <rect x={10} y={26 + i * 24} width={120 - i * 8} height={18} fill="rgba(16,185,129,0.18)" />
-          <text x={14} y={39 + i * 24} fill="#34D399" fontSize="11" fontFamily="monospace">
+          <rect x={10} y={26 + i * 24} width={120 - i * 8} height={18} fill="var(--aq-up-tint)" />
+          <text x={14} y={39 + i * 24} fill="var(--aq-up-hi)" fontSize="11" fontFamily="monospace">
             {(975.4 - i * 0.1).toFixed(1)}
           </text>
-          <text x={86} y={39 + i * 24} fill="rgba(255,255,255,0.5)" fontSize="10" fontFamily="monospace">
+          <text x={86} y={39 + i * 24} fill="var(--aq-muted)" fontSize="10" fontFamily="monospace">
             {120 - i * 16}
           </text>
         </g>
       ))}
       {[0, 1, 2, 3, 4].map((i) => (
         <g key={`a${i}`}>
-          <rect x={190 + i * 8} y={26 + i * 24} width={120 - i * 8} height={18} fill="rgba(239,68,68,0.18)" />
-          <text x={194 + i * 8} y={39 + i * 24} fill="#F87171" fontSize="11" fontFamily="monospace">
+          <rect x={190 + i * 8} y={26 + i * 24} width={120 - i * 8} height={18} fill="var(--aq-down-tint)" />
+          <text x={194 + i * 8} y={39 + i * 24} fill="var(--aq-down-hi)" fontSize="11" fontFamily="monospace">
             {(975.6 + i * 0.1).toFixed(1)}
           </text>
-          <text x={266 + i * 8} y={39 + i * 24} fill="rgba(255,255,255,0.5)" fontSize="10" fontFamily="monospace">
+          <text x={266 + i * 8} y={39 + i * 24} fill="var(--aq-muted)" fontSize="10" fontFamily="monospace">
             {100 - i * 12}
           </text>
         </g>
@@ -242,16 +243,16 @@ function VizOrderBook() {
 function VizCandlestick() {
   return (
     <svg className="aqp-viz" viewBox="0 0 320 160" role="img" aria-label="Candlestick anatomi">
-      <line x1="160" y1="20" x2="160" y2="140" stroke="rgba(255,255,255,0.4)" strokeWidth="1.2" />
-      <rect x="142" y="55" width="36" height="55" fill="rgba(16,185,129,0.55)" stroke="#34D399" strokeWidth="1.5" />
-      <text x="200" y="30" fill="rgba(255,255,255,0.7)" fontSize="11" fontFamily="monospace">høy 982.0</text>
-      <line x1="180" y1="26" x2="195" y2="26" stroke="rgba(255,255,255,0.5)" strokeDasharray="2 2" />
-      <text x="200" y="62" fill="rgba(255,255,255,0.7)" fontSize="11" fontFamily="monospace">åpning 968.0</text>
-      <line x1="180" y1="58" x2="195" y2="58" stroke="rgba(255,255,255,0.5)" strokeDasharray="2 2" />
-      <text x="200" y="115" fill="rgba(255,255,255,0.7)" fontSize="11" fontFamily="monospace">slutt 975.0</text>
-      <line x1="180" y1="111" x2="195" y2="111" stroke="rgba(255,255,255,0.5)" strokeDasharray="2 2" />
-      <text x="200" y="148" fill="rgba(255,255,255,0.7)" fontSize="11" fontFamily="monospace">lav 962.0</text>
-      <line x1="180" y1="144" x2="195" y2="144" stroke="rgba(255,255,255,0.5)" strokeDasharray="2 2" />
+      <line x1="160" y1="20" x2="160" y2="140" stroke="var(--aq-faint)" strokeWidth="1.2" />
+      <rect x="142" y="55" width="36" height="55" fill="var(--aq-up)" fillOpacity="0.55" stroke="var(--aq-up-hi)" strokeWidth="1.5" />
+      <text x="200" y="30" fill="var(--aq-text-mid)" fontSize="11" fontFamily="monospace">høy 982.0</text>
+      <line x1="180" y1="26" x2="195" y2="26" stroke="var(--aq-faint)" strokeDasharray="2 2" />
+      <text x="200" y="62" fill="var(--aq-text-mid)" fontSize="11" fontFamily="monospace">åpning 968.0</text>
+      <line x1="180" y1="58" x2="195" y2="58" stroke="var(--aq-faint)" strokeDasharray="2 2" />
+      <text x="200" y="115" fill="var(--aq-text-mid)" fontSize="11" fontFamily="monospace">slutt 975.0</text>
+      <line x1="180" y1="111" x2="195" y2="111" stroke="var(--aq-faint)" strokeDasharray="2 2" />
+      <text x="200" y="148" fill="var(--aq-text-mid)" fontSize="11" fontFamily="monospace">lav 962.0</text>
+      <line x1="180" y1="144" x2="195" y2="144" stroke="var(--aq-faint)" strokeDasharray="2 2" />
     </svg>
   );
 }
@@ -415,6 +416,7 @@ export function LearnView({ lang }: { lang: PlusLang }) {
           {t.eye}
         </div>
         <h1 className="aqp-page-title">{t.title}</h1>
+        <EditionRow lang={lang} />
         <p className="aqp-page-sub">{t.sub}</p>
       </div>
 
@@ -442,36 +444,18 @@ export function LearnView({ lang }: { lang: PlusLang }) {
                       className="aqp-module-card aqp-module-card--clickable"
                       onClick={() => setOpenLessonId(lesson.id)}
                     >
-                      <div
-                        className="aq-mono"
-                        style={{
-                          fontSize: 10,
-                          letterSpacing: '0.10em',
-                          color: 'rgba(255,255,255,0.45)',
-                          marginBottom: 8,
-                          textTransform: 'uppercase',
-                        }}
-                      >
+                      <div className="aq-mono aqp-module-min">
                         {t.minutes(lesson.readMinutes)}
                       </div>
                       <div className="aqp-module-title">{text.title}</div>
-                      <div
-                        style={{
-                          marginTop: 6,
-                          fontSize: 13,
-                          color: 'rgba(255,255,255,0.62)',
-                          lineHeight: 1.5,
-                        }}
-                      >
-                        {text.summary}
-                      </div>
+                      <div className="aqp-module-sum">{text.summary}</div>
                       <div style={{ marginTop: 14 }}>
                         {isComplete ? (
-                          <span className="aqp-module-soon" style={{ background: 'rgba(16,185,129,0.10)', color: '#34D399', borderColor: 'rgba(16,185,129,0.25)' }}>
+                          <span className="aqp-module-soon aqp-module-soon--done">
                             {t.completed}
                           </span>
                         ) : (
-                          <span className="aqp-module-soon" style={{ background: 'rgba(0,245,255,0.07)', color: 'var(--aq-cyan)', borderColor: 'rgba(0,245,255,0.20)' }}>
+                          <span className="aqp-module-soon aqp-module-soon--start">
                             {t.start}
                           </span>
                         )}

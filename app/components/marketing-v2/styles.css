@@ -177,8 +177,8 @@
 .aqv2 .hero-display {
   font-family: var(--aq-font-serif);
   font-weight: 300;
-  font-size: clamp(56px, 8.4vw, 124px);
-  line-height: 0.94;
+  font-size: clamp(52px, 7.8vw, 112px);
+  line-height: 0.96;
   letter-spacing: -0.03em;
   color: var(--aq-text);
   margin: 0;
@@ -262,8 +262,8 @@
 }
 .aqv2 .panel-row .px { color: var(--aq-text-mid); font-weight: 500; white-space: nowrap; }
 .aqv2 .panel-row .chg { font-weight: 700; min-width: 80px; text-align: right; white-space: nowrap; }
-.aqv2 .chg-up { color: var(--aq-up); }
-.aqv2 .chg-dn { color: var(--aq-down); }
+.aqv2 .chg-up { color: var(--aq-up-hi); }
+.aqv2 .chg-dn { color: var(--aq-down-hi); }
 .aqv2 .swatch-up   { width: 3px; height: 16px; background: var(--aq-up);   border-radius: 1px; }
 .aqv2 .swatch-dn   { width: 3px; height: 16px; background: var(--aq-down); border-radius: 1px; }
 .aqv2 .swatch-gold { width: 3px; height: 16px; background: var(--aq-gold); border-radius: 1px; }
@@ -2070,7 +2070,7 @@
   .aqv2 .hero-meta-num { font-size: 26px; }
   .aqv2 .hero-panel { padding: 20px; }
 
-  .aqv2 .thesis-eye h2 { font-size: clamp(34px, 7vw, 48px); }
+  .aqv2 .thesis-left h2 { font-size: clamp(34px, 7vw, 48px); }
   .aqv2 .thesis-right { gap: 18px; padding-top: 0; }
 
   .aqv2 .principles { padding: 72px 0; }
@@ -2081,8 +2081,8 @@
     border-bottom: 1px solid var(--aq-border);
   }
   .aqv2 .principle:last-child { border-bottom: 0; }
-  .aqv2 .principle-n { font-size: 48px; }
-  .aqv2 .principle-t { font-size: 22px; }
+  .aqv2 .principle-num { font-size: 56px; }
+  .aqv2 .principle h3 { font-size: 22px; }
 
   .aqv2 .tiers { padding: 64px 0 80px; }
   .aqv2 .tiers-head h2 { font-size: clamp(30px, 6.5vw, 44px); }
@@ -2109,7 +2109,7 @@
 
 @media (max-width: 520px) {
   .aqv2 .hero { padding: 80px 0 52px; }
-  .aqv2 .hero-display { font-size: clamp(34px, 11vw, 56px); line-height: 1.04; }
+  .aqv2 .hero-display { font-size: clamp(38px, 11.5vw, 56px); line-height: 1.04; }
   .aqv2 .hero-ctas .btn { flex-basis: 100%; }
   .aqv2 .hero-meta-item { flex: 1 1 100%; }
   .aqv2 .container { padding: 0 16px; }
@@ -2118,8 +2118,8 @@
   .aqv2 .tier { padding: 28px 20px; }
   .aqv2 .tier-price { font-size: 38px; }
   .aqv2 .record-stats { grid-template-columns: 1fr; }
-  .aqv2 .principle-n { font-size: 40px; }
-  .aqv2 .principle-t { font-size: 20px; }
+  .aqv2 .principle-num { font-size: 48px; }
+  .aqv2 .principle h3 { font-size: 20px; }
   .aqv2 .brand-wm .quiet,
   .aqv2 .brand-wm .gold { letter-spacing: 0; }
 }
@@ -2464,4 +2464,201 @@ html, body { overflow-x: hidden; }
   .record-chart .rc-line { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; }
   .record-chart[data-drawn] .rc-line { animation: none; }
   .record-chart .rc-last-dot { opacity: 1; transition: none; }
+}
+
+/* === E2 === */
+/* Landing + chrome (§7/§8) — E2-sonens tillegg. Konsumerer E1-primitivene
+   (.aq-srcnote-pop, .aq-hatch, .aq-paper-tag) — redefinerer dem aldri. */
+
+/* — Header: PAPER-badge (§7) — */
+.aqv2 .hdr-paper { position: relative; display: inline-flex; }
+.aqv2 .hdr-paper-badge {
+  background: transparent;
+  border: 1px solid var(--aq-border);
+  border-radius: 2px;
+  padding: 5px 9px;
+  font-family: var(--aq-font-mono);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--aq-faint);
+  transition: color var(--aq-dur-fast) var(--aq-ease), border-color var(--aq-dur-fast) var(--aq-ease);
+}
+.aqv2 .hdr-paper-badge:hover { color: var(--aq-muted); border-color: var(--aq-border-hi); }
+.aqv2 .hdr-paper .aq-srcnote-pop { left: auto; right: 0; top: calc(100% + 14px); }
+
+/* — Hero (§8-01): KPI-feilfallback, PaperTag, panel-tomhet, +N-lenke — */
+.aqv2 .hero-meta-num.dn {
+  color: var(--aq-down-hi);
+  font-style: italic;
+  font-weight: 400;
+  font-variation-settings: "opsz" 60, "SOFT" 100, "WONK" 1;
+}
+.aqv2 .hero-meta-lab.err { color: var(--aq-faint); }
+.aqv2 .hero-meta-paper { margin-top: 14px; }
+.aqv2 .hero-panel-hatch { height: 246px; border-radius: 4px; }
+.aqv2 .panel-more {
+  display: block;
+  padding: 12px 0 2px;
+  font-family: var(--aq-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--aq-cyan-hi);
+  transition: color var(--aq-dur-fast) var(--aq-ease);
+}
+.aqv2 .panel-more:hover { color: var(--aq-text); }
+
+/* — Thesis: «Anfangen» drop cap, 3 linjer, --aq-imperial (§8-02) — */
+.aqv2 .thesis-right .lede::first-letter {
+  float: left;
+  font-family: var(--aq-font-serif);
+  font-weight: 400;
+  font-size: 82px;
+  line-height: 0.78;
+  padding: 8px 12px 0 0;
+  color: var(--aq-imperial);
+}
+
+/* — Principles: mono-linje + graverte tall (§8-03) — */
+.aqv2 .principle-eye {
+  font-family: var(--aq-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--aq-muted);
+}
+.aqv2 .principle-num {
+  font-size: 72px;
+  color: transparent;
+  -webkit-text-stroke: 1px var(--aq-gold);
+}
+@supports not (-webkit-text-stroke: 1px #000) {
+  .aqv2 .principle-num { color: var(--aq-gold); }
+}
+
+/* — Tiers: Gullsnitt-topplinje på Max, venteliste, fagtermer, mono-linje (§8-05) — */
+.aqv2 .tier.gold::before {
+  height: 1px;
+  background: var(--aq-hairline-grad);
+  opacity: 0.6;
+}
+.aqv2 .tiers-anchor { display: flex; }
+.aqv2 .tiers-anchor > .tier { width: 100%; }
+.aqv2 .tier-term {
+  text-decoration: underline dotted;
+  text-decoration-color: var(--aq-muted);
+  text-underline-offset: 3px;
+  cursor: help;
+}
+.aqv2 .tier-wait { display: flex; gap: 10px; flex: 1 1 100%; flex-wrap: wrap; }
+.aqv2 .tier-wait-input {
+  flex: 1 1 180px;
+  min-width: 0;
+  background: var(--aq-ink-deep);
+  border: 1px solid var(--aq-border);
+  border-radius: 4px;
+  padding: 12px 14px;
+  font-family: var(--aq-font-mono);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--aq-text);
+  transition: border-color var(--aq-dur-fast) var(--aq-ease);
+}
+.aqv2 .tier-wait-input::placeholder { color: var(--aq-faint); }
+.aqv2 .tier-wait-input:hover { border-color: var(--aq-border-hi); }
+.aqv2 .tiers-note {
+  margin: 32px 0 0;
+  text-align: center;
+  font-family: var(--aq-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--aq-muted);
+}
+
+/* — Record: Morgenutgaven, DATAKILDE-rad, ærlig tomhet (§8-04) — */
+.aqv2 .record-edition { margin-top: 18px; }
+.aqv2 .record-stat-val.dn { color: var(--aq-down-hi); }
+.aqv2 .record-stat-val.src {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+}
+.aqv2 .record-hatch { height: 380px; }
+
+/* — Inside: eksempelmerking (§8-06) — */
+.aqv2 .inside-example-tag {
+  font-family: var(--aq-font-mono);
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--aq-warn);
+}
+
+/* — CTA: mikrolenker (§8-07) — */
+.aqv2 .cta-micro {
+  margin-top: 26px;
+  display: flex;
+  gap: 24px;
+  justify-content: center;
+  flex-wrap: wrap;
+  font-family: var(--aq-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+.aqv2 .cta-micro a { color: var(--aq-muted); transition: color var(--aq-dur-fast) var(--aq-ease); }
+.aqv2 .cta-micro a:hover { color: var(--aq-gold); }
+
+/* — Footer: statuslenke uten umålte påstander (§7) — */
+.aqv2 .footer-status {
+  display: inline-flex;
+  font-family: var(--aq-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--aq-muted);
+  border-bottom: 1px solid var(--aq-border);
+  padding-bottom: 2px;
+  transition: color var(--aq-dur-fast) var(--aq-ease), border-color var(--aq-dur-fast) var(--aq-ease);
+}
+.aqv2 .footer-status:hover { color: var(--aq-gold); border-color: var(--aq-border-warm); }
+
+/* — Seksjons-reveal (§11): settes av JS kun under folden; én gang.
+     Uten JS forblir alt synlig; reduced-motion hopper over hele løpet. — */
+.aqv2 .aq-reveal {
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity var(--aq-dur-slow) var(--aq-ease), transform var(--aq-dur-slow) var(--aq-ease);
+}
+.aqv2 .aq-reveal.is-in { opacity: 1; transform: translateY(0); }
+/* Gullsnittet på parchment-båndet tegnes inn ved første viewport-entry (§5.4) */
+.aqv2 .band-parch.aq-reveal::after { transform: scaleX(0); }
+.aqv2 .band-parch.aq-reveal.is-in::after {
+  transform: scaleX(1);
+  transition: transform var(--aq-dur-slow) var(--aq-ease);
+}
+
+/* — Responsivt (§12): nye elementer — */
+@media (max-width: 880px) {
+  .aqv2 .record-hatch { height: 280px; }
+  .aqv2 .thesis-right .lede::first-letter { font-size: 66px; }
+  .aqv2 .principle-eye { font-size: 10.5px; }
+}
+@media (max-width: 640px) {
+  .aqv2 .hdr-paper-badge { min-height: 40px; }
+  .aqv2 .panel-more { padding: 14px 0 2px; }
+}
+@media (max-width: 520px) {
+  .aqv2 .record-hatch { height: 220px; }
+  .aqv2 .cta-row .btn { flex: 1 1 100%; }
+  .aqv2 .tier-actions .btn { flex: 1 1 100%; }
+  .aqv2 .tier-wait { flex-direction: column; }
+  .aqv2 .tier-wait .btn { width: 100%; }
+  .aqv2 .hdr-right { gap: 10px; }
+  .aqv2 .hero-panel-hatch { height: 220px; }
 }
