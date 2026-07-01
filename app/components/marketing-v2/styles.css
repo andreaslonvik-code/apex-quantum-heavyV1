@@ -7,77 +7,12 @@
    redesigned landing does not affect /max, /dashboard or /plus.
    ========================================================= */
 
-@import url("https://api.fontshare.com/v2/css?f[]=satoshi@300,400,500,700,900&display=swap");
-@import url("https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght,SOFT,WONK@9..144,300..900,0..100,0..1&family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap");
+/* Fonter lastes via next/font (Fraunces, JetBrains Mono, Inter) og
+   Fontshare-<link> i app/layout.tsx (Satoshi) — ingen render-blocking
+   @import her. Alle tokens arves fra :root (app/styles/tokens.css);
+   .aqv2 er kun scope for komponentregler + basetypografi. */
 
 .aqv2 {
-  /* ===== INK & PARCHMENT ===== */
-  --aq-ink:          #0A1424;
-  --aq-ink-deep:     #060D1A;
-  --aq-ink-lift:     #11203A;
-  --aq-ink-2:        #1A2D4D;
-  --aq-slate:        #2A3E5C;
-
-  --aq-bg:           var(--aq-ink);
-  --aq-bg-lift:      var(--aq-ink-lift);
-  --aq-bg-deep:      var(--aq-ink-deep);
-
-  --aq-parch:        #F0E6D2;
-  --aq-parch-2:      #E5DAC4;
-  --aq-parch-deep:   #C9BB9A;
-
-  --aq-surface:      rgba(240,230,210,0.04);
-  --aq-surface-hi:   rgba(240,230,210,0.07);
-  --aq-surface-2:    rgba(240,230,210,0.025);
-
-  --aq-border:       rgba(240,230,210,0.08);
-  --aq-border-hi:    rgba(0,200,214,0.30);
-  --aq-border-soft:  rgba(240,230,210,0.04);
-  --aq-border-warm:  rgba(201,169,97,0.30);
-
-  --aq-text:         #F0E6D2;
-  --aq-text-mid:     rgba(240,230,210,0.66);
-  --aq-muted:        rgba(240,230,210,0.42);
-  --aq-mute-deep:    rgba(240,230,210,0.22);
-
-  /* ===== ACCENTS ===== */
-  --aq-cyan:         #00C8D6;
-  --aq-cyan-hi:      #4FE0EA;
-  --aq-cyan-deep:    #008A95;
-  --aq-cyan-tint:    rgba(0,200,214,0.10);
-  --aq-cyan-glow:    rgba(0,200,214,0.18);
-
-  --aq-gold:         #C9A961;
-  --aq-gold-hi:      #DEC080;
-  --aq-gold-deep:    #8E7637;
-  --aq-gold-tint:    rgba(201,169,97,0.12);
-
-  --aq-imperial:     #1E3A5F;
-  --aq-imperial-hi:  #2E5285;
-
-  --aq-down:         #A53241;
-  --aq-down-hi:      #C24355;
-  --aq-down-tint:    rgba(165,50,65,0.18);
-
-  --aq-up:           #10A86A;
-  --aq-up-hi:        #2DC986;
-  --aq-up-tint:      rgba(16,168,106,0.16);
-
-  --aq-warn:         #E2A03F;
-  --aq-warn-tint:    rgba(226,160,63,0.16);
-
-  /* ===== TYPE STACKS ===== */
-  --aq-font-serif:   "Fraunces", "Source Serif Pro", "Iowan Old Style", Georgia, serif;
-  --aq-font-sans:    "Satoshi", "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --aq-font-mono:    "JetBrains Mono", "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
-
-  /* ===== MOTION ===== */
-  --aq-ease:        cubic-bezier(0.22, 1, 0.36, 1);
-  --aq-ease-fast:   cubic-bezier(0.33, 1, 0.68, 1);
-  --aq-dur-fast:    150ms;
-  --aq-dur-base:    250ms;
-  --aq-dur-slow:    600ms;
-
   /* base body styles — scoped, don't leak to /max */
   background: var(--aq-ink);
   color: var(--aq-text);
@@ -2275,3 +2210,258 @@
 /* Prevent horizontal scroll on the body — any wide element should
    handle its own overflow (the watchlist table does). */
 html, body { overflow-x: hidden; }
+
+/* ============================================================
+   E1-PRIMITIVER — «Hovedboken» delte atomer (§5 i masterdirektivet)
+   Toppnivå-klasser; leser :root-tokens, uavhengig av .aqv2-scope.
+   ============================================================ */
+
+/* — Gullsnittet (§5.4): systemets eneste ornament — */
+.aq-gullsnitt {
+  height: 1px;
+  background: var(--aq-hairline-grad);
+  opacity: 0.4;
+}
+
+/* — Kildenoten (§5.1) — */
+.aq-srcnote { position: relative; display: inline-block; }
+.aq-srcnote-dagger {
+  background: none; border: 0; padding: 0 2px;
+  font-family: var(--aq-font-serif);
+  font-style: italic;
+  font-size: 0.6em;
+  vertical-align: super;
+  color: var(--aq-gold);
+  letter-spacing: -0.05em;
+  cursor: pointer;
+  line-height: 1;
+}
+.aq-srcnote-dagger:hover { color: var(--aq-gold-hi); }
+.aq-srcnote-pop {
+  position: absolute; left: 0; top: calc(100% + 8px); z-index: 60;
+  width: 320px; max-width: 80vw;
+  display: flex; flex-direction: column; gap: 6px;
+  background: var(--aq-ink-deep);
+  border: 1px solid var(--aq-border);
+  border-radius: 6px;
+  padding: 14px 16px 12px;
+  box-shadow: var(--aq-shadow-panel);
+  font-family: var(--aq-font-mono);
+  font-size: 11px;
+  line-height: 1.6;
+  letter-spacing: 0.04em;
+  color: var(--aq-text-mid);
+  text-align: left;
+  text-transform: none;
+  white-space: normal;
+  opacity: 0;
+  transform: translateY(4px);
+  transition: opacity var(--aq-dur-fast) var(--aq-ease), transform var(--aq-dur-fast) var(--aq-ease);
+}
+.aq-srcnote-pop::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 1px;
+  background: var(--aq-hairline-grad); opacity: 0.4;
+}
+.aq-srcnote-pop[data-open] { opacity: 1; transform: translateY(0); }
+.aq-srcnote-line { text-transform: uppercase; }
+.aq-srcnote-caveat { color: var(--aq-muted); }
+.aq-srcnote-links { display: flex; gap: 14px; margin-top: 4px; }
+.aq-srcnote-links a { color: var(--aq-cyan-hi); text-decoration: none; }
+.aq-srcnote-links a:hover { color: var(--aq-text); }
+
+/* — PaperTag (§5.2) — */
+.aq-paper-tag {
+  display: inline-flex; align-items: center; gap: 8px;
+  font-family: var(--aq-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--aq-muted);
+}
+.aq-paper-tag-dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--aq-gold);
+  flex: none;
+}
+
+/* — «Viktig informasjon»-båndet (§6 lag 3) — */
+.aq-legal-band { background: var(--aq-parch); color: var(--aq-ink-on-parch); }
+.aq-legal-band-inner {
+  max-width: 1320px; margin: 0 auto; padding: 56px 32px 64px;
+}
+.aq-legal-band-title {
+  font-family: var(--aq-font-mono);
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--aq-gold-deep);
+  margin: 0 0 24px;
+}
+.aq-legal-band-cols {
+  columns: 2; column-gap: 48px;
+  font-family: var(--aq-font-sans);
+  font-size: 14.5px; line-height: 1.65;
+}
+.aq-legal-band-cols p { margin: 0 0 12px; break-inside: avoid; }
+@media (max-width: 880px) {
+  .aq-legal-band-cols { columns: 1; }
+  .aq-legal-band-inner { padding: 40px 20px 48px; }
+}
+
+/* — Morgenutgaven (§5.5) — */
+.aq-edition {
+  display: inline-flex; align-items: baseline; gap: 10px;
+  color: var(--aq-muted);
+}
+.aq-edition em {
+  font-family: var(--aq-font-serif);
+  font-style: italic;
+  font-size: 15px;
+  color: var(--aq-text-mid);
+}
+.aq-edition-sep { color: var(--aq-gold); }
+.aq-edition-no {
+  font-family: var(--aq-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* — Statuslinjen (§5.6) — */
+.aq-statusline {
+  display: flex; align-items: center; justify-content: space-between; gap: 16px;
+  height: 32px; padding: 0 16px;
+  border-top: 1px solid var(--aq-border);
+  background: var(--aq-ink-deep);
+  font-family: var(--aq-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--aq-muted);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.aq-statusline-right { display: inline-flex; gap: 16px; align-items: center; }
+.aq-statusline a { color: var(--aq-cyan-hi); text-decoration: none; text-transform: none; }
+.aq-statusline a:hover { color: var(--aq-text); }
+@media (max-width: 640px) { .aq-statusline-mid { display: none; } }
+
+/* — Ærlig tomhet (§5.7): tom-/laste-/feiltilstand i identiske mål — */
+.aq-hatch {
+  display: flex; align-items: center; justify-content: center;
+  border: 1px solid var(--aq-border);
+  border-radius: 8px;
+  background: repeating-linear-gradient(
+    45deg, transparent, transparent 7px, var(--aq-border) 7px, var(--aq-border) 8px
+  );
+  font-family: var(--aq-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--aq-muted);
+  text-align: center;
+  padding: 24px;
+}
+
+/* — Ledger-raden (§5.3): hovedbokens gjenbruksatom — */
+.aq-ledger-row {
+  display: grid;
+  grid-template-columns: 3px minmax(64px, auto) 1fr auto;
+  align-items: center; gap: 12px;
+  min-height: 40px;
+  padding: 0 12px 0 0;
+  border-bottom: 1px solid var(--aq-border);
+  font-family: var(--aq-font-mono);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.aq-ledger-row:last-child { border-bottom: 0; }
+.aq-ledger-swatch { width: 3px; height: 24px; border-radius: 1px; }
+.aq-ledger-swatch[data-side="up"] { background: var(--aq-up); }
+.aq-ledger-swatch[data-side="down"] { background: var(--aq-down); }
+.aq-ledger-ticker { font-weight: 700; color: var(--aq-text); }
+.aq-ledger-val { color: var(--aq-text-mid); }
+.aq-ledger-delta { text-align: right; }
+.aq-ledger-delta[data-side="up"] { color: var(--aq-up-hi); }
+.aq-ledger-delta[data-side="down"] { color: var(--aq-down-hi); }
+
+/* — Terminal-dialekten (§10): base-lag for dashboards — */
+.aq-term {
+  background: var(--aq-ink-deep);
+  color: var(--aq-text);
+  font-family: var(--aq-font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+.aq-term .aq-panel {
+  border: 1px solid var(--aq-border);
+  border-radius: 8px;
+  background: var(--aq-ink);
+  display: flex; flex-direction: column;
+  min-height: 0;
+}
+.aq-term .aq-panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--aq-border);
+  font-family: var(--aq-font-mono);
+  font-size: 10.5px; font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--aq-muted);
+  flex: none;
+}
+.aq-term .aq-panel-body { padding: 16px; min-height: 0; overflow: auto; }
+.aq-term ::-webkit-scrollbar { width: 8px; height: 8px; }
+.aq-term ::-webkit-scrollbar-thumb {
+  background: rgba(240, 230, 210, 0.15); border-radius: 4px;
+}
+.aq-term .aq-num { font-family: var(--aq-font-mono); font-variant-numeric: tabular-nums; }
+
+/* — Ticker-pulsen (§5.8): 600ms flash når live-verdi faktisk endres — */
+@keyframes aq-tick-up { 0% { background: var(--aq-up-tint); } 100% { background: transparent; } }
+@keyframes aq-tick-down { 0% { background: var(--aq-down-tint); } 100% { background: transparent; } }
+.aq-tick-up { animation: aq-tick-up var(--aq-dur-slow) var(--aq-ease) 1; }
+.aq-tick-down { animation: aq-tick-down var(--aq-dur-slow) var(--aq-ease) 1; }
+
+@media (prefers-reduced-motion: reduce) {
+  .aq-srcnote-pop { transition: none; transform: none; }
+  .aq-tick-up, .aq-tick-down { animation: none; }
+}
+
+/* — EquityChart-tillegg (delt: record, /innsyn, dashboards) — */
+.record-chart { position: relative; }
+.record-chart svg { width: 100%; height: 100%; display: block; }
+.record-chart .rc-line {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+}
+.record-chart[data-drawn] .rc-line {
+  animation: aq-draw-line var(--aq-dur-slow) var(--aq-ease) forwards;
+}
+@keyframes aq-draw-line { to { stroke-dashoffset: 0; } }
+.record-chart .rc-last-dot { opacity: 0; }
+.record-chart[data-drawn] .rc-last-dot {
+  opacity: 1;
+  transition: opacity var(--aq-dur-fast) var(--aq-ease) var(--aq-dur-slow);
+}
+.rc-x-labels {
+  position: absolute; left: 0; right: 0; bottom: 2px; height: 16px;
+  font-family: var(--aq-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--aq-faint);
+  pointer-events: none;
+}
+.rc-x-labels span { position: absolute; transform: translateX(-50%); white-space: nowrap; }
+.rc-x-labels span[data-edge="start"] { transform: none; }
+.rc-x-labels span[data-edge="end"] { transform: translateX(-100%); }
+@media (max-width: 880px) { .record-chart { height: 280px !important; } }
+@media (max-width: 520px) { .record-chart { height: 220px !important; } }
+@media (prefers-reduced-motion: reduce) {
+  .record-chart .rc-line { animation: none; stroke-dasharray: none; stroke-dashoffset: 0; }
+  .record-chart[data-drawn] .rc-line { animation: none; }
+  .record-chart .rc-last-dot { opacity: 1; transition: none; }
+}

@@ -1,0 +1,102 @@
+/* =========================================================
+   APEX QUANTUM — «Hovedboken» design tokens (kanonisk kilde)
+   Alle flater — marketing, dashboards, auth — arver herfra.
+   Scope-klassene .aqv2 / .aqv2-dash / .aq-term definerer IKKE
+   egne tokenverdier; de leser :root.
+   ========================================================= */
+
+:root {
+  /* ===== FLATER ===== */
+  --aq-ink:          #0A1424;
+  --aq-ink-deep:     #060D1A;
+  --aq-ink-lift:     #11203A;
+  --aq-ink-2:        #1A2D4D;
+  --aq-slate:        #2A3E5C;
+
+  --aq-surface:      rgba(240, 230, 210, 0.04);
+  --aq-surface-hi:   rgba(240, 230, 210, 0.07);
+  --aq-surface-2:    rgba(240, 230, 210, 0.025);
+
+  --aq-parch:        #F0E6D2;
+  --aq-parch-2:      #E5DAC4;
+  --aq-parch-deep:   #C9BB9A;
+
+  /* ===== TEKST (kontrast målt mot --aq-ink) ===== */
+  --aq-text:         #F0E6D2;                      /* 14,8:1 */
+  --aq-text-mid:     rgba(240, 230, 210, 0.72);    /* ≈7,3:1 */
+  --aq-muted:        rgba(240, 230, 210, 0.56);    /* ≈4,9:1 — minste lesbare */
+  --aq-faint:        rgba(240, 230, 210, 0.40);    /* KUN dekor/aksemerker/≥18px */
+  --aq-mute-deep:    rgba(240, 230, 210, 0.22);    /* kun linjer/separatorer */
+
+  /* På parchment-bånd */
+  --aq-ink-on-parch:   rgba(10, 20, 36, 0.78);
+  --aq-muted-on-parch: rgba(10, 20, 36, 0.60);
+
+  /* ===== GULL (maks ETT synlig gullelement per viewport) ===== */
+  --aq-gold:         #C9A961;
+  --aq-gold-hi:      #DEC080;
+  --aq-gold-deep:    #8E7637; /* gull på parchment — AA */
+  --aq-gold-tint:    rgba(201, 169, 97, 0.12);
+
+  /* ===== CYAN (KUN sanntid/interaktivt/Plus) ===== */
+  --aq-cyan:         #00C8D6;
+  --aq-cyan-hi:      #4FE0EA; /* tekst <16px på ink bruker alltid hi */
+  --aq-cyan-deep:    #008A95;
+  --aq-cyan-tint:    rgba(0, 200, 214, 0.10);
+  --aq-cyan-glow:    rgba(0, 200, 214, 0.18);
+
+  /* ===== SEMANTIKK ===== */
+  --aq-up:           #10A86A; /* fyll/swatch */
+  --aq-up-hi:        #2DC986; /* tekst */
+  --aq-up-tint:      rgba(16, 168, 106, 0.16);
+  --aq-down:         #A53241; /* fyll */
+  --aq-down-hi:      #C24355; /* tekst — negative tall <18px ALLTID i down-hi */
+  --aq-down-tint:    rgba(165, 50, 65, 0.18);
+  --aq-warn:         #E2A03F;
+  --aq-warn-tint:    rgba(226, 160, 63, 0.16);
+  --aq-imperial:     #1E3A5F;
+  --aq-imperial-hi:  #2E5285;
+
+  /* ===== LINJER ===== */
+  --aq-border:       rgba(240, 230, 210, 0.08);
+  --aq-border-hi:    rgba(240, 230, 210, 0.16); /* hover; cyan-border kun interaktivt */
+  --aq-border-soft:  rgba(240, 230, 210, 0.04);
+  --aq-border-warm:  rgba(201, 169, 97, 0.30);
+  --aq-hairline-grad: linear-gradient(90deg, transparent, #C9A961, transparent);
+
+  /* ===== FOKUS ===== */
+  --aq-focus: 0 0 0 2px var(--aq-ink), 0 0 0 4px var(--aq-cyan-hi);
+
+  /* ===== TYPE STACKS ===== */
+  --aq-font-serif: var(--font-fraunces, "Fraunces"), "Iowan Old Style", Georgia, serif;
+  --aq-font-sans:  "Satoshi", var(--font-inter, "Inter"), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --aq-font-mono:  var(--font-jetbrains, "JetBrains Mono"), "Fira Code", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* ===== ALIASER (bakoverkompatibilitet med eksisterende aqv2-regler) ===== */
+  --aq-bg:      var(--aq-ink);
+  --aq-bg-lift: var(--aq-ink-lift);
+  --aq-bg-deep: var(--aq-ink-deep);
+
+  /* ===== MOTION ===== */
+  --aq-ease:      cubic-bezier(0.22, 1, 0.36, 1);
+  --aq-ease-fast: cubic-bezier(0.33, 1, 0.68, 1);
+  --aq-dur-fast:  150ms;
+  --aq-dur-base:  250ms;
+  --aq-dur-slow:  600ms;
+
+  /* ===== EFFEKTER ===== */
+  --aq-shadow-panel: 0 30px 60px -20px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(240, 230, 210, 0.02);
+}
+
+/* Global fokusdisiplin — aldri outline:none uten erstatning */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--aq-focus);
+  border-radius: 2px;
+}
+
+::selection {
+  background: var(--aq-gold-tint);
+  color: var(--aq-text);
+}

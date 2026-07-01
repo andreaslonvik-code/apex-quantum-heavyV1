@@ -1,8 +1,8 @@
 import type { Metadata, Viewport } from "next";
-import { Inter, JetBrains_Mono } from "next/font/google";
+import { Fraunces, Inter, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
+import "./styles/tokens.css";
 import { Toaster } from "sonner";
-import { LegalDisclaimers } from "@/components/legal-disclaimers";
 import { ClerkProvider } from "@clerk/nextjs";
 import { Analytics } from "@vercel/analytics/next";
 import { SpeedInsights } from "@vercel/speed-insights/next";
@@ -19,25 +19,44 @@ const jetbrainsMono = JetBrains_Mono({
   weight: ["300", "400", "500", "700"],
 });
 
+const fraunces = Fraunces({
+  variable: "--font-fraunces",
+  subsets: ["latin"],
+  style: ["normal", "italic"],
+  axes: ["SOFT", "WONK", "opsz"],
+  display: "swap",
+});
+
 export const metadata: Metadata = {
-  title: "APEX QUANTUM · Autonomous Trading Intelligence",
+  title: "Apex Quantum — AI-drevet aksjeinnsikt og autonom handel",
   description:
-    "Self-directing AI trading system. Scans nine million signals a second, evolves its own strategies in real time, and compounds capital 24/7 — without you lifting a finger.",
-  keywords: ["autonomous trading", "AI", "algorithmic trading", "quantitative finance", "Alpaca"],
+    "Daglige AI-signaler med fullstendig begrunnelse, og en autonom handelsmotor under utvikling. Alle resultater fra dokumentert paper trading.",
+  keywords: [
+    "AI-signaler",
+    "aksjeanalyse",
+    "autonom handel",
+    "algorithmic trading",
+    "paper trading",
+  ],
   openGraph: {
-    title: "APEX QUANTUM · Autonomous Trading Intelligence",
-    description: "+187% YTD · 4,12 Sharpe · 73,4% win rate · 24/7 autonomous",
+    title: "Apex Quantum — AI-drevet aksjeinnsikt og autonom handel",
+    description:
+      "Daglige AI-signaler med fullstendig begrunnelse. Alle resultater fra dokumentert paper trading — publisert åpent, dag for dag.",
     type: "website",
+    siteName: "Apex Quantum",
+    locale: "nb_NO",
   },
 };
 
-export const viewport: Viewport = {
-  themeColor: "#05050A",
-  width: "device-width",
-  initialScale: 1,
-  minimumScale: 1,
-  maximumScale: 5,
-};
+export function generateViewport(): Viewport {
+  return {
+    themeColor: "#0A1424",
+    width: "device-width",
+    initialScale: 1,
+    minimumScale: 1,
+    maximumScale: 5,
+  };
+}
 
 export default function RootLayout({
   children,
@@ -46,7 +65,7 @@ export default function RootLayout({
     <ClerkProvider>
       <html
         lang="no"
-        className={`${inter.variable} ${jetbrainsMono.variable} h-full antialiased`}
+        className={`${inter.variable} ${jetbrainsMono.variable} ${fraunces.variable} h-full antialiased`}
         suppressHydrationWarning
       >
         <head>
@@ -57,20 +76,20 @@ export default function RootLayout({
             rel="stylesheet"
           />
         </head>
-        <body className="min-h-full flex flex-col overflow-x-hidden" style={{ background: 'var(--aq-bg)', color: 'var(--aq-text)' }}>
-          <div className="scanline" aria-hidden="true" />
-          <LegalDisclaimers />
+        <body
+          className="min-h-full flex flex-col overflow-x-hidden"
+          style={{ background: "var(--aq-ink)", color: "var(--aq-text)" }}
+        >
           {children}
           <Toaster
             position="top-right"
             theme="dark"
             toastOptions={{
               style: {
-                background: "rgba(10,10,16,0.95)",
-                border: "1px solid rgba(0,245,255,0.18)",
-                color: "#fff",
+                background: "var(--aq-ink-deep)",
+                border: "1px solid var(--aq-border-warm)",
+                color: "var(--aq-text)",
                 fontSize: "0.875rem",
-                backdropFilter: "blur(20px)",
               },
             }}
           />

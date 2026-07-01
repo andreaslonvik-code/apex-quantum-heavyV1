@@ -5,24 +5,26 @@
 /* ============================================================ */
 
 :root {
-  /* Core palette */
-  --aq-bg:      #05050A;
-  --aq-surface: rgba(255,255,255,0.038);
-  --aq-surface-hi: rgba(255,255,255,0.06);
-  --aq-border:  rgba(255,255,255,0.07);
-  --aq-border-hi: rgba(0,245,255,0.14);
+  /* Core palette — E1-remapping til «Hovedboken»-tokens (app/styles/tokens.css
+     er kanonisk kilde; verdiene her holdes i synk slik at v8-selektorene
+     harmonerer frem til E6-oppryddingen. Ingen selektorer slettes før E6.) */
+  --aq-bg:      #0A1424;
+  --aq-surface: rgba(240,230,210,0.04);
+  --aq-surface-hi: rgba(240,230,210,0.07);
+  --aq-border:  rgba(240,230,210,0.08);
+  --aq-border-hi: rgba(240,230,210,0.16);
 
-  --aq-cyan:    #00F5FF;
-  --aq-cyan-hi: #5CFAFF;
-  --aq-magenta: #C026D3;
-  --aq-gold:    #F5C443;
-  --aq-green:   #10b981;
-  --aq-green-hi:#34D399;
-  --aq-red:     #ef4444;
-  --aq-red-hi:  #F87171;
-  --aq-warn:    #FBBF24;
-  --aq-text:    rgba(255,255,255,0.88);
-  --aq-muted:   rgba(255,255,255,0.42);
+  --aq-cyan:    #00C8D6;
+  --aq-cyan-hi: #4FE0EA;
+  --aq-magenta: #C9A961; /* midlertidig alias → gull (magenta utgår i E6) */
+  --aq-gold:    #C9A961;
+  --aq-green:   #10A86A;
+  --aq-green-hi:#2DC986;
+  --aq-red:     #A53241;
+  --aq-red-hi:  #C24355;
+  --aq-warn:    #E2A03F;
+  --aq-text:    #F0E6D2;
+  --aq-muted:   rgba(240,230,210,0.56);
 
   /* Motion — ease-out curves per DESIGN.md (no bounce, no elastic) */
   --aq-ease:    cubic-bezier(0.22, 1, 0.36, 1);
