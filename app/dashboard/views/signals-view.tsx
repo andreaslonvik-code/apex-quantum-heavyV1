@@ -6,6 +6,7 @@ import { PLUS_WATCHLIST, type PlusRegion } from '@/lib/blueprints/plus';
 import { type PlusAction, SEED_SIGNALS } from './seed-signals';
 import { useOwnedTickers } from './use-owned-tickers';
 import { EditionRow } from './edition-row';
+import { fmtPctPlus } from './format';
 
 interface DisplaySignal {
   id: string;
@@ -632,7 +633,7 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
               {trackRecord.avgWinPct !== null && (
                 <div className="aqp-track-stat">
                   <div className="aqp-track-num aqp-track-num--win">
-                    +{(trackRecord.avgWinPct * 100).toFixed(1)}%
+                    {fmtPctPlus(trackRecord.avgWinPct * 100, lang, 1)}
                   </div>
                   <div className="aqp-track-key">{t.trackRecordAvgWin}</div>
                 </div>
@@ -640,7 +641,7 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
               {trackRecord.avgLossPct !== null && (
                 <div className="aqp-track-stat">
                   <div className="aqp-track-num aqp-track-num--loss">
-                    {(trackRecord.avgLossPct * 100).toFixed(1)}%
+                    {fmtPctPlus(trackRecord.avgLossPct * 100, lang, 1)}
                   </div>
                   <div className="aqp-track-key">{t.trackRecordAvgLoss}</div>
                 </div>
@@ -676,6 +677,7 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
         <button
           type="button"
           className={`aqp-chip ${action === 'ALL' ? 'is-on' : ''}`}
+          aria-pressed={action === 'ALL'}
           onClick={() => setAction('ALL')}
         >
           {t.allActions}
@@ -688,6 +690,7 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
               key={a}
               type="button"
               className={`aqp-chip aqp-chip--${a.toLowerCase()} ${action === a ? 'is-on' : ''}`}
+              aria-pressed={action === a}
               onClick={() => setAction(a)}
             >
               {t.actions[a]} <span className="aqp-chip-count">{count}</span>
@@ -709,6 +712,7 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
         <button
           type="button"
           className={`aqp-chip ${region === 'ALL' ? 'is-on' : ''}`}
+          aria-pressed={region === 'ALL'}
           onClick={() => setRegion('ALL')}
         >
           {t.allRegions}
@@ -721,6 +725,7 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
               key={r}
               type="button"
               className={`aqp-chip ${region === r ? 'is-on' : ''}`}
+              aria-pressed={region === r}
               onClick={() => setRegion(r)}
             >
               {REGION_LABELS[lang][r]} <span className="aqp-chip-count">{count}</span>
@@ -828,6 +833,7 @@ export function SignalsView({ lang }: { lang: PlusLang }) {
                   live={livePrices[s.ticker.toUpperCase()]}
                   sinceLabel={t.sinceSignal}
                   liveLabel={t.livePriceLabel}
+                  lang={lang}
                 />
 
                 <div className="aqp-signal-meta">
@@ -922,11 +928,13 @@ function PriceRow({
   live,
   sinceLabel,
   liveLabel,
+  lang,
 }: {
   signal: DisplaySignal;
   live?: LivePrice;
   sinceLabel: string;
   liveLabel: string;
+  lang: PlusLang;
 }) {
   if (!live) return null;
   const priceStr = formatPrice(live.price, live.currency);
@@ -942,15 +950,13 @@ function PriceRow({
         <span className="aqp-price-value">{priceStr}</span>
         {dayPct !== null && (
           <span className={`aqp-price-day ${dayPct >= 0 ? 'is-up' : 'is-down'}`}>
-            {dayPct >= 0 ? '+' : ''}
-            {(dayPct * 100).toFixed(2)}%
+            {fmtPctPlus(dayPct * 100, lang)}
           </span>
         )}
       </div>
       {sinceSignalPct !== null && (
         <div className={`aqp-price-since ${sinceSignalPct >= 0 ? 'is-up' : 'is-down'}`}>
-          {sinceSignalPct >= 0 ? '+' : ''}
-          {(sinceSignalPct * 100).toFixed(2)}% {sinceLabel}
+          {fmtPctPlus(sinceSignalPct * 100, lang)} {sinceLabel}
         </div>
       )}
     </div>
@@ -1054,8 +1060,7 @@ function TickerModal({
                     live.changeFromPrevClose >= 0 ? 'is-up' : 'is-down'
                   }`}
                 >
-                  {live.changeFromPrevClose >= 0 ? '+' : ''}
-                  {(live.changeFromPrevClose * 100).toFixed(2)}%
+                  {fmtPctPlus(live.changeFromPrevClose * 100, lang)}
                 </span>
               )}
             </div>

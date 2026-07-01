@@ -65,6 +65,7 @@ const TIMELINE_POLL_MS = 60_000;
 export default function QuantumDashboard() {
   const [lang, setLang] = useState<Lang>('no');
   const [connected, setConnected] = useState<boolean | null>(null);
+  const [stale, setStale] = useState(false);
   const [environment, setEnvironment] = useState<'paper' | 'live'>('paper');
   const [tf, setTf] = useState<CockpitTf>('24H');
   const [performance, setPerformance] = useState<CockpitPerformance | null>(null);
@@ -81,7 +82,9 @@ export default function QuantumDashboard() {
 
   useEffect(() => {
     const cookieLang = readLangCookie();
-    if (cookieLang) setLang(cookieLang);
+    if (!cookieLang) return;
+    const raf = requestAnimationFrame(() => setLang(cookieLang));
+    return () => cancelAnimationFrame(raf);
   }, []);
 
   const markSynced = useCallback(() => {
@@ -131,6 +134,7 @@ export default function QuantumDashboard() {
         if (cancelled) return;
         if (data.connected) {
           setConnected(true);
+          setStale(Boolean(data.stale));
           if (data.accountInfo?.environment === 'live') setEnvironment('live');
         } else {
           setConnected(false);
@@ -146,9 +150,12 @@ export default function QuantumDashboard() {
 
   useEffect(() => {
     if (!connected) return;
-    refreshAll();
+    const first = setTimeout(refreshAll, 0);
     const id = setInterval(refreshAll, POLL_MS);
-    return () => clearInterval(id);
+    return () => {
+      clearTimeout(first);
+      clearInterval(id);
+    };
   }, [connected, refreshAll]);
 
   // Motorens vurderinger — offentlig beslutningslogg, uavhengig av konto.
@@ -257,7 +264,9 @@ export default function QuantumDashboard() {
                 onTf={setTf}
               />
             )}
-            {showChat && <AIChat lang={lang} connected={connected} status={chatStatus} />}
+            {showChat && (
+              <AIChat lang={lang} connected={connected} stale={stale} status={chatStatus} />
+            )}
             {journalInMain && (
               <RightSidebar lang={lang} orders={orders} decisions={decisions} embedded />
             )}
@@ -284,6 +293,7 @@ export default function QuantumDashboard() {
               type="button"
               className="aq-ck-tab"
               data-on={mobileTab === key || undefined}
+              aria-pressed={mobileTab === key}
               onClick={() => setMobileTab(key)}
             >
               {label}

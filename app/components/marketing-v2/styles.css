@@ -102,6 +102,9 @@
 .aqv2 .btn-lg { padding: 17px 28px; font-size: 15px; }
 .aqv2 .btn-sm { padding: 9px 16px; font-size: 13px; }
 .aqv2 .btn:disabled { opacity: 0.6; cursor: not-allowed; }
+/* Funn 27: btn-primary/btn-gold har egen box-shadow som ellers vinner over
+   den globale fokusringen — legg ringen FORAN de dekorative skyggene. */
+.aqv2 .btn:focus-visible { box-shadow: var(--aq-focus), 0 1px 0 rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.4); }
 
 /* Pills + tags (scoped names to avoid colliding with globals .tag) */
 .aqv2 .aqv2-tag {
@@ -780,7 +783,7 @@
   --aq-cyan-tint:    rgba(0,200,214,0.10);
   --aq-gold:         #C9A961;
   --aq-gold-hi:      #DEC080;
-  --aq-gold-deep:    #8E7637;
+  /* --aq-gold-deep arves fra :root (tokens.css) — ingen lokal duplikat */
   --aq-gold-tint:    rgba(201,169,97,0.12);
 
   background: var(--aq-ink);
@@ -897,6 +900,11 @@
 .aqv2-dash .aqp-content {
   padding: 56px 48px 80px;
   max-width: 1280px;
+}
+/* Funn 33: på smale skjermer bærer .aqp-main sidepaddingen alene —
+   96px ekstra klemte innholdet til ~260px ved 390px. */
+@media (max-width: 640px) {
+  .aqv2-dash .aqp-content { padding: 32px 0 64px; }
 }
 .aqv2-dash .aqp-page-head { margin-bottom: 32px; }
 .aqv2-dash .aqp-page-title {
@@ -2226,6 +2234,7 @@ html, body { overflow-x: hidden; }
 /* — Kildenoten (§5.1) — */
 .aq-srcnote { position: relative; display: inline-block; }
 .aq-srcnote-dagger {
+  position: relative;
   background: none; border: 0; padding: 0 2px;
   font-family: var(--aq-font-serif);
   font-style: italic;
@@ -2235,6 +2244,13 @@ html, body { overflow-x: hidden; }
   letter-spacing: -0.05em;
   cursor: pointer;
   line-height: 1;
+}
+/* Funn 34a: usynlig treffflate via pseudo-element — padding/negativ margin
+   ville ødelagt superscript-baselinen. Gir ~44px tap-mål på touch. */
+.aq-srcnote-dagger::after {
+  content: "";
+  position: absolute;
+  inset: -12px;
 }
 .aq-srcnote-dagger:hover { color: var(--aq-gold-hi); }
 .aq-srcnote-pop {
@@ -2662,3 +2678,8 @@ html, body { overflow-x: hidden; }
   .aqv2 .hdr-right { gap: 10px; }
   .aqv2 .hero-panel-hatch { height: 220px; }
 }
+
+/* Fiks: eyebrow i quote-block fikk egen linje + luft (kolliderte med
+   quote-markens negative margin-oppsett) */
+.aqv2 .quote-block .eyebrow { display: flex; margin-bottom: 24px; }
+.aqv2 .quote-mark { display: block; }

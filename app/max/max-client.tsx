@@ -469,15 +469,31 @@ export default function MaxClient({ isAdmin = false }: { isAdmin?: boolean }) {
 
   // ── States: loading / not-connected ─────────────────────────────────
   if (isLoading) {
+    // §5.7 Ærlig tomhet: statisk lasteblokk i cockpit-dimensjoner —
+    // skravur + mono-melding, ingen spinn, ingen puls, ingen shimmer.
     return (
       <>
         <div className="ambient" aria-hidden="true" />
         <div className="grain" aria-hidden="true" />
-        <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <div className="orb">
-            <div className="orb-ring2" />
-            <div className="orb-ring" />
-            <div className="orb-core" />
+        <div
+          style={{
+            minHeight: '100vh',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+          }}
+        >
+          <div
+            className="aq-hatch"
+            style={{
+              width: '100%',
+              maxWidth: 560,
+              minHeight: 220,
+              backgroundColor: 'var(--aq-ink-lift)',
+            }}
+          >
+            {lang === 'no' ? 'HENTER KONTODATA …' : 'FETCHING ACCOUNT DATA …'}
           </div>
         </div>
       </>

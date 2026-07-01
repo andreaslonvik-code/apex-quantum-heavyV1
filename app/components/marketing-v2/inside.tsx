@@ -20,7 +20,7 @@ const INSIDE_COPY: Record<Lang, {
     steps: [
       { tag: ['SIGNAL',       'utløst'], parts: ['Modellen flagger ', { sym: 'NVDA' }, ' for posisjon. Forslått størrelse 1,2 % av portefølje, stop −1,8 %.'] },
       { tag: ['BEGRUNNELSE',  'fullt synlig'], parts: ['Akkumulasjon over fire dager, RSI 58, momentum reagerer på sektorrotasjon mot halvledere. Datapunktene som veide tyngst er listet med signalet.'] },
-      { tag: ['UTFØRELSE',    'via Alpaca'], parts: ['Max plasserer ordren mot din Alpaca-konto. Du kan se hver handling i live cockpiten — eller skru av motoren med ', { sym: 'kill switch' }, '.'] },
+      { tag: ['UTFØRELSE',    'via Alpaca'], parts: ['Max plasserer ordren mot din Alpaca-konto. Du kan se hver handling i live cockpiten. Du kan når som helst stanse motoren ved å koble Alpaca-kontoen fra i cockpiten. Åpne posisjoner lukkes ikke automatisk ved frakobling.'] },
       { tag: ['REVURDERING',  'kontinuerlig'], parts: ['Modellen revurderer hver posisjon. Når begrunnelsen ikke lenger holder, lukkes den — og du ser hvorfor.'] },
     ],
   },
@@ -32,7 +32,7 @@ const INSIDE_COPY: Record<Lang, {
     steps: [
       { tag: ['SIGNAL',    'triggered'], parts: ['The model flags ', { sym: 'NVDA' }, ' for a position. Suggested size 1.2 % of portfolio, stop −1.8 %.'] },
       { tag: ['RATIONALE', 'fully visible'], parts: ['Four-day accumulation, RSI 58, momentum responds to sector rotation into semis. The data points that mattered most are listed alongside the signal.'] },
-      { tag: ['EXECUTION', 'via Alpaca'], parts: ['Max places the order against your Alpaca account. You see every action in the live cockpit — or shut the engine off with the ', { sym: 'kill switch' }, '.'] },
+      { tag: ['EXECUTION', 'via Alpaca'], parts: ['Max places the order against your Alpaca account. You see every action in the live cockpit. You can stop the engine at any time by disconnecting your Alpaca account in the cockpit. Open positions are not closed automatically on disconnect.'] },
       { tag: ['RE-EVAL',   'continuous'], parts: ['The model reassesses every position. When the rationale no longer holds, it closes — and you see why.'] },
     ],
   },

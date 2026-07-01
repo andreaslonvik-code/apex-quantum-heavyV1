@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { SignOutButton, useUser } from '@clerk/nextjs';
 import { PageShell } from '@/app/components/marketing/page-shell';
 import { PLUS_FOR_SALE, PLUS_DEV_LABELS } from '@/lib/product-status';
+import { PLUS_SALES_PAUSED } from '@/lib/legal-copy';
 import type { Lang } from '@/app/components/marketing/types';
 
 const COPY: Record<
@@ -15,7 +16,8 @@ const COPY: Record<
     sub: string;
     eyeSoon: string;
     titleSoon: string;
-    subSoon: string;
+    subSoonPre: string;
+    subSoonPost: string;
     bullets: readonly string[];
     foot: readonly string[];
     signedInAs: string;
@@ -32,7 +34,8 @@ const COPY: Record<
     sub: 'Apex Quantum + er i lukket beta mens vi finjusterer signal-pipelinen. Du kan starte abonnement nå og få full tilgang så snart beta åpnes for ditt nivå — eller vente til vi åpner bredt.',
     eyeSoon: 'UNDER UTVIKLING',
     titleSoon: 'Snart tilgjengelig.',
-    subSoon: 'Apex Quantum + er under utvikling. Nye abonnement er midlertidig stengt mens vi fullfører den juridiske lisensieringen. Eksisterende abonnenter beholder full tilgang — vi sier fra her så snart vi åpner igjen.',
+    subSoonPre: 'Apex Quantum + er under utvikling, og nye abonnement er midlertidig stengt.',
+    subSoonPost: 'Eksisterende abonnenter beholder full tilgang — vi sier fra her så snart vi åpner igjen.',
     bullets: [
       'Daglige AI-signaler med begrunnelse',
       'Ukentlige markedsrapporter',
@@ -53,7 +56,8 @@ const COPY: Record<
     sub: 'Apex Quantum + is in closed beta while we tune the signal pipeline. You can start a subscription now and get full access the moment beta opens for your tier — or wait until we open widely.',
     eyeSoon: 'IN DEVELOPMENT',
     titleSoon: 'Coming soon.',
-    subSoon: 'Apex Quantum + is in development. New subscriptions are temporarily closed while we complete regulatory licensing. Existing subscribers keep full access — we will post here the moment we reopen.',
+    subSoonPre: 'Apex Quantum + is in development, and new subscriptions are temporarily closed.',
+    subSoonPost: 'Existing subscribers keep full access — we will post here the moment we reopen.',
     bullets: [
       'Daily AI signals with reasoning',
       'Weekly market reports',
@@ -150,7 +154,7 @@ function Inner({ lang }: { lang: Lang }) {
             lineHeight: 1.6,
           }}
         >
-          {PLUS_FOR_SALE ? t.sub : t.subSoon}
+          {PLUS_FOR_SALE ? t.sub : `${t.subSoonPre} ${PLUS_SALES_PAUSED[lang]} ${t.subSoonPost}`}
         </p>
 
         <ul
@@ -201,11 +205,11 @@ function Inner({ lang }: { lang: Lang }) {
                   style={{
                     marginTop: 8,
                     padding: '8px 14px',
-                    background: 'rgba(239,68,68,0.08)',
-                    border: '1px solid rgba(239,68,68,0.30)',
-                    borderRadius: 8,
+                    background: 'var(--aq-down-tint)',
+                    border: '1px solid var(--aq-down)',
+                    borderRadius: 4,
                     fontSize: 13,
-                    color: '#F87171',
+                    color: 'var(--aq-down-hi)',
                   }}
                 >
                   {error}
@@ -232,7 +236,7 @@ function Inner({ lang }: { lang: Lang }) {
               marginLeft: 'auto',
               marginRight: 'auto',
               fontSize: 12,
-              color: 'rgba(255,255,255,0.45)',
+              color: 'var(--aq-muted)',
               lineHeight: 1.55,
             }}
           >
@@ -262,7 +266,7 @@ function Inner({ lang }: { lang: Lang }) {
           </SignOutButton>
         </div>
 
-        <p style={{ marginTop: 28, color: 'rgba(255,255,255,0.42)', fontSize: 13 }}>
+        <p style={{ marginTop: 28, color: 'var(--aq-muted)', fontSize: 13 }}>
           {t.contact}{' '}
           <a href="mailto:post@apex-quantum.com" style={{ color: 'var(--aq-cyan)' }}>
             post@apex-quantum.com

@@ -7,8 +7,9 @@ import type { Lang } from '@/app/components/marketing/types';
 
 export const COCKPIT_COPY = {
   no: {
-    // Topplinje
-    marketOpen: 'NASDAQ ÅPEN',
+    // Topplinje. NB: isNasdaqOpen() dekker ikke helligdager — etiketten
+    // påstår derfor kun «ordinær åpningstid», aldri at børsen er åpen.
+    marketOpen: 'ORD. ÅPNINGSTID',
     marketClosed: 'NASDAQ STENGT',
     alpacaConnected: 'ALPACA TILKOBLET',
     alpacaDisconnected: 'IKKE TILKOBLET',
@@ -31,6 +32,7 @@ export const COCKPIT_COPY = {
     chatPlaceholder: 'Spør om metoden eller journalen …',
     chatSend: 'Send',
     chatThinking: 'Motoren formulerer svar …',
+    chatEmpty: 'DIALOGEN KLARGJØRES …',
     // Journalen (høyre)
     journalTitle: 'JOURNALEN',
     filterAll: 'ALLE',
@@ -56,7 +58,7 @@ export const COCKPIT_COPY = {
     } as Record<'stocks' | 'crypto' | 'commodities', string>,
   },
   en: {
-    marketOpen: 'NASDAQ OPEN',
+    marketOpen: 'REG. HOURS',
     marketClosed: 'NASDAQ CLOSED',
     alpacaConnected: 'ALPACA CONNECTED',
     alpacaDisconnected: 'NOT CONNECTED',
@@ -77,6 +79,7 @@ export const COCKPIT_COPY = {
     chatPlaceholder: 'Ask about the method or the journal …',
     chatSend: 'Send',
     chatThinking: 'The engine is composing a reply …',
+    chatEmpty: 'PREPARING THE DIALOGUE …',
     journalTitle: 'THE JOURNAL',
     filterAll: 'ALL',
     filterTrades: 'TRADES',

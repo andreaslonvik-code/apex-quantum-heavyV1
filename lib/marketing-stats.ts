@@ -36,6 +36,8 @@ export interface MarketingStats {
   positions: MarketingPosition[];
   /** YTD daily equity series for the track-record chart ([] if too little history). */
   equityHistory: number[];
+  /** Real epoch-ms timestamps, parallel to equityHistory (live tip → Date.now()). */
+  equityTimestampsMs: number[];
   /** Whether enough equity history is available to plot a curve (>= 5 points). */
   hasChart: boolean;
   asOfIso: string;
@@ -49,6 +51,7 @@ const EMPTY: MarketingStats = {
   positionsHeld: null,
   positions: [],
   equityHistory: [],
+  equityTimestampsMs: [],
   hasChart: false,
   asOfIso: new Date().toISOString(),
 };
@@ -83,6 +86,7 @@ export async function getLeaderMarketingStats(): Promise<MarketingStats> {
     let ytdReturnPct: number | null = null;
     let maxDrawdownPct: number | null = null;
     const equityHistory: number[] = [];
+    const equityTimestampsMs: number[] = [];
 
     if (hist.success && hist.data.timestamp.length > 0) {
       const yearStart = Math.floor(Date.UTC(new Date().getUTCFullYear(), 0, 1) / 1000);
@@ -95,11 +99,13 @@ export async function getLeaderMarketingStats(): Promise<MarketingStats> {
         if (t >= yearStart) {
           if (baseline == null) baseline = v;
           equityHistory.push(v);
+          equityTimestampsMs.push(t * 1000);
         }
       }
       // Append the live tip so the chart reaches the headline number.
       if (totalValue > 0 && (equityHistory.length === 0 || Math.abs(equityHistory[equityHistory.length - 1] - totalValue) > 0.5)) {
         equityHistory.push(totalValue);
+        equityTimestampsMs.push(Date.now());
       }
       // Fall back to since-inception baseline if no YTD coverage at all.
       if (baseline == null) {
@@ -158,6 +164,7 @@ export async function getLeaderMarketingStats(): Promise<MarketingStats> {
       positionsHeld,
       positions,
       equityHistory,
+      equityTimestampsMs,
       hasChart: equityHistory.length >= 5,
       asOfIso: new Date().toISOString(),
     };

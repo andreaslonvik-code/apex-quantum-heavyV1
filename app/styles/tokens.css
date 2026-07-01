@@ -35,7 +35,7 @@
   /* ===== GULL (maks ETT synlig gullelement per viewport) ===== */
   --aq-gold:         #C9A961;
   --aq-gold-hi:      #DEC080;
-  --aq-gold-deep:    #8E7637; /* gull på parchment — AA */
+  --aq-gold-deep:    #6E5A2A; /* gull på parchment — ≥4,5:1 mot --aq-parch (AA, målt) */
   --aq-gold-tint:    rgba(201, 169, 97, 0.12);
 
   /* ===== CYAN (KUN sanntid/interaktivt/Plus) ===== */
@@ -50,7 +50,7 @@
   --aq-up-hi:        #2DC986; /* tekst */
   --aq-up-tint:      rgba(16, 168, 106, 0.16);
   --aq-down:         #A53241; /* fyll */
-  --aq-down-hi:      #C24355; /* tekst — negative tall <18px ALLTID i down-hi */
+  --aq-down-hi:      #E06A7A; /* tekst — negative tall <18px ALLTID i down-hi (≥4,5:1 mot ink, AA) */
   --aq-down-tint:    rgba(165, 50, 65, 0.18);
   --aq-warn:         #E2A03F;
   --aq-warn-tint:    rgba(226, 160, 63, 0.16);

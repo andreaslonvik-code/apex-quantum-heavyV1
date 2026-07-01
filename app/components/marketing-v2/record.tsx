@@ -14,9 +14,10 @@ const RECORD_COPY: Record<Lang, {
   titlePost: string;
   lede: string;
   ledeNoData: string;
-  /** Tail of the return KPI label — prefixed with the live day-count.
-   *  E.g. "20 dager siden oppstart" / "20 days since launch". */
-  kpiYtdSuffix: string;
+  /** Label for the return KPI — states the actual measurement window (YTD). */
+  kpiYtd: string;
+  /** Separate day-counter line in the same KPI block. */
+  kpiDays: (n: number) => string;
   kpiDrawdown: string;
   kpiCapital: string;
   kpiPositions: string;
@@ -33,7 +34,8 @@ const RECORD_COPY: Record<Lang, {
     titlePost: ' markedet.',
     lede: 'Apex Quantum kjører live på Alpaca paper trading. Tallene under speiles direkte fra leder-kontoens cockpit — ingen prototyper, ingen tilbakeberegnede backtests.',
     ledeNoData: 'Live-tall fra leder-kontoen blir publisert her så snart cockpit-data er tilgjengelig.',
-    kpiYtdSuffix: 'dager siden oppstart',
+    kpiYtd: 'Avkastning i år (YTD) · paper',
+    kpiDays: (n) => `${n} dager siden oppstart`,
     kpiDrawdown: 'Maks drawdown',
     kpiCapital: 'Forvaltet kapital',
     kpiPositions: 'Aktive posisjoner',
@@ -50,7 +52,8 @@ const RECORD_COPY: Record<Lang, {
     titlePost: ' the market.',
     lede: 'Apex Quantum runs live on Alpaca paper trading. The numbers below mirror the leader account’s cockpit directly — no prototypes, no back-tested figures.',
     ledeNoData: 'Live numbers from the leader account will appear here as soon as cockpit data is available.',
-    kpiYtdSuffix: 'days since launch',
+    kpiYtd: 'Return this year (YTD) · paper',
+    kpiDays: (n) => `${n} days since launch`,
     kpiDrawdown: 'Max drawdown',
     kpiCapital: 'Capital under model',
     kpiPositions: 'Active positions',
@@ -81,10 +84,15 @@ export function RecordV2({ lang, stats }: { lang: Lang; stats: MarketingStats })
                 verdier «—» ved manglende data, maks drawdown alltid synlig. */}
             <div className="record-stats">
               <div className="record-stat">
-                <span className="record-stat-lab">{daysSinceLaunch()} {t.kpiYtdSuffix}</span>
+                <span className="record-stat-lab">{t.kpiYtd}</span>
                 <span className={`record-stat-val${stats.ok && stats.ytdReturnPct != null ? (ytdUp ? ' up' : ' dn') : ''}`}>
                   {fmtPct(stats.ok ? stats.ytdReturnPct : null, lang)}
                   {stats.ok && <SourceNote lang={lang} asOfIso={stats.asOfIso} />}
+                </span>
+                {/* Dagteller i eget element (funn 24) — suppressHydrationWarning
+                    fordi Date.now() kan krysse døgnskiftet mellom SSR og klient. */}
+                <span className="record-stat-lab" suppressHydrationWarning>
+                  {t.kpiDays(daysSinceLaunch())}
                 </span>
               </div>
               <div className="record-stat">
@@ -118,7 +126,7 @@ export function RecordV2({ lang, stats }: { lang: Lang; stats: MarketingStats })
               <span className="aqv2-tag cy"><span className="aqv2-dot" />{t.liveTag}</span>
             </div>
             {stats.ok && stats.hasChart ? (
-              <EquityChart history={stats.equityHistory} lang={lang} />
+              <EquityChart history={stats.equityHistory} timestampsMs={stats.equityTimestampsMs} lang={lang} />
             ) : (
               /* Ærlig tomhet (§5.7) i identiske chartdimensjoner —
                  svakhet snudd til integritetspoeng (§8-04i). */

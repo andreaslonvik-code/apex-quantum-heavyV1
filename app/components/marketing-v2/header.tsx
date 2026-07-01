@@ -94,6 +94,7 @@ const NAV_ITEMS: Array<{ href: string; label: Record<Lang, string> }> = [
 
 export function HeaderV2({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => void }) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const burgerRef = useRef<HTMLButtonElement>(null);
   const choose = (next: Lang) => {
     setLang(next);
     writeLangCookie(next);
@@ -108,6 +109,19 @@ export function HeaderV2({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => 
     return () => {
       document.body.style.overflow = prev;
     };
+  }, [menuOpen]);
+
+  // Escape lukker mobilmenyen og gir fokus tilbake til burgeren (funn 31).
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+        burgerRef.current?.focus();
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
   }, [menuOpen]);
 
   const closeMenu = () => setMenuOpen(false);
@@ -151,9 +165,14 @@ export function HeaderV2({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => 
           </SignedIn>
           <PaperBadge lang={lang} />
           <button
+            ref={burgerRef}
             type="button"
             className="hdr-burger"
-            aria-label={menuOpen ? 'Lukk meny' : 'Åpne meny'}
+            aria-label={
+              menuOpen
+                ? (lang === 'no' ? 'Lukk meny' : 'Close menu')
+                : (lang === 'no' ? 'Åpne meny' : 'Open menu')
+            }
             aria-expanded={menuOpen}
             onClick={() => setMenuOpen((v) => !v)}
           >
@@ -167,7 +186,9 @@ export function HeaderV2({ lang, setLang }: { lang: Lang; setLang: (l: Lang) => 
       {/* Mobile drawer — slide-down sheet under the header. Hidden by CSS
           on ≥ 880px; visible only when menuOpen on mobile. Links share the
           same routes as the desktop nav so search engines see one source. */}
-      <div className={`mobile-sheet ${menuOpen ? 'is-open' : ''}`} aria-hidden={!menuOpen}>
+      {/* inert (React 19-boolean) tar lenkene ut av tab-rekkefølgen når
+          menyen er lukket — aria-hidden alene skjulte dem kun for SR. */}
+      <div className={`mobile-sheet ${menuOpen ? 'is-open' : ''}`} inert={!menuOpen} aria-hidden={!menuOpen}>
         <nav className="mobile-nav" onClick={closeMenu}>
           {NAV_ITEMS.map((it) => (
             <Link key={it.href} href={it.href}>{it.label[lang]}</Link>

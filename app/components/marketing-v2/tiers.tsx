@@ -6,7 +6,7 @@ import { PLUS_FOR_SALE, PLUS_DEV_LABELS } from '@/lib/product-status';
 import type { Lang } from '../marketing/types';
 import { ArrowRight, Check } from './icons';
 
-interface TierData {
+export interface TierData {
   name: string;
   tag: string;
   tagline: string;
@@ -18,7 +18,9 @@ interface TierData {
   cta2: string;
 }
 
-const TIERS_COPY: Record<Lang, {
+/** Delt tier-copy — /pris gjenbruker kortene herfra (funn 14): én sannhet
+ *  for navn, tag, pris og feature-punkter på tvers av landing og prisside. */
+export const TIERS_COPY: Record<Lang, {
   eye: string;
   titlePre: string;
   titleEm: string;
@@ -63,6 +65,7 @@ const TIERS_COPY: Record<Lang, {
         'Cutter raskt ved ekte trend-bryt (FDA-avslag, dårlig earnings, SMA50-brudd)',
         'Fullautomatisk handel via Alpaca, krypterte API-nøkler (AES-256-GCM)',
         'Live cockpit, P&L og porteføljegraf',
+        'Stans når som helst ved frakobling',
         'Ta ut avkastning på ett klikk',
       ],
       cta1: 'Sett meg på ventelisten', cta2: 'Detaljer',
@@ -101,6 +104,7 @@ const TIERS_COPY: Record<Lang, {
         'Cuts fast on real breakdowns (FDA rejection, bad earnings, SMA50 break)',
         'Fully automated trading via Alpaca, encrypted API keys (AES-256-GCM)',
         'Live cockpit, P&L and portfolio chart',
+        'Stop anytime by disconnecting',
         'Withdraw profits with one click',
       ],
       cta1: 'Join the waitlist', cta2: 'Details',
@@ -144,7 +148,7 @@ function renderBullet(text: string, lang: Lang): ReactNode {
  * Max-venteliste (§8-05): e-postfelt + gullknapp. Submit åpner samme
  * mailto som før med utfylt emne — ingen ny backend.
  */
-function MaxWaitlist({ lang, cta, placeholder, ariaLabel }: {
+export function MaxWaitlist({ lang, cta, placeholder, ariaLabel }: {
   lang: Lang;
   cta: string;
   placeholder: string;
@@ -177,7 +181,7 @@ function MaxWaitlist({ lang, cta, placeholder, ariaLabel }: {
   );
 }
 
-function Tier({
+export function Tier({
   data,
   kind,
   available,

@@ -307,6 +307,7 @@ export default function PlusDashboardClient({ allowlisted, hasSubscription }: Pr
         lang={lang === 'no' ? 'no' : 'en'}
         lastSync={fmtClock(signalSyncIso, true)}
         modeOverride={`${t.signalsUpdated} ${fmtClock(signalSyncIso, false) ?? '—'}`}
+        dataSource="yahoo"
       />
 
       {/* Bunn-tab-bar ≤768px (§10h): 5 ikoner + «mer». */}
@@ -318,6 +319,7 @@ export default function PlusDashboardClient({ allowlisted, hasSubscription }: Pr
               key={item.key}
               type="button"
               className={`aqp-tab ${isActive ? 'is-active' : ''}`}
+              aria-pressed={isActive}
               onClick={() => {
                 setView(item.key);
                 setNavOpen(false);

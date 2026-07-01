@@ -17,7 +17,7 @@ const isPublicRoute = createRouteMatcher([
   '/',
   '/om-oss',
   '/kontakt',
-  '/blogg',
+  '/blogg(.*)',            // index + public article pages /blogg/[slug]
   '/status',
   '/personvern',
   '/vilkar',

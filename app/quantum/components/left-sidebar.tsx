@@ -50,9 +50,14 @@ export function LeftSidebar({
       prev.set(p.ticker, p.pnlPercent);
     }
     if (next.size > 0) {
-      setFlash(next);
+      // Utsett én frame — unngår synkron setState i effekt (lint) uten
+      // synlig forskjell for 600ms-pulsen
+      const raf = requestAnimationFrame(() => setFlash(next));
       const id = setTimeout(() => setFlash(new Map()), 600);
-      return () => clearTimeout(id);
+      return () => {
+        cancelAnimationFrame(raf);
+        clearTimeout(id);
+      };
     }
   }, [positions]);
 

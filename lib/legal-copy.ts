@@ -29,14 +29,14 @@ export const LEGAL_LINES: Record<Lang, LegalLines> = {
     l2: 'Selskapet har søkt lisens for Robotic and Artificial Intelligence Enabled Advisory Services hos Financial Services Commission, Mauritius. Lisensen er ennå ikke innvilget.',
     l3: 'Apex Quantum har ikke konsesjon fra Finanstilsynet og yter ikke investeringsrådgivning etter verdipapirhandelloven.',
     l4: 'All handel med verdipapirer innebærer risiko for tap av hele det investerte beløpet. Historiske og simulerte resultater gir ingen garanti for fremtidig avkastning.',
-    l5: 'Alle viste resultater stammer fra paper trading — simulert handel uten reell kapital — via Alpaca.',
+    l5: 'Alle resultater som publiseres på nettstedet stammer fra paper trading — simulert handel uten reell kapital — via Alpaca.',
   },
   en: {
     l1: 'Apex Quantum AS provides AI-generated analysis and, upon the launch of Max, automated order execution through a third-party broker.',
     l2: 'The company has applied for a Robotic and Artificial Intelligence Enabled Advisory Services licence with the Financial Services Commission, Mauritius. The licence has not yet been granted.',
     l3: 'Apex Quantum is not authorised by the Financial Supervisory Authority of Norway (Finanstilsynet) and does not provide investment advice under the Norwegian Securities Trading Act.',
     l4: 'All trading in securities carries a risk of losing the entire invested amount. Historical and simulated results are no guarantee of future returns.',
-    l5: 'All displayed results originate from paper trading — simulated trading without real capital — via Alpaca.',
+    l5: 'All results published on this website originate from paper trading — simulated trading without real capital — via Alpaca.',
   },
 };
 
@@ -129,15 +129,25 @@ export const ATTESTATION_MAX_EXTRA = {
     'Max legger inn ordre autonomt, uten manuell godkjenning per handel. Motoren kan handle mens du sover.',
     'Systemrisiko: programvarefeil, API-avbrudd hos megler eller datafeil kan føre til utilsiktede posisjoner eller tap.',
     'Likviditetsrisiko: i urolige markeder kan ordre bli utført til vesentlig dårligere kurser enn forventet.',
-    'Du kan når som helst stanse motoren med kill-switchen i cockpiten. Åpne posisjoner lukkes ikke automatisk ved stans.',
+    'Du kan når som helst stanse motoren ved å koble Alpaca-kontoen fra i cockpiten. Åpne posisjoner lukkes ikke automatisk ved frakobling.',
   ],
   en: [
     'Max places orders autonomously, without per-trade manual approval. The engine may trade while you sleep.',
     'System risk: software defects, broker API outages or data errors can lead to unintended positions or losses.',
     'Liquidity risk: in turbulent markets, orders may be executed at materially worse prices than expected.',
-    'You can stop the engine at any time with the kill switch in the cockpit. Open positions are not closed automatically on stop.',
+    'You can stop the engine at any time by disconnecting your Alpaca account in the cockpit. Open positions are not closed automatically on disconnect.',
   ],
 } satisfies Record<Lang, string[]>;
+
+/**
+ * Salgspause-setningen for Plus (/plus «Kommer snart»-flaten).
+ * Søknads-valør konsistent med L2: utfallet ligger hos FSC, ikke hos oss.
+ * Byttes sammen med L2 ved innvilgelse — ett sted.
+ */
+export const PLUS_SALES_PAUSED: Record<Lang, string> = {
+  no: 'Salget åpner når lisenssøknaden hos FSC Mauritius er ferdigbehandlet.',
+  en: 'Sales open once our licence application with the FSC Mauritius has been processed.',
+};
 
 /** Footer-baselinje */
 export const FOOTER_BASELINE = {

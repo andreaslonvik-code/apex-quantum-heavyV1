@@ -169,7 +169,7 @@ const COPY: Record<Lang, {
     kpiSource: 'ALPACA PAPER-KONTO',
     kpiRows: {
       ret: {
-        lbl: 'Avkastning siden oppstart',
+        lbl: 'Avkastning i år (YTD) · paper',
         def: 'Endring i porteføljeverdi fra første registrerte punkt i år til nå, i prosent. Paper trading — simulert kapital.',
       },
       cap: {
@@ -246,7 +246,7 @@ const COPY: Record<Lang, {
     kpiSource: 'ALPACA PAPER ACCOUNT',
     kpiRows: {
       ret: {
-        lbl: 'Return since launch',
+        lbl: 'Return this year (YTD) · paper',
         def: 'Change in portfolio value from the first recorded point this year to now, in percent. Paper trading — simulated capital.',
       },
       cap: {
@@ -601,7 +601,7 @@ export function InnsynClient({
                 </span>
               </div>
               {stats.ok && stats.hasChart ? (
-                <EquityChart history={stats.equityHistory} lang={lang} />
+                <EquityChart history={stats.equityHistory} timestampsMs={stats.equityTimestampsMs} lang={lang} />
               ) : (
                 <div className="aq-hatch innsyn-hatch-chart">
                   {stats.ok ? t.chartEmpty : t.kpiUnavailable}

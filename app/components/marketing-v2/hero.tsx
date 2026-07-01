@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import type { Lang } from '../marketing/types';
 import type { MarketingStats } from '@/lib/marketing-stats';
+import { PLUS_FOR_SALE, PLUS_DEV_LABELS } from '@/lib/product-status';
 import { daysSinceLaunch, fmtPct, fmtUsd, fmtSyncTime } from '@/lib/marketing-format';
 import { SourceNote } from './source-note';
 import { PaperTag } from './paper-tag';
@@ -23,9 +24,10 @@ const HERO_COPY: Record<Lang, {
   panelEmpty: string;
   panelOffline: string;
   panelMore: (n: number) => string;
-  /** Tail of the return KPI label — prefixed with the live day-count.
-   *  E.g. "20 dager siden oppstart · paper". */
-  kpiYtdSuffix: string;
+  /** Label for the return KPI — states the actual measurement window (YTD). */
+  kpiYtd: string;
+  /** Separate day-counter line under the KPI label. */
+  kpiDays: (n: number) => string;
   kpiErr: string;
   kpiCapital: string;
   kpiPositions: string;
@@ -45,7 +47,8 @@ const HERO_COPY: Record<Lang, {
     panelEmpty: 'Ingen åpne posisjoner akkurat nå.',
     panelOffline: 'FRAKOBLET',
     panelMore: (n) => `+${n} flere posisjoner →`,
-    kpiYtdSuffix: 'dager siden oppstart · paper',
+    kpiYtd: 'Avkastning i år (YTD) · paper',
+    kpiDays: (n) => `${n} dager siden oppstart`,
     kpiErr: 'LIVE-DATA UTILGJENGELIG · PRØVER IGJEN',
     kpiCapital: 'Forvaltet kapital',
     kpiPositions: 'Aktive posisjoner',
@@ -65,7 +68,8 @@ const HERO_COPY: Record<Lang, {
     panelEmpty: 'No open positions right now.',
     panelOffline: 'OFFLINE',
     panelMore: (n) => `+${n} more positions →`,
-    kpiYtdSuffix: 'days since launch · paper',
+    kpiYtd: 'Return this year (YTD) · paper',
+    kpiDays: (n) => `${n} days since launch`,
     kpiErr: 'LIVE DATA UNAVAILABLE · RETRYING',
     kpiCapital: 'Capital under model',
     kpiPositions: 'Active positions',
@@ -88,8 +92,16 @@ export function HeroV2({ lang, stats }: { lang: Lang; stats: MarketingStats }) {
             </h1>
             <p className="hero-desc">{t.desc}</p>
             <div className="hero-ctas">
-              <Link href="/sign-up" className="btn btn-gold btn-lg">
-                {t.ctaPrimary} <ArrowRight size={16} />
+              {/* Funn 19: Plus-tilgjengelighet gated på PLUS_FOR_SALE — samme
+                  nøytrale «Kommer snart»-variant som tiers, identiske
+                  knappedimensjoner. */}
+              <Link
+                href={PLUS_FOR_SALE ? '/sign-up' : '#'}
+                className="btn btn-gold btn-lg"
+                aria-disabled={!PLUS_FOR_SALE}
+                style={!PLUS_FOR_SALE ? { opacity: 0.6, pointerEvents: 'none' } : undefined}
+              >
+                {PLUS_FOR_SALE ? t.ctaPrimary : PLUS_DEV_LABELS[lang].cta} <ArrowRight size={16} />
               </Link>
               <a href="#products" className="btn btn-ghost btn-lg">{t.ctaSecondary}</a>
             </div>
@@ -108,7 +120,12 @@ export function HeroV2({ lang, stats }: { lang: Lang; stats: MarketingStats }) {
                   )}
                 </span>
                 <span className={`hero-meta-lab${stats.ok ? '' : ' err'}`}>
-                  {stats.ok ? `${daysSinceLaunch()} ${t.kpiYtdSuffix}` : t.kpiErr}
+                  {stats.ok ? t.kpiYtd : t.kpiErr}
+                </span>
+                {/* Dagteller i eget element (funn 24) — suppressHydrationWarning
+                    fordi Date.now() kan krysse døgnskiftet mellom SSR og klient. */}
+                <span className="hero-meta-lab" suppressHydrationWarning>
+                  {t.kpiDays(daysSinceLaunch())}
                 </span>
               </div>
               <div className="hero-meta-item">

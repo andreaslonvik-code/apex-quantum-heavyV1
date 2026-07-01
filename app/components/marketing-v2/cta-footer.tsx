@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import type { Lang } from '../marketing/types';
 import { LEGAL_LINES, FOOTER_BASELINE } from '@/lib/legal-copy';
+import { PLUS_FOR_SALE, PLUS_DEV_LABELS } from '@/lib/product-status';
 import { ArrowRight } from './icons';
 
 const CTA_COPY: Record<Lang, {
@@ -12,6 +13,9 @@ const CTA_COPY: Record<Lang, {
   titleEm: string;
   titlePost: string;
   sub: string;
+  /** Nøytral sub uten pris-/tilgjengelighetspåstand — vises når
+   *  PLUS_FOR_SALE er false (funn 19). */
+  subDev: string;
   cta1: string;
   cta2: string;
   riskLink: string;
@@ -23,6 +27,7 @@ const CTA_COPY: Record<Lang, {
     titleEm:  'Dag for dag',
     titlePost: '.',
     sub: 'Fra 199 kr/mnd. Ingen binding. Alle resultater dokumentert.',
+    subDev: 'Apex Quantum + kommer snart. Alle resultater dokumentert.',
     cta1: 'Kom i gang',
     cta2: 'Se resultatene →',
     riskLink: 'Les risikofaktorene først →',
@@ -34,6 +39,7 @@ const CTA_COPY: Record<Lang, {
     titleEm:  'Day by day',
     titlePost: '.',
     sub: 'From $19/month. No commitment. Every result documented.',
+    subDev: 'Apex Quantum + coming soon. Every result documented.',
     cta1: 'Get started',
     cta2: 'See the results →',
     riskLink: 'Read the risk factors first →',
@@ -108,9 +114,18 @@ export function CTAV2({ lang }: { lang: Lang }) {
         <div className="cta-inner">
           <span className="eyebrow"><span className="rule" />{t.eye}</span>
           <h2>{t.titlePre}<em>{t.titleEm}</em>{t.titlePost}</h2>
-          <p>{t.sub}</p>
+          <p>{PLUS_FOR_SALE ? t.sub : t.subDev}</p>
           <div className="cta-row">
-            <Link href="/sign-up" className="btn btn-gold btn-lg">{t.cta1} <ArrowRight size={16} /></Link>
+            {/* Funn 19: samme nøytrale «Kommer snart»-variant som tiers når
+                nysalg er stengt — identiske knappedimensjoner. */}
+            <Link
+              href={PLUS_FOR_SALE ? '/sign-up' : '#'}
+              className="btn btn-gold btn-lg"
+              aria-disabled={!PLUS_FOR_SALE}
+              style={!PLUS_FOR_SALE ? { opacity: 0.6, pointerEvents: 'none' } : undefined}
+            >
+              {PLUS_FOR_SALE ? t.cta1 : PLUS_DEV_LABELS[lang].cta} <ArrowRight size={16} />
+            </Link>
             <a href="#record" className="btn btn-ghost btn-lg">{t.cta2}</a>
           </div>
           {/* Mikrolenker: risikofaktorer først — et tillitsgrep (§8-07) */}

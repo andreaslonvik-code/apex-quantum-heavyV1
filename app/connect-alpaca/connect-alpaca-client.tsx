@@ -131,9 +131,12 @@ export default function ConnectAlpacaClient() {
     if (cookieLang) setLang(cookieLang);
   }, []);
 
-  const meta = (user?.publicMetadata ?? {}) as { riskVersion?: number };
+  // §6 lag 4b — Max-attestasjonen (ATTESTATION + ATTESTATION_MAX_EXTRA)
+  // krever eget maxRiskVersion-felt; Plus-attestasjonen (riskVersion)
+  // dekker IKKE de utvidede Max-punktene og hopper aldri over steget.
+  const meta = (user?.publicMetadata ?? {}) as { maxRiskVersion?: number };
   const alreadyAttested =
-    typeof meta.riskVersion === 'number' && meta.riskVersion >= RISK_VERSION;
+    typeof meta.maxRiskVersion === 'number' && meta.maxRiskVersion >= RISK_VERSION;
   const attested = alreadyAttested || attestedNow;
 
   const isLive = environment === 'live';
@@ -145,7 +148,9 @@ export default function ConnectAlpacaClient() {
     try {
       const res = await fetch('/api/attest-risk', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        body: JSON.stringify({ scope: 'max' }),
       });
       if (!res.ok) {
         setError(t.attestFailed);

@@ -128,8 +128,11 @@ export function RightSidebar({
     if (fresh > 0) {
       const el = feedRef.current;
       const scrolledAway = !!el && el.scrollTop > 24;
-      if (scrolledAway) setNewCount((n) => n + fresh);
       seenIdsRef.current = new Set(events.map((e) => e.id));
+      if (scrolledAway) {
+        const raf = requestAnimationFrame(() => setNewCount((n) => n + fresh));
+        return () => cancelAnimationFrame(raf);
+      }
     }
   }, [events]);
 

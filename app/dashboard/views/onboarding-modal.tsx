@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useUser } from '@clerk/nextjs';
 import type { PlusLang } from '@/lib/i18n/plus-lang';
 import { ATTESTATION, RISK_VERSION } from '@/lib/legal-copy';
@@ -157,11 +157,54 @@ export function OnboardingModal({ lang }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(false);
   const [done, setDone] = useState(false);
+  const cardRef = useRef<HTMLDivElement>(null);
 
   const t = COPY[lang];
   // Juridisk tekst finnes kanonisk kun på NO/EN (lib/legal-copy).
   const legalLang = lang === 'no' ? 'no' : 'en';
   const legal = ATTESTATION[legalLang];
+
+  // Fokushåndtering: flytt fokus til modal-kortet ved åpning og ved hvert
+  // stegbytte, slik at skjermleser annonserer dialogen og tastaturbrukere
+  // aldri står igjen i dokumentet bak (aria-modal skjuler det for SR).
+  useEffect(() => {
+    cardRef.current?.focus();
+  }, [step, isLoaded, done]);
+
+  // Enkel fokusfelle: Tab sykler innenfor kortet. Escape ignoreres —
+  // attestasjonen er obligatorisk (§6 lag 4a) og modalen kan ikke lukkes.
+  const handleKeyDown = useCallback((e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    if (e.key !== 'Tab') return;
+    const card = cardRef.current;
+    if (!card) return;
+    const focusables = Array.from(
+      card.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])',
+      ),
+    );
+    if (focusables.length === 0) {
+      e.preventDefault();
+      return;
+    }
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    const active = document.activeElement;
+    if (e.shiftKey) {
+      if (active === first || active === card) {
+        e.preventDefault();
+        last.focus();
+      }
+    } else if (active === last || active === card) {
+      // Fra siste element (eller kortet selv, tabIndex=-1) → første element.
+      e.preventDefault();
+      first.focus();
+    }
+  }, []);
 
   if (!isLoaded || !user || done) return null;
 
@@ -186,7 +229,9 @@ export function OnboardingModal({ lang }: Props) {
     try {
       const res = await fetch('/api/attest-risk', {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
+        body: JSON.stringify({ scope: 'plus' }),
       });
       const data = await res.json();
       if (!res.ok || !data.ok) throw new Error('attest_failed');
@@ -202,8 +247,14 @@ export function OnboardingModal({ lang }: Props) {
   };
 
   return (
-    <div className="aqp-onb-overlay" role="dialog" aria-modal="true" aria-labelledby="aqp-onb-title">
-      <div className="aqp-onb-card">
+    <div
+      className="aqp-onb-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="aqp-onb-title"
+      onKeyDown={handleKeyDown}
+    >
+      <div className="aqp-onb-card" ref={cardRef} tabIndex={-1}>
         {isAttest ? (
           <>
             <header className="aqp-onb-head">

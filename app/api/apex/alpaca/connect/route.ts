@@ -10,11 +10,12 @@
  *   - Refreshes account snapshot from Alpaca on every call.
  */
 import { NextRequest, NextResponse } from 'next/server';
-import { auth } from '@clerk/nextjs/server';
+import { auth, clerkClient } from '@clerk/nextjs/server';
 import { validateCreds, updateAccountConfigurations, type AlpacaEnv } from '@/lib/alpaca';
 import { saveUserAlpacaCreds, getUserAlpacaCreds } from '@/lib/user-alpaca';
 import { mask } from '@/lib/crypto';
 import { checkSameOrigin } from '@/lib/csrf';
+import { RISK_VERSION } from '@/lib/legal-copy';
 
 export async function POST(request: NextRequest) {
   try {
@@ -26,6 +27,18 @@ export async function POST(request: NextRequest) {
     const { userId } = await auth();
     if (!userId) {
       return NextResponse.json({ error: 'Du må være logget inn.' }, { status: 401 });
+    }
+
+    // §6 lag 4b — attestasjonen håndheves server-side, ikke bare i klienten.
+    // Nøkler lagres ALDRI uten at Max-attestasjonen (maxRiskVersion) er på
+    // fil i Clerk publicMetadata for gjeldende RISK_VERSION.
+    const client = await clerkClient();
+    const clerkUser = await client.users.getUser(userId);
+    const meta = (clerkUser.publicMetadata ?? {}) as { maxRiskVersion?: unknown };
+    const maxRiskVersion =
+      typeof meta.maxRiskVersion === 'number' ? meta.maxRiskVersion : 0;
+    if (maxRiskVersion < RISK_VERSION) {
+      return NextResponse.json({ error: 'attestation_required' }, { status: 403 });
     }
 
     const body = await request.json().catch(() => ({}));

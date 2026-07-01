@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { PageShell } from '@/app/components/marketing/page-shell';
 import { ArrowRight, Check } from '@/app/components/marketing-v2/icons';
+import { Tier, MaxWaitlist, TIERS_COPY } from '@/app/components/marketing-v2/tiers';
 import { PLUS_FOR_SALE, PLUS_DEV_LABELS } from '@/lib/product-status';
 import { LEGAL_LINES } from '@/lib/legal-copy';
 import type { Lang } from '@/app/components/marketing/types';
 
 /**
- * /pris — TiersV2-mønsteret gjenbygd lokalt med aqv2-klasser (§9),
+ * /pris — gjenbruker landingens <Tier/>-kort og TIERS_COPY direkte
+ * (funn 14: én sannhet for navn/tag/pris/feature-punkter), pluss
  * sammenligningstabell i ledger-vokabular, FAQ med details/summary
  * og legal-band via PageShell. NOK primært; USD i EN-konteksten.
  */
@@ -22,38 +24,6 @@ const COPY = {
     titleEm: 'Velg din vei',
     titlePost: '.',
     sub: 'Begynn med Apex Quantum + og lær markedet i ditt eget tempo. Apex Quantum Max — den autonome handelsmotoren — er under utvikling med lansering planlagt i 2026.',
-    plus: {
-      tag: 'TILGJENGELIG NÅ',
-      tagline: 'Signaler, rapporter og læring.',
-      currency: '199',
-      cycle: 'kr / mnd',
-      bullets: [
-        'Daglige AI-signaler med begrunnelse',
-        'Ukentlige markedsrapporter',
-        'Læringsmoduler — nybegynner til avansert',
-        'Praksisportefølje med live priser',
-        'Ordbok og investeringsjournal',
-        'Tilgjengelig globalt — ingen meglerbinding',
-      ],
-      cta: 'Start nå',
-      cta2: 'Les mer',
-    },
-    max: {
-      tag: 'UNDER UTVIKLING · 2026',
-      tagline: 'Fullautomatisk AI-handel.',
-      currency: '4 990',
-      cycle: 'kr / mnd',
-      bullets: [
-        'Autonom handel via din egen Alpaca-konto',
-        'US equities — NASDAQ, NYSE, ARCA, AMEX',
-        'AES-256-GCM-krypterte API-nøkler',
-        'Live cockpit, P&L og porteføljegraf',
-        'Kill-switch — stans motoren når som helst',
-        'E-poststøtte med 24 t responstid',
-      ],
-      cta: 'Varsle meg',
-      cta2: 'Detaljer',
-    },
     cmpEye: 'Sammenligning',
     cmpTitlePre: 'Side ved side, ',
     cmpTitleEm: 'linje for linje',
@@ -66,7 +36,7 @@ const COPY = {
       { f: 'Læringsmoduler og ordbok', plus: { check: true }, max: { none: true } },
       { f: 'Praksisportefølje og journal', plus: { check: true }, max: { none: true } },
       { f: 'Autonom ordreutførelse via Alpaca', plus: { none: true }, max: { check: true } },
-      { f: 'Live cockpit med kill-switch', plus: { none: true }, max: { check: true } },
+      { f: 'Live cockpit — stans når som helst ved frakobling', plus: { none: true }, max: { check: true } },
       { f: 'AES-256-GCM-krypterte API-nøkler', plus: { none: true }, max: { check: true } },
       { f: 'Binding', plus: { text: 'Ingen' }, max: { text: 'Ingen' } },
     ] as Array<{ f: string; plus: CmpCell; max: CmpCell }>,
@@ -91,38 +61,6 @@ const COPY = {
     titleEm: 'Pick your path',
     titlePost: '.',
     sub: 'Begin with Apex Quantum + and learn the market at your own pace. Apex Quantum Max — the autonomous trading engine — is in development with launch planned for 2026.',
-    plus: {
-      tag: 'AVAILABLE NOW',
-      tagline: 'Signals, reports and learning.',
-      currency: '19',
-      cycle: '$ / month',
-      bullets: [
-        'Daily AI signals with reasoning',
-        'Weekly market reports',
-        'Learning modules — beginner to advanced',
-        'Practice portfolio with live prices',
-        'Glossary and investment journal',
-        'Available globally — no broker lock-in',
-      ],
-      cta: 'Start now',
-      cta2: 'Learn more',
-    },
-    max: {
-      tag: 'IN DEVELOPMENT · 2026',
-      tagline: 'Fully autonomous AI trading.',
-      currency: '499',
-      cycle: '$ / month',
-      bullets: [
-        'Autonomous trading via your own Alpaca account',
-        'US equities — NASDAQ, NYSE, ARCA, AMEX',
-        'AES-256-GCM encrypted API keys',
-        'Live cockpit, P&L and portfolio chart',
-        'Kill switch — stop the engine at any time',
-        'Email support with 24 h response',
-      ],
-      cta: 'Notify me',
-      cta2: 'Details',
-    },
     cmpEye: 'Comparison',
     cmpTitlePre: 'Side by side, ',
     cmpTitleEm: 'line by line',
@@ -135,7 +73,7 @@ const COPY = {
       { f: 'Learning modules and glossary', plus: { check: true }, max: { none: true } },
       { f: 'Practice portfolio and journal', plus: { check: true }, max: { none: true } },
       { f: 'Autonomous order execution via Alpaca', plus: { none: true }, max: { check: true } },
-      { f: 'Live cockpit with kill switch', plus: { none: true }, max: { check: true } },
+      { f: 'Live cockpit — stop anytime by disconnecting', plus: { none: true }, max: { check: true } },
       { f: 'AES-256-GCM encrypted API keys', plus: { none: true }, max: { check: true } },
       { f: 'Commitment', plus: { text: 'None' }, max: { text: 'None' } },
     ] as Array<{ f: string; plus: CmpCell; max: CmpCell }>,
@@ -181,11 +119,11 @@ export default function PrisPage() {
           if (i === 5) return [q, `${a} ${L.l3}`] as const;
           return [q, a] as const;
         });
+        // Delt tier-copy fra landingens TiersV2 (funn 14) — én sannhet.
+        const tiers = TIERS_COPY[lang];
         const plusAvailable = PLUS_FOR_SALE;
-        const plusTag = plusAvailable ? t.plus.tag : PLUS_DEV_LABELS[lang].tag;
-        const plusCta = plusAvailable ? t.plus.cta : PLUS_DEV_LABELS[lang].cta;
-        const maxMailto =
-          'mailto:post@apex-quantum.com?subject=Apex%20Quantum%20Max%20%E2%80%94%20notify%20me';
+        const plusTag = plusAvailable ? tiers.plus.tag : PLUS_DEV_LABELS[lang].tag;
+        const plusCta = plusAvailable ? tiers.plus.cta1 : PLUS_DEV_LABELS[lang].cta;
         return (
           <>
             {/* Hode */}
@@ -203,68 +141,48 @@ export default function PrisPage() {
             <section className="pg-section" style={{ paddingTop: 8 }}>
               <div className="container">
                 <div className="tiers-grid">
-                  {/* Plus — cyan */}
-                  <div className={plusAvailable ? 'tier' : 'tier dev'}>
-                    <div className="tier-head">
-                      <h3 className="tier-name">
-                        <span>Apex Quantum </span>
-                        <span className="cyan">+</span>
-                      </h3>
-                      <span className={plusAvailable ? 'aqv2-tag cy' : 'aqv2-tag dev'}>
-                        {plusAvailable ? <span className="aqv2-dot" /> : null}
-                        {plusTag}
-                      </span>
-                    </div>
-                    <p className="tier-tagline">{t.plus.tagline}</p>
-                    <div className="tier-price-row">
-                      <span className="tier-price">{t.plus.currency}</span>
-                      <span className="tier-cycle">{t.plus.cycle}</span>
-                    </div>
-                    <ul>
-                      {t.plus.bullets.map((b) => (
-                        <li key={b}><span className="mark"><Check /></span>{b}</li>
-                      ))}
-                    </ul>
-                    <div className="tier-actions">
-                      {plusAvailable ? (
-                        <Link href="/sign-up" className="btn btn-cyan">
-                          {plusCta} <ArrowRight size={14} />
-                        </Link>
-                      ) : (
-                        <button type="button" className="btn btn-cyan" disabled>
-                          {plusCta}
-                        </button>
-                      )}
-                      <Link href="/plus" className="btn btn-ghost">{t.plus.cta2}</Link>
-                    </div>
-                  </div>
+                  {/* Plus — cyan (delt <Tier/> fra tiers.tsx) */}
+                  <Tier
+                    data={tiers.plus}
+                    kind="cyan"
+                    available={plusAvailable}
+                    primaryTag={plusTag}
+                    lang={lang}
+                    actions={
+                      <>
+                        {plusAvailable ? (
+                          <Link href="/sign-up" className="btn btn-cyan">
+                            {plusCta} <ArrowRight size={14} />
+                          </Link>
+                        ) : (
+                          <button type="button" className="btn btn-cyan" disabled>
+                            {plusCta}
+                          </button>
+                        )}
+                        <Link href="/plus" className="btn btn-ghost">{tiers.plus.cta2}</Link>
+                      </>
+                    }
+                  />
 
-                  {/* Max — gull */}
-                  <div className="tier gold dev">
-                    <div className="tier-head">
-                      <h3 className="tier-name">
-                        <span>Apex Quantum </span>
-                        <span className="gold">Max</span>
-                      </h3>
-                      <span className="aqv2-tag gold">{t.max.tag}</span>
-                    </div>
-                    <p className="tier-tagline">{t.max.tagline}</p>
-                    <div className="tier-price-row">
-                      <span className="tier-price">{t.max.currency}</span>
-                      <span className="tier-cycle">{t.max.cycle}</span>
-                    </div>
-                    <ul>
-                      {t.max.bullets.map((b) => (
-                        <li key={b}><span className="mark"><Check /></span>{b}</li>
-                      ))}
-                    </ul>
-                    <div className="tier-actions">
-                      <a href={maxMailto} className="btn btn-gold">
-                        {t.max.cta} <ArrowRight size={14} />
-                      </a>
-                      <Link href="/max" className="btn btn-ghost">{t.max.cta2}</Link>
-                    </div>
-                  </div>
+                  {/* Max — gull (samme venteliste-mekanikk som landing) */}
+                  <Tier
+                    data={tiers.max}
+                    kind="gold"
+                    available={false}
+                    primaryTag={tiers.max.tag}
+                    lang={lang}
+                    actions={
+                      <>
+                        <MaxWaitlist
+                          lang={lang}
+                          cta={tiers.max.cta1}
+                          placeholder={tiers.waitPlaceholder}
+                          ariaLabel={tiers.waitAria}
+                        />
+                        <Link href="/max" className="btn btn-ghost">{tiers.max.cta2}</Link>
+                      </>
+                    }
+                  />
                 </div>
                 <p className="pg-mononote" style={{ marginTop: 24 }}>
                   {lang === 'no'

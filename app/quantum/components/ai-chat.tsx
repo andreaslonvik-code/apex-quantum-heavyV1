@@ -95,13 +95,20 @@ const FALLBACK: Record<Lang, string> = {
 function buildIntro(
   lang: Lang,
   status: { totalValue: number | null; positionsCount: number | null; changePct: number | null; tf: CockpitTf },
+  stale = false,
 ): string {
   const { totalValue, positionsCount, changePct, tf } = status;
   if (lang === 'no') {
+    if (stale) {
+      return `**Forvalterens bord**\n\nKontoen er tilkoblet, men tilkoblingen validerer ikke akkurat nå — jeg har ingen live-tall å vise. Jeg kan likevel forklare metoden, risikoen og journalen. Alle svar her er forhåndsdefinerte, og ingen ordre utføres fra dialogen.`;
+    }
     if (totalValue == null) {
       return `**Forvalterens bord**\n\nIngen tilkoblet konto — jeg har ingen live-tall å vise. Jeg kan likevel forklare metoden, risikoen og journalen. Alle svar her er forhåndsdefinerte, og ingen ordre utføres fra dialogen.`;
     }
     return `**Status**\n\nPorteføljeverdi: ${fmtUsd(totalValue, lang)} · ${positionsCount ?? '—'} posisjoner · endring (${tf}): ${changePct == null ? '—' : fmtPct(changePct, lang)}. Alle tall er paper trading via Alpaca.\n\nSpør meg om metoden, risikoen eller journalen.`;
+  }
+  if (stale) {
+    return `**The manager's desk**\n\nThe account is connected, but the connection does not validate right now — I have no live figures to show. I can still explain the method, the risk and the journal. All answers here are predefined, and no orders are placed from this dialogue.`;
   }
   if (totalValue == null) {
     return `**The manager's desk**\n\nNo connected account — I have no live figures to show. I can still explain the method, the risk and the journal. All answers here are predefined, and no orders are placed from this dialogue.`;
@@ -112,11 +119,14 @@ function buildIntro(
 export function AIChat({
   lang,
   connected,
+  stale = false,
   status,
 }: {
   lang: Lang;
   /** null = tilkoblingsstatus ukjent (laster fortsatt) */
   connected: boolean | null;
+  /** true = lagrede nøkler validerer ikke lenger — live-tall kommer aldri */
+  stale?: boolean;
   status: { totalValue: number | null; positionsCount: number | null; changePct: number | null; tf: CockpitTf };
 }) {
   const t = COCKPIT_COPY[lang];
@@ -140,21 +150,24 @@ export function AIChat({
   // Åpningsmelding med ekte status — settes én gang når tilkoblingsstatus
   // er avklart (og live-tall foreligger hvis tilkoblet). Oppdateres ikke
   // i etterkant; tall animeres/oppdateres aldri i løpende samtale.
+  // Stale tilkobling (nøkler validerer ikke) gir «ingen live-tall»-varianten
+  // umiddelbart — panelet blir aldri stående permanent tomt (§5.7).
   useEffect(() => {
     if (introSetRef.current) return;
     if (connected == null) return; // fortsatt ukjent — vent
-    if (connected && status.totalValue == null) return; // vent på ekte tall
+    const isStale = connected && stale;
+    if (connected && !isStale && status.totalValue == null) return; // vent på ekte tall
     introSetRef.current = true;
     setMessages([
       {
         id: 'intro',
         role: 'assistant',
-        content: buildIntro(lang, status),
+        content: buildIntro(lang, status, isStale),
         timestamp: new Date(),
       },
     ]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connected, status.totalValue]);
+  }, [connected, stale, status.totalValue]);
 
   useEffect(() => {
     const el = listRef.current;
@@ -207,6 +220,9 @@ export function AIChat({
       </div>
 
       <div className="aq-ck-chat-list" ref={listRef}>
+        {messages.length === 0 && (
+          <div className="aq-hatch aq-ck-hatch-fill">{t.chatEmpty}</div>
+        )}
         {messages.map((m) => (
           <div key={m.id} className="aq-ck-msg" data-role={m.role}>
             <div className="aq-ck-msg-body">{renderInlineMarkdown(m.content)}</div>

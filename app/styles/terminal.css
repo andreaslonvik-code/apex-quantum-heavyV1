@@ -453,6 +453,22 @@
   margin: 12px 16px 16px;
 }
 
+/* ── Visually hidden (SR-tilgjengelig, ingen piksler) ──
+   Brukes der tekst skjules visuelt men skjermleser fortsatt skal
+   få innholdet — aldri display:none på meningsbærende status. */
+.aq-visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0 0 0 0) !important;
+  clip-path: inset(50%) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
 /* ── Bunn-tab-bar (≤768px) ── */
 .aq-ck-tabbar {
   display: none;
@@ -500,11 +516,26 @@
   .aq-ck-ledger { border-right: 0; }
   .aq-ck-main { grid-template-rows: minmax(0, 1fr); }
   .aq-ck-tabbar { display: flex; }
-  .aq-ck-stat span.aq-ck-stat-label { display: none; }
+  /* Statustekstene skjules kun VISUELT (§28-fiks): dot + tekst står
+     fortsatt i DOM, så skjermleser hører «NASDAQ …»/Alpaca-status og
+     informasjonen er aldri farge-kun. Aldri display:none her. */
+  .aq-ck-stat span.aq-ck-stat-label {
+    position: absolute !important;
+    width: 1px !important;
+    height: 1px !important;
+    padding: 0 !important;
+    margin: -1px !important;
+    overflow: hidden !important;
+    clip: rect(0 0 0 0) !important;
+    clip-path: inset(50%) !important;
+    white-space: nowrap !important;
+    border: 0 !important;
+  }
   .aq-ck-top { gap: 10px; padding: 0 12px; }
 }
 @media (max-width: 640px) {
-  .aq-ck-chip { min-height: 32px; }
+  /* §12f: tap-mål ≥44px ≤640px */
+  .aq-ck-chip { min-height: 44px; }
 }
 
 /* ============================================================
